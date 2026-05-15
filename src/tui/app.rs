@@ -8,7 +8,7 @@ pub struct App {
     pub flat: Vec<FlatItem>,
     pub selected: usize,
     pub status: String,
-    pub quitting: bool,
+    pub _quitting: bool,
 }
 
 #[derive(Clone)]
@@ -29,7 +29,7 @@ impl App {
             flat: vec![],
             selected: 0,
             status: String::new(),
-            quitting: false,
+            _quitting: false,
         };
         app.rebuild_flat();
         app

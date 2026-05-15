@@ -70,7 +70,7 @@ pub fn render(frame: &mut Frame, app: &App, list_state: &mut ListState) {
                 Style::default().fg(Color::White)
             };
 
-            let size_col_width = 10;
+            let _size_col_width = 10;
             let name_part = format!("{}{}{}", indent, icon, item.name);
             let name_truncated = truncate(&name_part, 40);
 

@@ -20,7 +20,7 @@ use tree::load_root;
 
 pub fn run(db_path: Option<String>) -> Result<()> {
     let path = db_path
-        .or_else(|| snapshots::latest_snapshot())
+        .or_else(snapshots::latest_snapshot)
         .ok_or_else(|| anyhow::anyhow!("No snapshot found. Run `disky scan` first."))?;
 
     let conn = db::open(&path)?;

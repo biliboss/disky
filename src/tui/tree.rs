@@ -1,6 +1,5 @@
 use anyhow::Result;
 use duckdb::Connection;
-use humansize::{format_size, BINARY};
 
 #[derive(Debug, Clone)]
 pub struct DirEntry {
@@ -12,35 +11,6 @@ pub struct DirEntry {
     pub expanded: bool,
     pub loaded: bool,
     pub children: Vec<DirEntry>,
-}
-
-impl DirEntry {
-    pub fn size_str(&self) -> String {
-        if self.size == 0 {
-            "-".into()
-        } else {
-            format_size(self.size as u64, BINARY)
-        }
-    }
-
-    pub fn icon(&self) -> &'static str {
-        if self.is_dir {
-            "▶"
-        } else {
-            " "
-        }
-    }
-
-    pub fn expanded_icon(&self) -> &'static str {
-        if !self.is_dir {
-            return " ";
-        }
-        if self.expanded {
-            "▼"
-        } else {
-            "▶"
-        }
-    }
 }
 
 pub fn load_children(
@@ -91,7 +61,7 @@ pub fn load_children(
     }
 
     // re-sort after computing dir sizes
-    children.sort_by(|a, b| b.size.cmp(&a.size));
+    children.sort_by_key(|b| std::cmp::Reverse(b.size));
     Ok(children)
 }
 
