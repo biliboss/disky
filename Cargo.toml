@@ -1,0 +1,39 @@
+[package]
+name = "disky"
+version = "0.1.0"
+edition = "2021"
+description = "Fast macOS disk analyzer — scan, explore, clean up"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/biliboss/disky"
+homepage = "https://github.com/biliboss/disky"
+keywords = ["disk", "analyzer", "cli", "macos", "tui"]
+categories = ["command-line-utilities", "filesystem"]
+readme = "README.md"
+rust-version = "1.75"
+
+[[bin]]
+name = "disky"
+path = "src/main.rs"
+
+[dependencies]
+jwalk = "0.8"
+duckdb = { version = "1.1", features = ["bundled"] }
+clap = { version = "4", features = ["derive"] }
+rayon = "1.10"
+indicatif = "0.17"
+flume = "0.11"
+humansize = "2"
+anyhow = "1"
+chrono = "0.4"
+num_cpus = "1"
+memchr = "2"
+ratatui = "0.29"
+crossterm = "0.28"
+arboard = "3"
+dirs = "5"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
