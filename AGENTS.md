@@ -31,3 +31,18 @@ Run `cargo fmt` before committing — rustfmt has opinions on inline if-else.
 
 Matrix: `aarch64-apple-darwin` + `x86_64-apple-darwin`. Tag `vX.Y.Z` triggers workflow.
 CHANGELOG.md uses Keep a Changelog format — awk extracts entry per tag.
+
+## Deploy (devopless)
+
+No containers, no registry, no CI gating for releases — artifacts ship direct.
+
+| Scenario | Command |
+|----------|---------|
+| Normal release | `git tag vX.Y.Z && git push origin vX.Y.Z` → GH Actions builds + uploads `.tar.gz` |
+| Hotfix (can't wait for CI) | `cargo build --release --target aarch64-apple-darwin` → `gh release upload vX.Y.Z target/.../disky` |
+| Rollback | `gh release download vX.Y.Z -p '*.tar.gz'` → extract + replace binary |
+| Share offline | `cargo build --release` → `scp target/release/disky user@host:~/bin/` |
+
+**Before any release tag:** `cargo clippy -- -D warnings && cargo fmt --check` must pass locally — CI will fail otherwise and the release job depends on the build job.
+
+**Versioning:** bump `version` in `Cargo.toml` + add CHANGELOG entry before tagging.
