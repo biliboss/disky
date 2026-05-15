@@ -32,6 +32,18 @@ Run `cargo fmt` before committing — rustfmt has opinions on inline if-else.
 Matrix: `aarch64-apple-darwin` + `x86_64-apple-darwin`. Tag `vX.Y.Z` triggers workflow.
 CHANGELOG.md uses Keep a Changelog format — awk extracts entry per tag.
 
+## Cleanup
+
+| What | Command | Size |
+|------|---------|------|
+| Build artifacts | `cargo clean` | ~1GB |
+| Scan snapshots | `rm ~/Library/Application\ Support/disky/*.db` | varies |
+| Ad-hoc scan files | `rm auto` (gitignored, won't be committed) | ~300MB |
+
+`.gitignore` covers: `/target`, `*.db`, `auto`, `dist/`, `.claude/`
+
+Test with release binary, not debug: `cargo build --release` → `./target/release/disky`.
+
 ## Deploy (devopless)
 
 No containers, no registry, no CI gating for releases — artifacts ship direct.
