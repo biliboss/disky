@@ -13,7 +13,10 @@ pub fn new_snapshot_path() -> Result<String> {
     let dir = snapshot_dir();
     fs::create_dir_all(&dir)?;
     let ts = Local::now().format("%Y-%m-%d_%H-%M").to_string();
-    Ok(dir.join(format!("{}.db", ts)).to_string_lossy().into_owned())
+    Ok(dir
+        .join(format!("{}.db", ts))
+        .to_string_lossy()
+        .into_owned())
 }
 
 pub fn latest_snapshot() -> Option<String> {
@@ -24,7 +27,9 @@ pub fn latest_snapshot() -> Option<String> {
         .filter(|e| e.path().extension().map(|x| x == "db").unwrap_or(false))
         .collect();
     entries.sort_by_key(|e| e.file_name());
-    entries.last().map(|e| e.path().to_string_lossy().into_owned())
+    entries
+        .last()
+        .map(|e| e.path().to_string_lossy().into_owned())
 }
 
 pub fn list_snapshots() -> Vec<(String, u64)> {

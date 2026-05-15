@@ -57,9 +57,7 @@ pub fn run(root: &str, db_path: &str) -> Result<()> {
                 let path_owned: String = path.to_string_lossy().into_owned();
                 let path_bytes = path_owned.as_bytes();
 
-                let name_start = memrchr(b'/', path_bytes)
-                    .map(|i| i + 1)
-                    .unwrap_or(0);
+                let name_start = memrchr(b'/', path_bytes).map(|i| i + 1).unwrap_or(0);
                 let name = path_owned[name_start..].to_string();
 
                 let ext = if is_dir {

@@ -1,7 +1,7 @@
-mod db;
-mod scan;
-mod display;
 mod cli;
+mod db;
+mod display;
+mod scan;
 mod snapshots;
 mod tui;
 
@@ -21,7 +21,11 @@ fn main() -> Result<()> {
             };
             scan::run(&path, &db_path)?;
         }
-        Command::Top { db, limit, min_size } => {
+        Command::Top {
+            db,
+            limit,
+            min_size,
+        } => {
             let conn = db::open(&db)?;
             display::top_files(&conn, limit, min_size)?;
         }
@@ -50,7 +54,11 @@ fn main() -> Result<()> {
                 println!("No snapshots found. Run `disky scan` first.");
             } else {
                 for (path, size) in snaps {
-                    println!("{:60} {:>10}", path, humansize::format_size(size, humansize::BINARY));
+                    println!(
+                        "{:60} {:>10}",
+                        path,
+                        humansize::format_size(size, humansize::BINARY)
+                    );
                 }
             }
         }

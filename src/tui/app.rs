@@ -1,23 +1,23 @@
+use super::tree::{load_children, DirEntry};
 use anyhow::Result;
 use duckdb::Connection;
-use super::tree::{DirEntry, load_children};
 
 pub struct App {
-    pub db_path:   String,
-    pub root:      DirEntry,
-    pub flat:      Vec<FlatItem>,
-    pub selected:  usize,
-    pub status:    String,
-    pub quitting:  bool,
+    pub db_path: String,
+    pub root: DirEntry,
+    pub flat: Vec<FlatItem>,
+    pub selected: usize,
+    pub status: String,
+    pub quitting: bool,
 }
 
 #[derive(Clone)]
 pub struct FlatItem {
-    pub depth:  usize,
+    pub depth: usize,
     pub is_dir: bool,
-    pub path:   String,
-    pub name:   String,
-    pub size:   i64,
+    pub path: String,
+    pub name: String,
+    pub size: i64,
     pub expanded: bool,
 }
 
@@ -45,16 +45,24 @@ impl App {
     }
 
     pub fn move_up(&mut self) {
-        if self.selected > 0 { self.selected -= 1; }
+        if self.selected > 0 {
+            self.selected -= 1;
+        }
     }
 
     pub fn move_down(&mut self) {
-        if self.selected + 1 < self.flat.len() { self.selected += 1; }
+        if self.selected + 1 < self.flat.len() {
+            self.selected += 1;
+        }
     }
 
     pub fn toggle_expand(&mut self, conn: &Connection) -> Result<()> {
-        let Some(item) = self.flat.get(self.selected).cloned() else { return Ok(()); };
-        if !item.is_dir { return Ok(()); }
+        let Some(item) = self.flat.get(self.selected).cloned() else {
+            return Ok(());
+        };
+        if !item.is_dir {
+            return Ok(());
+        }
 
         self.toggle_in_tree(&item.path, conn)?;
         let sel_path = item.path.clone();
@@ -94,11 +102,11 @@ impl App {
 
 fn flatten(node: &DirEntry, out: &mut Vec<FlatItem>) {
     out.push(FlatItem {
-        depth:    node.depth,
-        is_dir:   node.is_dir,
-        path:     node.path.clone(),
-        name:     node.name.clone(),
-        size:     node.size,
+        depth: node.depth,
+        is_dir: node.is_dir,
+        path: node.path.clone(),
+        name: node.name.clone(),
+        size: node.size,
         expanded: node.expanded,
     });
     if node.expanded {

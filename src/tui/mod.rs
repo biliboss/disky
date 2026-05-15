@@ -27,11 +27,9 @@ pub fn run(db_path: Option<String>) -> Result<()> {
 
     // detect scan root from DB (smallest depth path)
     let root_path: String = conn
-        .query_row(
-            "SELECT path FROM files WHERE depth = 0 LIMIT 1",
-            [],
-            |r| r.get(0),
-        )
+        .query_row("SELECT path FROM files WHERE depth = 0 LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or_else(|_| "/".to_string());
 
     eprintln!("Loading snapshot {}...", path);
@@ -51,7 +49,9 @@ pub fn run(db_path: Option<String>) -> Result<()> {
         list_state.select(Some(app.selected));
         terminal.draw(|f| ui::render(f, &app, &mut list_state))?;
 
-        if !event::poll(Duration::from_millis(250))? { continue; }
+        if !event::poll(Duration::from_millis(250))? {
+            continue;
+        }
 
         if let Event::Key(key) = event::read()? {
             // ctrl-c / ctrl-d
