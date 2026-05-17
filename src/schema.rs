@@ -71,7 +71,12 @@ fn records() -> Value {
         "FileRow":    { "path": "string", "size": "u64", "ext": "string?", "mtime": "string? (RFC3339 UTC)" },
         "DirRow":     { "path": "string", "total_size": "u64" },
         "ExtRow":     { "ext": "string", "files": "u64", "total_size": "u64" },
-        "Stats":      { "files": "u64", "dirs": "u64", "total_bytes": "u64", "largest_bytes": "u64", "avg_bytes": "u64" },
+        "Stats":      {
+            "files": "u64", "dirs": "u64", "total_bytes": "u64",
+            "largest_bytes": "u64", "avg_bytes": "u64",
+            "partial": "bool",
+            "scan_root": "string?", "scan_duration_s": "i64?", "scanned_at": "string? (RFC3339 UTC)"
+        },
         "Snapshot":   { "path": "string", "id": "string?", "bytes": "u64" },
         "CleanupHit": { "category": "string", "path": "string", "bytes": "u64", "files": "u64" },
         "envelope":   { "schema_version": "u32", "kind": "string", "records": "T[]" },

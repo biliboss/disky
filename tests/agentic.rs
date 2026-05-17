@@ -87,7 +87,11 @@ fn stats_reports_partial_flag() {
         "--format",
         "json",
     ]);
-    assert_eq!(v["record"]["partial"], false);
+    let r = &v["record"];
+    assert_eq!(r["partial"], false);
+    assert!(r["scan_root"].is_string(), "scan_root missing: {}", r);
+    assert!(r["scanned_at"].is_string(), "scanned_at missing: {}", r);
+    assert!(r["scan_duration_s"].is_i64() || r["scan_duration_s"].is_u64());
 }
 
 #[test]

@@ -8,9 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `Stats` now carries scan provenance: `scan_root`, `scanned_at` (RFC 3339),
+  `scan_duration_s`. `disky stats` text mode prints them under the totals;
+  JSON mode adds them as optional fields. Lets agents tell whether a query
+  is hitting a fresh snapshot or a week-old one.
+- `scan_meta.ended_at` (BIGINT) stored on every scan; `ScanMeta::duration_secs`
+  computes the elapsed time.
 - Integration test suite (`tests/agentic.rs`): 6 tests covering JSON
-  envelope, partial flag, RFC 9457 not-found stderr, schema descriptor,
-  raw SQL, cleanup dry-run.
+  envelope, partial flag + provenance fields, RFC 9457 not-found stderr,
+  schema descriptor, raw SQL, cleanup dry-run.
 - CI now runs `cargo test --release`.
 - README documents agentic surface (JSON/NDJSON, MCP, exit codes).
 

@@ -145,6 +145,15 @@ pub fn stats(s: &Stats, format: Format) -> Result<()> {
     println!("Total size: {:>12}", format_size(s.total_bytes, BINARY));
     println!("Largest:    {:>12}", format_size(s.largest_bytes, BINARY));
     println!("Avg size:   {:>12}", format_size(s.avg_bytes, BINARY));
+    if let Some(root) = &s.scan_root {
+        println!("Root:       {}", root);
+    }
+    if let Some(ts) = &s.scanned_at {
+        println!("Scanned:    {}", ts);
+    }
+    if let Some(d) = s.scan_duration_s {
+        println!("Duration:   {}s", d);
+    }
     if s.partial {
         println!("Status:        PARTIAL (scan was cancelled)");
     }

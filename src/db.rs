@@ -25,6 +25,7 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
         CREATE TABLE scan_meta (
             root         TEXT NOT NULL,
             started_at   BIGINT NOT NULL,
+            ended_at     BIGINT,
             completed    BOOLEAN NOT NULL DEFAULT false,
             entries      BIGINT NOT NULL DEFAULT 0,
             bytes        BIGINT NOT NULL DEFAULT 0
@@ -34,18 +35,28 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn write_scan_meta(
     conn: &Connection,
     root: &str,
     started_at: i64,
+    ended_at: Option<i64>,
     completed: bool,
     entries: u64,
     bytes: u64,
 ) -> Result<()> {
     conn.execute("DELETE FROM scan_meta", [])?;
     conn.execute(
-        "INSERT INTO scan_meta (root, started_at, completed, entries, bytes) VALUES (?, ?, ?, ?, ?)",
-        duckdb::params![root, started_at, completed, entries as i64, bytes as i64],
+        "INSERT INTO scan_meta (root, started_at, ended_at, completed, entries, bytes)
+         VALUES (?, ?, ?, ?, ?, ?)",
+        duckdb::params![
+            root,
+            started_at,
+            ended_at,
+            completed,
+            entries as i64,
+            bytes as i64
+        ],
     )?;
     Ok(())
 }
@@ -53,21 +64,33 @@ pub fn write_scan_meta(
 #[derive(Debug, Clone)]
 pub struct ScanMeta {
     pub root: String,
+    pub started_at: i64,
+    pub ended_at: Option<i64>,
     pub completed: bool,
     pub entries: u64,
     pub bytes: u64,
 }
 
+impl ScanMeta {
+    pub fn duration_secs(&self) -> Option<i64> {
+        self.ended_at.map(|e| (e - self.started_at).max(0))
+    }
+}
+
 pub fn read_scan_meta(conn: &Connection) -> Option<ScanMeta> {
     let mut stmt = conn
-        .prepare("SELECT root, completed, entries, bytes FROM scan_meta LIMIT 1")
+        .prepare(
+            "SELECT root, started_at, ended_at, completed, entries, bytes FROM scan_meta LIMIT 1",
+        )
         .ok()?;
     stmt.query_row([], |row| {
         Ok(ScanMeta {
             root: row.get::<_, String>(0)?,
-            completed: row.get::<_, bool>(1)?,
-            entries: row.get::<_, i64>(2)? as u64,
-            bytes: row.get::<_, i64>(3)? as u64,
+            started_at: row.get::<_, i64>(1)?,
+            ended_at: row.get::<_, Option<i64>>(2)?,
+            completed: row.get::<_, bool>(3)?,
+            entries: row.get::<_, i64>(4)? as u64,
+            bytes: row.get::<_, i64>(5)? as u64,
         })
     })
     .ok()

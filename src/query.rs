@@ -40,6 +40,12 @@ pub struct Stats {
     /// True when the snapshot's last scan was cancelled before completing.
     /// Agents should treat the data as best-effort.
     pub partial: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scan_root: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scan_duration_s: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanned_at: Option<String>,
 }
 
 fn rfc3339(mtime: Option<i64>) -> Option<String> {
@@ -233,10 +239,16 @@ pub fn stats(conn: &Connection) -> Result<Stats> {
             largest_bytes: row.get::<_, i64>(3)? as u64,
             avg_bytes: row.get::<_, f64>(4)? as u64,
             partial: false,
+            scan_root: None,
+            scan_duration_s: None,
+            scanned_at: None,
         })
     })?;
     if let Some(meta) = crate::db::read_scan_meta(conn) {
         row.partial = !meta.completed;
+        row.scan_root = Some(meta.root.clone());
+        row.scan_duration_s = meta.duration_secs();
+        row.scanned_at = rfc3339(Some(meta.started_at));
     }
     Ok(row)
 }

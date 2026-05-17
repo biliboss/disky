@@ -121,7 +121,7 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
-    db::write_scan_meta(&conn, root, started_at, false, 0, 0)?;
+    db::write_scan_meta(&conn, root, started_at, None, false, 0, 0)?;
 
     let cpus = num_cpus::get();
 
@@ -226,7 +226,11 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
 
     let total = counter.load(Ordering::Relaxed);
     let bytes = bytes_seen.load(Ordering::Relaxed);
-    db::write_scan_meta(&conn, root, started_at, !cancelled, total, bytes)?;
+    let ended_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .ok();
+    db::write_scan_meta(&conn, root, started_at, ended_at, !cancelled, total, bytes)?;
     progress.finish(total, bytes, db_path);
     Ok(ScanOutcome {
         complete: !cancelled,
