@@ -123,6 +123,95 @@ pub fn find_files(conn: &Connection, pattern: &str, limit: usize) -> Result<Vec<
     Ok(rows.flatten().collect())
 }
 
+/// Run an arbitrary SQL statement and return rows as JSON objects keyed by
+/// column name. Heterogeneous columns are coerced to the closest serde_json
+/// type — large integers (HugeInt) fall back to strings to preserve precision.
+pub fn raw_query(
+    conn: &Connection,
+    sql: &str,
+    limit: usize,
+) -> Result<Vec<serde_json::Map<String, serde_json::Value>>> {
+    use duckdb::types::{TimeUnit, Value as DV};
+    use serde_json::Value as JV;
+
+    fn convert(v: DV) -> JV {
+        match v {
+            DV::Null => JV::Null,
+            DV::Boolean(b) => JV::Bool(b),
+            DV::TinyInt(i) => JV::from(i),
+            DV::SmallInt(i) => JV::from(i),
+            DV::Int(i) => JV::from(i),
+            DV::BigInt(i) => JV::from(i),
+            DV::HugeInt(i) => JV::String(i.to_string()),
+            DV::UTinyInt(i) => JV::from(i),
+            DV::USmallInt(i) => JV::from(i),
+            DV::UInt(i) => JV::from(i),
+            DV::UBigInt(i) => JV::from(i),
+            DV::Float(f) => serde_json::Number::from_f64(f as f64).map_or(JV::Null, JV::Number),
+            DV::Double(f) => serde_json::Number::from_f64(f).map_or(JV::Null, JV::Number),
+            DV::Decimal(d) => JV::String(d.to_string()),
+            DV::Timestamp(_, i) => JV::from(i),
+            DV::Text(s) => JV::String(s),
+            DV::Blob(b) => JV::String(format!("<blob:{} bytes>", b.len())),
+            DV::Date32(i) => JV::from(i),
+            DV::Time64(TimeUnit::Microsecond, i) => JV::from(i),
+            DV::Time64(_, i) => JV::from(i),
+            DV::Interval {
+                months,
+                days,
+                nanos,
+            } => serde_json::json!({
+                "months": months, "days": days, "nanos": nanos
+            }),
+            DV::List(v) | DV::Array(v) => JV::Array(v.into_iter().map(convert).collect()),
+            DV::Enum(s) => JV::String(s),
+            DV::Struct(m) => {
+                let mut o = serde_json::Map::new();
+                for (k, v) in m.iter() {
+                    o.insert(k.clone(), convert(v.clone()));
+                }
+                JV::Object(o)
+            }
+            DV::Union(inner) => convert(*inner),
+            DV::Map(m) => {
+                let arr: Vec<JV> = m
+                    .iter()
+                    .map(|(k, v)| {
+                        serde_json::json!({ "key": convert(k.clone()), "value": convert(v.clone()) })
+                    })
+                    .collect();
+                JV::Array(arr)
+            }
+        }
+    }
+
+    let mut stmt = conn.prepare(sql)?;
+    let mut rows = stmt.query([])?;
+    let column_names: Vec<String> = rows
+        .as_ref()
+        .map(|s| s.column_names())
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    let n_cols = column_names.len();
+
+    let mut out = Vec::new();
+    let mut taken = 0usize;
+    while let Some(row) = rows.next()? {
+        if taken >= limit {
+            break;
+        }
+        let mut obj = serde_json::Map::with_capacity(n_cols);
+        for (i, name) in column_names.iter().enumerate() {
+            let v: DV = row.get(i)?;
+            obj.insert(name.clone(), convert(v));
+        }
+        out.push(obj);
+        taken += 1;
+    }
+    Ok(out)
+}
+
 pub fn stats(conn: &Connection) -> Result<Stats> {
     let mut stmt = conn.prepare(
         "SELECT

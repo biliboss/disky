@@ -40,54 +40,77 @@ fn emit_error(err: &DiskyError, format: Format) {
     }
 }
 
+fn open_snapshot(spec: &str) -> anyhow::Result<duckdb::Connection> {
+    let path = snapshots::resolve(spec)?;
+    db::open(&path)
+}
+
 fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
-    match cli.command.unwrap_or(Command::Tui { db: None }) {
+    match cli.command.unwrap_or(Command::Tui { snapshot: None }) {
         Command::Scan { path, db } => {
-            let db_path = if db == "disky.db" {
-                snapshots::new_snapshot_path()?
-            } else {
-                db
+            let db_path = match db {
+                Some(p) => p,
+                None => snapshots::new_snapshot_path()?,
             };
             scan::run(&path, &db_path)?;
         }
         Command::Top {
-            db,
+            snapshot,
             limit,
             min_size,
         } => {
-            let conn = db::open(&db)?;
+            let conn = open_snapshot(&snapshot)?;
             let rows = query::top_files(&conn, limit, min_size)?;
             render::top_files(&rows, format)?;
         }
-        Command::Ext { db, limit } => {
-            let conn = db::open(&db)?;
+        Command::Ext { snapshot, limit } => {
+            let conn = open_snapshot(&snapshot)?;
             let rows = query::by_extension(&conn, limit)?;
             render::by_extension(&rows, format)?;
         }
-        Command::Dirs { db, limit } => {
-            let conn = db::open(&db)?;
+        Command::Dirs { snapshot, limit } => {
+            let conn = open_snapshot(&snapshot)?;
             let rows = query::top_dirs(&conn, limit)?;
             render::top_dirs(&rows, format)?;
         }
-        Command::Find { db, pattern, limit } => {
-            let conn = db::open(&db)?;
+        Command::Find {
+            snapshot,
+            pattern,
+            limit,
+        } => {
+            let conn = open_snapshot(&snapshot)?;
             let rows = query::find_files(&conn, &pattern, limit)?;
             render::find_files(&rows, &pattern, format)?;
         }
-        Command::Stats { db } => {
-            let conn = db::open(&db)?;
+        Command::Stats { snapshot } => {
+            let conn = open_snapshot(&snapshot)?;
             let s = query::stats(&conn)?;
             render::stats(&s, format)?;
         }
-        Command::Tui { db } => {
-            tui::run(db)?;
+        Command::Query {
+            sql,
+            snapshot,
+            limit,
+        } => {
+            let conn = open_snapshot(&snapshot)?;
+            let rows = query::raw_query(&conn, &sql, limit)?;
+            render::raw_query(&rows, format)?;
+        }
+        Command::Tui { snapshot } => {
+            tui::run(snapshot)?;
         }
         Command::List => {
             let snaps = snapshots::list_snapshots();
             if format.is_machine() {
                 let records: Vec<_> = snaps
                     .iter()
-                    .map(|(path, size)| json!({"path": path, "bytes": size}))
+                    .map(|(path, size)| {
+                        json!({
+                            "path": path,
+                            "id": snapshots::id_for(path),
+                            "bytes": size,
+                        })
+                    })
                     .collect();
                 let payload = json!({
                     "schema_version": SCHEMA_VERSION,
@@ -99,10 +122,12 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                 println!("No snapshots found. Run `disky scan` first.");
             } else {
                 for (path, size) in snaps {
+                    let id = snapshots::id_for(&path).unwrap_or_default();
                     println!(
-                        "{:60} {:>10}",
+                        "{:24} {:>10} {}",
+                        id,
+                        humansize::format_size(size, humansize::BINARY),
                         path,
-                        humansize::format_size(size, humansize::BINARY)
                     );
                 }
             }

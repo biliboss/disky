@@ -206,6 +206,19 @@ fn tools_list() -> Value {
                 }
             },
             {
+                "name": "disky_query",
+                "description": "Run an arbitrary SQL query against a snapshot. The `files` table has columns: path, name, ext, size, mtime, is_dir, depth.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "sql": { "type": "string" },
+                        "snapshot": { "type": "string", "default": "@latest" },
+                        "limit": { "type": "integer", "default": 1000 }
+                    },
+                    "required": ["sql"]
+                }
+            },
+            {
                 "name": "disky_list_snapshots",
                 "description": "List available DuckDB snapshots in ~/Library/Application Support/disky/.",
                 "inputSchema": { "type": "object", "properties": {} }
@@ -228,6 +241,7 @@ fn handle_tool_call(id: Value, params: Value) -> Value {
         "disky_ext" => tool_ext(&args),
         "disky_find" => tool_find(&args),
         "disky_stats" => tool_stats(&args),
+        "disky_query" => tool_query(&args),
         "disky_list_snapshots" => tool_list_snapshots(),
         other => {
             return tool_error_result(
@@ -252,12 +266,7 @@ fn resolve_snapshot(args: &Value) -> anyhow::Result<String> {
         .get("snapshot")
         .and_then(Value::as_str)
         .unwrap_or("@latest");
-    if snap == "@latest" {
-        snapshots::latest_snapshot()
-            .ok_or_else(|| anyhow::anyhow!("no snapshot found; run disky_scan first (not found)"))
-    } else {
-        Ok(snap.to_string())
-    }
+    snapshots::resolve(snap)
 }
 
 fn tool_scan(args: &Value) -> anyhow::Result<Value> {
@@ -338,11 +347,30 @@ fn tool_stats(args: &Value) -> anyhow::Result<Value> {
     }))
 }
 
+fn tool_query(args: &Value) -> anyhow::Result<Value> {
+    let sql = args
+        .get("sql")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("missing required field 'sql'"))?
+        .to_string();
+    let db_path = resolve_snapshot(args)?;
+    let conn = db::open(&db_path)?;
+    let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(1000) as usize;
+    let rows = query::raw_query(&conn, &sql, limit)?;
+    Ok(envelope("query", json!(rows)))
+}
+
 fn tool_list_snapshots() -> anyhow::Result<Value> {
     let snaps = snapshots::list_snapshots();
     let records: Vec<_> = snaps
         .iter()
-        .map(|(path, size)| json!({ "path": path, "bytes": size }))
+        .map(|(path, size)| {
+            json!({
+                "path": path,
+                "id": snapshots::id_for(path),
+                "bytes": size,
+            })
+        })
         .collect();
     Ok(envelope("snapshots", json!(records)))
 }

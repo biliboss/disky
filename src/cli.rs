@@ -30,6 +30,10 @@ impl From<FormatArg> for Format {
     }
 }
 
+/// Snapshot reference accepted by every query subcommand: `@latest`, a
+/// snapshot ID (`2026-05-15_11-56`), or a filesystem path.
+const SNAPSHOT_HELP: &str = "Snapshot to query: @latest, an ID, or a path";
+
 #[derive(Subcommand)]
 pub enum Command {
     /// Scan a directory and store results
@@ -38,15 +42,15 @@ pub enum Command {
         #[arg(default_value = "/")]
         path: String,
 
-        /// DuckDB file path
-        #[arg(short, long, default_value = "disky.db")]
-        db: String,
+        /// Output DuckDB file path (default: auto-named in data dir)
+        #[arg(short, long)]
+        db: Option<String>,
     },
 
     /// Show largest files
     Top {
-        #[arg(short, long, default_value = "disky.db")]
-        db: String,
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
         #[arg(short, long, default_value_t = 50)]
         limit: usize,
         /// Minimum size in bytes
@@ -56,16 +60,16 @@ pub enum Command {
 
     /// Show disk usage by extension
     Ext {
-        #[arg(short, long, default_value = "disky.db")]
-        db: String,
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
         #[arg(short, long, default_value_t = 30)]
         limit: usize,
     },
 
     /// Show top directories by size
     Dirs {
-        #[arg(short, long, default_value = "disky.db")]
-        db: String,
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
         #[arg(short, long, default_value_t = 30)]
         limit: usize,
     },
@@ -74,23 +78,34 @@ pub enum Command {
     Find {
         /// Glob pattern (e.g. "*.log")
         pattern: String,
-        #[arg(short, long, default_value = "disky.db")]
-        db: String,
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
         #[arg(short, long, default_value_t = 50)]
         limit: usize,
     },
 
     /// Show overall disk stats
     Stats {
-        #[arg(short, long, default_value = "disky.db")]
-        db: String,
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
+    },
+
+    /// Run an arbitrary SQL query against a snapshot
+    Query {
+        /// SQL — references the `files` table (`path, name, ext, size, mtime, is_dir, depth`)
+        sql: String,
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
+        /// Cap on returned rows
+        #[arg(short, long, default_value_t = 1000)]
+        limit: usize,
     },
 
     /// Open interactive TUI (default when no subcommand given)
     Tui {
-        /// Snapshot DB path (default: latest in ~/.local/share/disky/)
+        /// Snapshot to load (default: @latest)
         #[arg(short, long)]
-        db: Option<String>,
+        snapshot: Option<String>,
     },
 
     /// List available snapshots

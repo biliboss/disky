@@ -12,6 +12,27 @@ Fast macOS disk analyzer — scan, explore, clean up.
 | `flume 0.11` | Bounded channel walker→writer, cap 256 |
 | `memchr 2` | `memrchr(b'.', ...)` for ext extraction (2-3x faster than `Path::extension`) |
 
+## Snapshot references
+
+All query subcommands accept `--snapshot <ref>` where `<ref>` is:
+
+| Form | Example | Resolves to |
+|------|---------|-------------|
+| `@latest` (default) | `@latest` | newest `*.db` in the data dir |
+| Snapshot ID | `2026-05-15_11-56` | `<data dir>/<id>.db` |
+| Filesystem path | `/tmp/scan.db` | itself, untouched |
+
+`disky list` prints the ID, size, and full path. The same syntax works in the
+`disky-mcp` tools via the `snapshot` argument.
+
+## Raw SQL
+
+`disky query "<sql>" --snapshot @latest --format json` (or `--format ndjson`)
+runs an arbitrary SQL statement against the snapshot. The `files` table has
+columns `path, name, ext, size, mtime, is_dir, depth`. Large integers (DuckDB
+`HugeInt`) are emitted as strings to preserve precision; everything else maps
+to native JSON types. Default row cap: 1000 (`--limit`).
+
 ## MCP server
 
 `disky-mcp` is a stdio JSON-RPC 2.0 server exposing the query layer as typed

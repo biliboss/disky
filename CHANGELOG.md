@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-17
+
+### Added
+- `disky query "<sql>"` — run arbitrary SQL against a snapshot, rendered as
+  text table, JSON envelope, or NDJSON. Heterogeneous columns map to native
+  JSON types; `HugeInt` is stringified to preserve precision. `--limit`
+  caps rows (default 1000).
+- Snapshot ID handles: every CLI subcommand and MCP tool now accepts
+  `--snapshot @latest | <id> | <path>` via `snapshots::resolve`. IDs are the
+  file stem (e.g. `2026-05-15_11-56`) and resolve against the data dir.
+- `disky_query` MCP tool mirroring the CLI surface.
+- `disky list` (text + JSON) now prints the snapshot ID alongside the path.
+
+### Changed
+- CLI subcommands replace `--db <path>` with `--snapshot <ref>`. The legacy
+  `disky.db` literal default is gone; queries default to `@latest`.
+- `disky scan --db <path>` keeps the old flag for explicit destinations,
+  defaults to an auto-named file in the data dir.
+- Bad snapshot IDs now exit with status `4 not-found` (verified end-to-end).
+
 ## [0.3.0] - 2026-05-17
 
 ### Added

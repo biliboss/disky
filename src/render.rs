@@ -147,6 +147,79 @@ pub fn stats(s: &Stats, format: Format) -> Result<()> {
     Ok(())
 }
 
+pub fn raw_query(
+    rows: &[serde_json::Map<String, serde_json::Value>],
+    format: Format,
+) -> Result<()> {
+    match format {
+        Format::Ndjson => {
+            for r in rows {
+                println!("{}", serde_json::to_string(r)?);
+            }
+        }
+        Format::Json => {
+            let payload = json!({
+                "schema_version": SCHEMA_VERSION,
+                "kind": "query",
+                "records": rows,
+            });
+            println!("{}", serde_json::to_string(&payload)?);
+        }
+        Format::Text => {
+            if rows.is_empty() {
+                println!("(0 rows)");
+                return Ok(());
+            }
+            let columns: Vec<String> = rows[0].keys().cloned().collect();
+            let widths: Vec<usize> = columns
+                .iter()
+                .map(|c| {
+                    let max_cell = rows
+                        .iter()
+                        .map(|r| {
+                            r.get(c)
+                                .map(|v| match v {
+                                    serde_json::Value::String(s) => s.len(),
+                                    other => other.to_string().len(),
+                                })
+                                .unwrap_or(4)
+                        })
+                        .max()
+                        .unwrap_or(c.len());
+                    max_cell.max(c.len()).min(80)
+                })
+                .collect();
+
+            for (c, w) in columns.iter().zip(widths.iter()) {
+                print!("{:<width$} ", c, width = w);
+            }
+            println!();
+            println!(
+                "{}",
+                "-".repeat(widths.iter().sum::<usize>() + columns.len())
+            );
+
+            for r in rows {
+                for (c, w) in columns.iter().zip(widths.iter()) {
+                    let cell = match r.get(c) {
+                        Some(serde_json::Value::String(s)) => s.clone(),
+                        Some(v) => v.to_string(),
+                        None => String::new(),
+                    };
+                    let truncated = if cell.len() > *w {
+                        format!("{}…", &cell[..w.saturating_sub(1)])
+                    } else {
+                        cell
+                    };
+                    print!("{:<width$} ", truncated, width = w);
+                }
+                println!();
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Used by the TUI's `e` keybind.
 pub fn export_html_report(conn: &Connection, db_path: &str) -> Result<()> {
     use std::fs;
