@@ -6,7 +6,7 @@
 
 use disky::exit::{classify, DiskyError, ExitCode};
 use disky::query::{self, SCHEMA_VERSION};
-use disky::{db, scan, snapshots};
+use disky::{cleanup, db, scan, schema, snapshots};
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 
@@ -219,6 +219,24 @@ fn tools_list() -> Value {
                 }
             },
             {
+                "name": "disky_cleanup",
+                "description": "Find well-known disk-hoggy directories (node_modules, target, …). Dry-run unless apply=true.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "target": { "type": "array", "items": { "type": "string" }, "description": "Categories (default: all)" },
+                        "snapshot": { "type": "string", "default": "@latest" },
+                        "limit": { "type": "integer", "default": 100 },
+                        "apply": { "type": "boolean", "default": false, "description": "Actually delete the listed paths" }
+                    }
+                }
+            },
+            {
+                "name": "disky_schema",
+                "description": "Emit a JSON descriptor of every disky command, record shape, and error type.",
+                "inputSchema": { "type": "object", "properties": {} }
+            },
+            {
                 "name": "disky_list_snapshots",
                 "description": "List available DuckDB snapshots in ~/Library/Application Support/disky/.",
                 "inputSchema": { "type": "object", "properties": {} }
@@ -242,6 +260,8 @@ fn handle_tool_call(id: Value, params: Value) -> Value {
         "disky_find" => tool_find(&args),
         "disky_stats" => tool_stats(&args),
         "disky_query" => tool_query(&args),
+        "disky_cleanup" => tool_cleanup(&args),
+        "disky_schema" => Ok(schema::document()),
         "disky_list_snapshots" => tool_list_snapshots(),
         other => {
             return tool_error_result(
@@ -358,6 +378,42 @@ fn tool_query(args: &Value) -> anyhow::Result<Value> {
     let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(1000) as usize;
     let rows = query::raw_query(&conn, &sql, limit)?;
     Ok(envelope("query", json!(rows)))
+}
+
+fn tool_cleanup(args: &Value) -> anyhow::Result<Value> {
+    let db_path = resolve_snapshot(args)?;
+    let conn = db::open(&db_path)?;
+    let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(100) as usize;
+    let apply = args.get("apply").and_then(Value::as_bool).unwrap_or(false);
+    let targets: Vec<String> = args
+        .get("target")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .filter(|v: &Vec<String>| !v.is_empty())
+        .unwrap_or_else(|| {
+            cleanup::default_target_names()
+                .into_iter()
+                .map(String::from)
+                .collect()
+        });
+
+    let hits = cleanup::scan(&conn, &targets, limit)?;
+    let removed = if apply {
+        Some(cleanup::apply(&hits)?)
+    } else {
+        None
+    };
+    Ok(json!({
+        "schema_version": SCHEMA_VERSION,
+        "kind": "cleanup",
+        "applied": apply,
+        "removed": removed.unwrap_or_default(),
+        "records": hits,
+    }))
 }
 
 fn tool_list_snapshots() -> anyhow::Result<Value> {

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-17
+
+### Added
+- `disky cleanup` — find well-known disk hoggers (`node_modules`, `target`,
+  `__pycache__`, `.next`, `dist`, `build`, `.venv`/`venv`, `.gradle`,
+  `.pytest_cache`) in the snapshot, render category/size/files/path. Defaults
+  to dry-run; `--apply` actually removes the listed paths. `--target` filters
+  to specific categories.
+- `disky schema` — emit a JSON descriptor of every command, record shape,
+  error code, and snapshot-ref form. Hand-written, no `schemars` dep.
+- MCP tools `disky_cleanup` and `disky_schema` mirror the CLI.
+
 ## [0.4.0] - 2026-05-17
 
 ### Added

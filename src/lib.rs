@@ -5,9 +5,11 @@
 //! agent-facing contract; bump [`query::SCHEMA_VERSION`] on any breaking
 //! change.
 
+pub mod cleanup;
 pub mod db;
 pub mod exit;
 pub mod query;
 pub mod render;
 pub mod scan;
+pub mod schema;
 pub mod snapshots;

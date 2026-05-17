@@ -6,7 +6,7 @@ use cli::{Cli, Command};
 use disky::exit::{classify, DiskyError, ExitCode};
 use disky::query::SCHEMA_VERSION;
 use disky::render::{resolve_format, Format};
-use disky::{db, query, render, scan, snapshots};
+use disky::{cleanup, db, query, render, scan, schema, snapshots};
 use serde_json::json;
 use std::process::ExitCode as ProcExit;
 
@@ -95,6 +95,32 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             let conn = open_snapshot(&snapshot)?;
             let rows = query::raw_query(&conn, &sql, limit)?;
             render::raw_query(&rows, format)?;
+        }
+        Command::Cleanup {
+            target,
+            snapshot,
+            limit,
+            apply,
+        } => {
+            let conn = open_snapshot(&snapshot)?;
+            let targets: Vec<String> = if target.is_empty() {
+                cleanup::default_target_names()
+                    .into_iter()
+                    .map(String::from)
+                    .collect()
+            } else {
+                target
+            };
+            let hits = cleanup::scan(&conn, &targets, limit)?;
+            let removed = if apply {
+                Some(cleanup::apply(&hits)?)
+            } else {
+                None
+            };
+            render::cleanup(&hits, removed.as_deref(), format)?;
+        }
+        Command::Schema => {
+            println!("{}", serde_json::to_string_pretty(&schema::document())?);
         }
         Command::Tui { snapshot } => {
             tui::run(snapshot)?;

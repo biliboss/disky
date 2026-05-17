@@ -12,6 +12,25 @@ Fast macOS disk analyzer — scan, explore, clean up.
 | `flume 0.11` | Bounded channel walker→writer, cap 256 |
 | `memchr 2` | `memrchr(b'.', ...)` for ext extraction (2-3x faster than `Path::extension`) |
 
+## Cleanup
+
+`disky cleanup` greps the snapshot for known disk-hoggy directories
+(`node_modules`, `target`, `__pycache__`, `.next`, `dist`, `build`,
+`.venv`/`venv`, `.gradle`, `.pytest_cache`). Default is dry-run.
+
+```
+disky cleanup --snapshot @latest                     # preview
+disky cleanup --target node_modules,target --apply   # actually delete
+```
+
+JSON output: `{kind:"cleanup", applied:bool, removed:[paths], records:[CleanupHit]}`.
+
+## Schema introspection
+
+`disky schema` prints a JSON document describing commands, record shapes,
+error codes, and snapshot-ref forms. Pair it with `--format json` on any
+command to let an agent bind without prompt-engineering.
+
 ## Snapshot references
 
 All query subcommands accept `--snapshot <ref>` where `<ref>` is:

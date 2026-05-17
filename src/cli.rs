@@ -101,6 +101,24 @@ pub enum Command {
         limit: usize,
     },
 
+    /// Find well-known disk-hoggy directories (node_modules, target, …).
+    /// Defaults to dry-run; pass `--apply` to delete.
+    Cleanup {
+        /// Comma-separated target categories (default: all known)
+        #[arg(short, long, value_delimiter = ',')]
+        target: Vec<String>,
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
+        #[arg(short, long, default_value_t = 100)]
+        limit: usize,
+        /// Actually delete the listed paths (default: dry-run)
+        #[arg(long, default_value_t = false)]
+        apply: bool,
+    },
+
+    /// Emit a JSON descriptor of every command, record shape, and error type
+    Schema,
+
     /// Open interactive TUI (default when no subcommand given)
     Tui {
         /// Snapshot to load (default: @latest)

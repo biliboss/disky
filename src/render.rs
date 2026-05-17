@@ -4,6 +4,7 @@ use humansize::{format_size, BINARY};
 use serde::Serialize;
 use serde_json::json;
 
+use crate::cleanup::CleanupHit;
 use crate::query::{DirRow, ExtRow, FileRow, Stats, SCHEMA_VERSION};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -216,6 +217,45 @@ pub fn raw_query(
                 println!();
             }
         }
+    }
+    Ok(())
+}
+
+pub fn cleanup(hits: &[CleanupHit], applied: Option<&[String]>, format: Format) -> Result<()> {
+    if format.is_machine() {
+        let payload = json!({
+            "schema_version": SCHEMA_VERSION,
+            "kind": "cleanup",
+            "applied": applied.is_some(),
+            "removed": applied.unwrap_or(&[]),
+            "records": hits,
+        });
+        if matches!(format, Format::Ndjson) {
+            for h in hits {
+                println!("{}", serde_json::to_string(h)?);
+            }
+        } else {
+            println!("{}", serde_json::to_string(&payload)?);
+        }
+        return Ok(());
+    }
+    println!("{:<14} {:>12} {:>10}  PATH", "CATEGORY", "SIZE", "FILES");
+    println!("{}", "-".repeat(80));
+    for h in hits {
+        println!(
+            "{:<14} {:>12} {:>10}  {}",
+            h.category,
+            format_size(h.bytes, BINARY),
+            h.files,
+            h.path,
+        );
+    }
+    if let Some(rm) = applied {
+        println!();
+        println!("Removed {} path(s).", rm.len());
+    } else {
+        println!();
+        println!("(dry-run — re-run with --apply to delete)");
     }
     Ok(())
 }
