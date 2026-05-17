@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `disky cleanup` (CLI + MCP) now adds `summary: [CategorySummary]` and
+  `total_bytes` to the JSON envelope, aggregating hits across paths per
+  category. Text mode prints a second table beneath the per-path list
+  showing TOTAL / FILES / PATHS per category and the grand total. Lets
+  an agent answer "how many GB can I reclaim across all node_modules?"
+  in one call.
+- New `cleanup::summarise` helper + `CategorySummary` record; schema
+  descriptor includes it.
+- Integration test covers per-category aggregation across two projects
+  with overlapping basenames.
 - TUI header now shows a red `PARTIAL` badge when the loaded snapshot's
   last scan was cancelled. Surfaces F12 state to humans, matching the
   `partial: true` flag exposed to agents in `disky stats --format json`.

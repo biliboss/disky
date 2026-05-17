@@ -461,12 +461,16 @@ fn tool_cleanup(args: &Value) -> anyhow::Result<Value> {
     } else {
         None
     };
+    let summary = cleanup::summarise(&hits);
+    let total_bytes: u64 = summary.iter().map(|s| s.bytes).sum();
     Ok(json!({
         "schema_version": SCHEMA_VERSION,
         "kind": "cleanup",
         "applied": apply,
         "removed": removed.unwrap_or_default(),
         "records": hits,
+        "summary": summary,
+        "total_bytes": total_bytes,
     }))
 }
 

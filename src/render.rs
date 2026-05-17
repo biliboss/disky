@@ -261,6 +261,9 @@ pub fn diff(rows: &[DiffRow], format: Format) -> Result<()> {
 }
 
 pub fn cleanup(hits: &[CleanupHit], applied: Option<&[String]>, format: Format) -> Result<()> {
+    let summary = crate::cleanup::summarise(hits);
+    let total_bytes: u64 = summary.iter().map(|s| s.bytes).sum();
+
     if format.is_machine() {
         let payload = json!({
             "schema_version": SCHEMA_VERSION,
@@ -268,6 +271,8 @@ pub fn cleanup(hits: &[CleanupHit], applied: Option<&[String]>, format: Format) 
             "applied": applied.is_some(),
             "removed": applied.unwrap_or(&[]),
             "records": hits,
+            "summary": summary,
+            "total_bytes": total_bytes,
         });
         if matches!(format, Format::Ndjson) {
             for h in hits {
@@ -288,6 +293,24 @@ pub fn cleanup(hits: &[CleanupHit], applied: Option<&[String]>, format: Format) 
             h.files,
             h.path,
         );
+    }
+    if !summary.is_empty() {
+        println!();
+        println!(
+            "{:<14} {:>12} {:>10} {:>8}",
+            "CATEGORY", "TOTAL", "FILES", "PATHS"
+        );
+        println!("{}", "-".repeat(50));
+        for s in &summary {
+            println!(
+                "{:<14} {:>12} {:>10} {:>8}",
+                s.category,
+                format_size(s.bytes, BINARY),
+                s.files,
+                s.paths,
+            );
+        }
+        println!("{:<14} {:>12}", "TOTAL", format_size(total_bytes, BINARY));
     }
     if let Some(rm) = applied {
         println!();

@@ -88,7 +88,8 @@ fn records() -> Value {
             "scan_root": "string?", "scan_duration_s": "i64?", "scanned_at": "string? (RFC3339 UTC)"
         },
         "Snapshot":   { "path": "string", "id": "string?", "bytes": "u64" },
-        "CleanupHit": { "category": "string", "path": "string", "bytes": "u64", "files": "u64" },
+        "CleanupHit":      { "category": "string", "path": "string", "bytes": "u64", "files": "u64" },
+        "CategorySummary": { "category": "string", "paths": "u64", "bytes": "u64", "files": "u64" },
         "DiffRow":    { "path": "string", "kind": "added|removed|grew|shrank", "size_a": "u64", "size_b": "u64", "delta": "i64" },
         "envelope":   { "schema_version": "u32", "kind": "string", "records": "T[]" },
         "error":      { "schema_version": "u32", "type": "string (URI)", "title": "string", "status": "i32", "detail": "string", "retryable": "bool" }

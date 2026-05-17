@@ -277,4 +277,45 @@ fn cleanup_dry_run_finds_nothing_in_clean_tree() {
     assert_eq!(v["kind"], "cleanup");
     assert_eq!(v["applied"], false);
     assert!(v["records"].as_array().unwrap().is_empty());
+    assert_eq!(v["total_bytes"], 0);
+    assert!(v["summary"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn cleanup_summarises_by_category() {
+    let dir = temp_dir();
+    fs::create_dir_all(dir.join("p1/node_modules")).unwrap();
+    fs::create_dir_all(dir.join("p2/node_modules")).unwrap();
+    fs::create_dir_all(dir.join("p1/target")).unwrap();
+    fs::write(dir.join("p1/node_modules/a.js"), vec![0u8; 4096]).unwrap();
+    fs::write(dir.join("p2/node_modules/b.js"), vec![0u8; 1024]).unwrap();
+    fs::write(dir.join("p1/target/blob"), vec![0u8; 8192]).unwrap();
+    let db = dir.join("snap.db");
+    let out = Command::new(disky_bin())
+        .args(["scan"])
+        .arg(&dir)
+        .args(["--db"])
+        .arg(&db)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{:?}", out);
+
+    let v = run_json(&[
+        "cleanup",
+        "--snapshot",
+        db.to_str().unwrap(),
+        "--format",
+        "json",
+    ]);
+    let summary = v["summary"].as_array().unwrap();
+    let by_cat: std::collections::HashMap<&str, &Value> = summary
+        .iter()
+        .map(|s| (s["category"].as_str().unwrap(), s))
+        .collect();
+    let nm = by_cat["node_modules"];
+    assert_eq!(nm["paths"], 2);
+    assert!(nm["bytes"].as_u64().unwrap() >= 5120);
+    let tg = by_cat["target"];
+    assert_eq!(tg["paths"], 1);
+    assert!(v["total_bytes"].as_u64().unwrap() >= 13312);
 }

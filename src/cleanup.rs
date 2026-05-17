@@ -31,6 +31,37 @@ pub struct CleanupHit {
     pub files: u64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct CategorySummary {
+    pub category: String,
+    pub paths: u64,
+    pub bytes: u64,
+    pub files: u64,
+}
+
+/// Aggregate `CleanupHit`s by category. Sorted by total `bytes` desc so the
+/// biggest reclamation opportunity is first.
+pub fn summarise(hits: &[CleanupHit]) -> Vec<CategorySummary> {
+    use std::collections::BTreeMap;
+    let mut acc: BTreeMap<String, CategorySummary> = BTreeMap::new();
+    for h in hits {
+        let entry = acc
+            .entry(h.category.clone())
+            .or_insert_with(|| CategorySummary {
+                category: h.category.clone(),
+                paths: 0,
+                bytes: 0,
+                files: 0,
+            });
+        entry.paths += 1;
+        entry.bytes += h.bytes;
+        entry.files += h.files;
+    }
+    let mut out: Vec<CategorySummary> = acc.into_values().collect();
+    out.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    out
+}
+
 fn basenames_for(targets: &[String]) -> Vec<(&'static str, &'static str)> {
     let mut out = Vec::new();
     for t in targets {
