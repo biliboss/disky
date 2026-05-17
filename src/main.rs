@@ -1,17 +1,52 @@
 mod cli;
 mod db;
-mod display;
+mod exit;
+mod query;
+mod render;
 mod scan;
 mod snapshots;
 mod tui;
 
-use anyhow::Result;
 use clap::Parser;
 use cli::{Cli, Command};
+use exit::{classify, DiskyError, ExitCode};
+use render::{resolve_format, Format};
+use serde_json::json;
+use std::process::ExitCode as ProcExit;
 
-fn main() -> Result<()> {
+use crate::query::SCHEMA_VERSION;
+
+fn main() -> ProcExit {
     let cli = Cli::parse();
+    let format = resolve_format(cli.format.map(Into::into));
 
+    match dispatch(cli, format) {
+        Ok(()) => ProcExit::from(ExitCode::Ok as u8),
+        Err(err) => {
+            let derr = classify(err);
+            emit_error(&derr, format);
+            ProcExit::from(derr.code as u8)
+        }
+    }
+}
+
+fn emit_error(err: &DiskyError, format: Format) {
+    if format.is_machine() {
+        let payload = json!({
+            "schema_version": SCHEMA_VERSION,
+            "type": format!("https://disky.dev/errors/{}", err.code.slug()),
+            "title": err.title,
+            "status": err.code as i32,
+            "detail": err.detail,
+            "retryable": err.retryable,
+        });
+        eprintln!("{}", payload);
+    } else {
+        eprintln!("error: {}", err);
+    }
+}
+
+fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
     match cli.command.unwrap_or(Command::Tui { db: None }) {
         Command::Scan { path, db } => {
             let db_path = if db == "disky.db" {
@@ -27,30 +62,46 @@ fn main() -> Result<()> {
             min_size,
         } => {
             let conn = db::open(&db)?;
-            display::top_files(&conn, limit, min_size)?;
+            let rows = query::top_files(&conn, limit, min_size)?;
+            render::top_files(&rows, format)?;
         }
         Command::Ext { db, limit } => {
             let conn = db::open(&db)?;
-            display::by_extension(&conn, limit)?;
+            let rows = query::by_extension(&conn, limit)?;
+            render::by_extension(&rows, format)?;
         }
         Command::Dirs { db, limit } => {
             let conn = db::open(&db)?;
-            display::top_dirs(&conn, limit)?;
+            let rows = query::top_dirs(&conn, limit)?;
+            render::top_dirs(&rows, format)?;
         }
         Command::Find { db, pattern, limit } => {
             let conn = db::open(&db)?;
-            display::find_files(&conn, &pattern, limit)?;
+            let rows = query::find_files(&conn, &pattern, limit)?;
+            render::find_files(&rows, &pattern, format)?;
         }
         Command::Stats { db } => {
             let conn = db::open(&db)?;
-            display::stats(&conn)?;
+            let s = query::stats(&conn)?;
+            render::stats(&s, format)?;
         }
         Command::Tui { db } => {
             tui::run(db)?;
         }
         Command::List => {
             let snaps = snapshots::list_snapshots();
-            if snaps.is_empty() {
+            if format.is_machine() {
+                let records: Vec<_> = snaps
+                    .iter()
+                    .map(|(path, size)| json!({"path": path, "bytes": size}))
+                    .collect();
+                let payload = json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "kind": "snapshots",
+                    "records": records,
+                });
+                println!("{}", payload);
+            } else if snaps.is_empty() {
                 println!("No snapshots found. Run `disky scan` first.");
             } else {
                 for (path, size) in snaps {

@@ -1,10 +1,33 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
+
+use crate::render::Format;
 
 #[derive(Parser)]
 #[command(name = "disky", about = "Fast macOS disk analyzer", version)]
 pub struct Cli {
+    /// Output format. Auto = JSON when stdout is piped, text on a TTY.
+    #[arg(long, value_enum, global = true)]
+    pub format: Option<FormatArg>,
+
     #[command(subcommand)]
     pub command: Option<Command>,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum FormatArg {
+    Text,
+    Json,
+    Ndjson,
+}
+
+impl From<FormatArg> for Format {
+    fn from(f: FormatArg) -> Self {
+        match f {
+            FormatArg::Text => Format::Text,
+            FormatArg::Json => Format::Json,
+            FormatArg::Ndjson => Format::Ndjson,
+        }
+    }
 }
 
 #[derive(Subcommand)]

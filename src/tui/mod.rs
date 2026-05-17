@@ -13,7 +13,7 @@ use std::io;
 use std::time::Duration;
 
 use crate::db;
-use crate::display;
+use crate::render;
 use crate::snapshots;
 use app::App;
 use tree::load_root;
@@ -99,7 +99,7 @@ pub fn run(db_path: Option<String>) -> Result<()> {
                     terminal.clear()?;
                     disable_raw_mode()?;
                     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-                    display::export_html_report(&conn, &path)?;
+                    render::export_html_report(&conn, &path)?;
                     enable_raw_mode()?;
                     execute!(terminal.backend_mut(), EnterAlternateScreen)?;
                     app.status = "HTML report exported.".into();

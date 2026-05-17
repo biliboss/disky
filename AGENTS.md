@@ -12,6 +12,33 @@ Fast macOS disk analyzer — scan, explore, clean up.
 | `flume 0.11` | Bounded channel walker→writer, cap 256 |
 | `memchr 2` | `memrchr(b'.', ...)` for ext extraction (2-3x faster than `Path::extension`) |
 
+## Agent-native output
+
+Query commands (`top`, `dirs`, `ext`, `find`, `stats`, `list`) honour `--format`:
+
+| Flag | Behaviour |
+|------|-----------|
+| `--format text` (default on a TTY) | Fixed-width ASCII tables |
+| `--format json` (default when stdout is piped) | Single JSON envelope `{schema_version, kind, records}`. Bytes as `u64`, paths absolute, `mtime` as RFC 3339 UTC |
+| `--format ndjson` | One JSON record per line — stream-friendly for `jq -c` |
+
+Errors in machine mode are emitted to **stderr** as RFC 9457 problem details:
+`{schema_version, type, title, status, detail, retryable}`. The `type` URI
+(`https://disky.dev/errors/<slug>`) is the stable dispatch key — agents should
+match on `type`, not the localized `detail` string.
+
+### Exit code taxonomy
+
+| Code | Slug | Meaning |
+|------|------|---------|
+| 0 | `ok` | Success |
+| 1 | `generic` | Unclassified error |
+| 2 | `usage` | Bad CLI usage (emitted by clap) |
+| 3 | `io` | I/O or permission error |
+| 4 | `not-found` | Snapshot / path not found |
+| 5 | `partial-scan` | Scan reached EOF with skipped entries (reserved) |
+| 6 | `lock-held` | Snapshot DB locked by another process |
+
 ## Snapshots
 
 Auto-saved to `~/Library/Application Support/disky/YYYY-MM-DD_HH-MM.db` via `dirs::data_local_dir()`.
