@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::cleanup::CleanupHit;
-use crate::query::{DirRow, ExtRow, FileRow, Stats, SCHEMA_VERSION};
+use crate::query::{DiffRow, DirRow, ExtRow, FileRow, Stats, SCHEMA_VERSION};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
@@ -229,6 +229,33 @@ pub fn raw_query(
                 println!();
             }
         }
+    }
+    Ok(())
+}
+
+pub fn diff(rows: &[DiffRow], format: Format) -> Result<()> {
+    if format.is_machine() {
+        return emit_records(rows, "diff", format);
+    }
+    println!(
+        "{:<8} {:>12} {:>12} {:>14}  PATH",
+        "KIND", "SIZE A", "SIZE B", "Δ"
+    );
+    println!("{}", "-".repeat(80));
+    for r in rows {
+        let delta_str = if r.delta >= 0 {
+            format!("+{}", format_size(r.delta as u64, BINARY))
+        } else {
+            format!("-{}", format_size(r.delta.unsigned_abs(), BINARY))
+        };
+        println!(
+            "{:<8} {:>12} {:>12} {:>14}  {}",
+            r.kind,
+            format_size(r.size_a, BINARY),
+            format_size(r.size_b, BINARY),
+            delta_str,
+            truncate(&r.path, 60),
+        );
     }
     Ok(())
 }

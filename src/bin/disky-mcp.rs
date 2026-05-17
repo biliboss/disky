@@ -222,6 +222,19 @@ fn tools_list() -> Value {
                 }
             },
             {
+                "name": "disky_diff",
+                "description": "Diff two snapshots — added / removed / grew / shrank files, ordered by absolute delta.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "a": { "type": "string", "description": "Snapshot A — @latest, ID, or path" },
+                        "b": { "type": "string", "description": "Snapshot B — @latest, ID, or path" },
+                        "limit": { "type": "integer", "default": 100 }
+                    },
+                    "required": ["a", "b"]
+                }
+            },
+            {
                 "name": "disky_cleanup",
                 "description": "Find well-known disk-hoggy directories (node_modules, target, …). Dry-run unless apply=true.",
                 "inputSchema": {
@@ -264,6 +277,7 @@ fn handle_tool_call(id: Value, params: Value) -> Value {
         "disky_find" => tool_find(&args),
         "disky_stats" => tool_stats(&args),
         "disky_query" => tool_query(&args),
+        "disky_diff" => tool_diff(&args),
         "disky_cleanup" => tool_cleanup(&args),
         "disky_schema" => Ok(schema::document()),
         "disky_list_snapshots" => tool_list_snapshots(),
@@ -393,6 +407,22 @@ fn tool_query(args: &Value) -> anyhow::Result<Value> {
     let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(1000) as usize;
     let rows = query::raw_query(&conn, &sql, limit)?;
     Ok(envelope("query", json!(rows)))
+}
+
+fn tool_diff(args: &Value) -> anyhow::Result<Value> {
+    let a = args
+        .get("a")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("missing required field 'a'"))?;
+    let b = args
+        .get("b")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("missing required field 'b'"))?;
+    let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(100) as usize;
+    let path_a = snapshots::resolve(a)?;
+    let path_b = snapshots::resolve(b)?;
+    let rows = query::diff(&path_a, &path_b, limit)?;
+    Ok(envelope("diff", json!(rows)))
 }
 
 fn tool_cleanup(args: &Value) -> anyhow::Result<Value> {

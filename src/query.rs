@@ -135,6 +135,69 @@ pub fn find_files(conn: &Connection, pattern: &str, limit: usize) -> Result<Vec<
 /// Run an arbitrary SQL statement and return rows as JSON objects keyed by
 /// column name. Heterogeneous columns are coerced to the closest serde_json
 /// type — large integers (HugeInt) fall back to strings to preserve precision.
+#[derive(Debug, Clone, Serialize)]
+pub struct DiffRow {
+    pub path: String,
+    /// `"added"` (only in b), `"removed"` (only in a), `"grew"`, `"shrank"`.
+    pub kind: &'static str,
+    pub size_a: u64,
+    pub size_b: u64,
+    pub delta: i64,
+}
+
+/// Diff two snapshots (file-level). Returns rows where the size differs or
+/// the file only exists in one side. Ordered by absolute delta, largest first.
+pub fn diff(snap_a: &str, snap_b: &str, limit: usize) -> Result<Vec<DiffRow>> {
+    use duckdb::Connection;
+    // Open an in-memory DB and ATTACH both snapshots read-only so we can FULL
+    // OUTER JOIN across them in one statement.
+    let conn = Connection::open_in_memory()?;
+    let sql = format!(
+        "ATTACH '{a}' AS db_a (READ_ONLY);\
+         ATTACH '{b}' AS db_b (READ_ONLY);",
+        a = snap_a.replace('\'', "''"),
+        b = snap_b.replace('\'', "''"),
+    );
+    conn.execute_batch(&sql)?;
+
+    let mut stmt = conn.prepare(
+        "SELECT COALESCE(a.path, b.path)              AS path,
+                COALESCE(a.size, 0)                   AS size_a,
+                COALESCE(b.size, 0)                   AS size_b,
+                COALESCE(b.size, 0) - COALESCE(a.size, 0) AS delta
+         FROM db_a.files a
+         FULL OUTER JOIN db_b.files b ON a.path = b.path
+         WHERE COALESCE(a.is_dir, false) = false
+           AND COALESCE(b.is_dir, false) = false
+           AND COALESCE(a.size, -1) IS DISTINCT FROM COALESCE(b.size, -1)
+         ORDER BY ABS(COALESCE(b.size, 0) - COALESCE(a.size, 0)) DESC
+         LIMIT ?",
+    )?;
+    let rows = stmt.query_map(duckdb::params![limit as i64], |row| {
+        let path: String = row.get(0)?;
+        let size_a: i64 = row.get(1)?;
+        let size_b: i64 = row.get(2)?;
+        let delta: i64 = row.get(3)?;
+        let kind = if size_a == 0 && size_b > 0 {
+            "added"
+        } else if size_a > 0 && size_b == 0 {
+            "removed"
+        } else if delta > 0 {
+            "grew"
+        } else {
+            "shrank"
+        };
+        Ok(DiffRow {
+            path,
+            kind,
+            size_a: size_a as u64,
+            size_b: size_b as u64,
+            delta,
+        })
+    })?;
+    Ok(rows.flatten().collect())
+}
+
 pub fn raw_query(
     conn: &Connection,
     sql: &str,

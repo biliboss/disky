@@ -12,6 +12,16 @@ Fast macOS disk analyzer — scan, explore, clean up.
 | `flume 0.11` | Bounded channel walker→writer, cap 256 |
 | `memchr 2` | `memrchr(b'.', ...)` for ext extraction (2-3x faster than `Path::extension`) |
 
+## Snapshot diff
+
+`disky diff <a> <b> [--limit N]` compares two snapshots and reports the
+files that grew, shrank, were added, or were removed — ordered by absolute
+delta. Both arguments accept `@latest`, an ID, or a path. JSON `records`
+hold `DiffRow { path, kind: added|removed|grew|shrank, size_a, size_b, delta }`.
+
+Useful for "what changed since the last cleanup": scan before, scan after,
+`disky diff old_id new_id`.
+
 ## Cleanup
 
 `disky cleanup` greps the snapshot for known disk-hoggy directories

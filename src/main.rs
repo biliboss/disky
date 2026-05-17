@@ -173,6 +173,12 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             };
             render::cleanup(&hits, removed.as_deref(), format)?;
         }
+        Command::Diff { a, b, limit } => {
+            let path_a = snapshots::resolve(&a)?;
+            let path_b = snapshots::resolve(&b)?;
+            let rows = query::diff(&path_a, &path_b, limit)?;
+            render::diff(&rows, format)?;
+        }
         Command::Schema => {
             println!("{}", serde_json::to_string_pretty(&schema::document())?);
         }

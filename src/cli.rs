@@ -138,6 +138,16 @@ pub enum Command {
         reversible: bool,
     },
 
+    /// Diff two snapshots — added / removed / grew / shrank files
+    Diff {
+        /// Snapshot A (the "before"). Accepts @latest, ID, or path.
+        a: String,
+        /// Snapshot B (the "after"). Accepts @latest, ID, or path.
+        b: String,
+        #[arg(short, long, default_value_t = 100)]
+        limit: usize,
+    },
+
     /// Emit a JSON descriptor of every command, record shape, and error type
     Schema,
 

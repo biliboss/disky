@@ -44,6 +44,11 @@ fn commands() -> Value {
         { "name": "query",  "args": snapshot_with(&["sql:string", "limit:int=1000"]),    "output": "Object[]" },
         { "name": "list",   "args": {},                                                  "output": "Snapshot[]" },
         {
+            "name": "diff",
+            "args": { "a": "@latest|<id>|<path>", "b": "@latest|<id>|<path>", "limit": "int=100" },
+            "output": "DiffRow[]"
+        },
+        {
             "name": "cleanup",
             "args": {
                 "target": "string[] (comma-separated)",
@@ -84,6 +89,7 @@ fn records() -> Value {
         },
         "Snapshot":   { "path": "string", "id": "string?", "bytes": "u64" },
         "CleanupHit": { "category": "string", "path": "string", "bytes": "u64", "files": "u64" },
+        "DiffRow":    { "path": "string", "kind": "added|removed|grew|shrank", "size_a": "u64", "size_b": "u64", "delta": "i64" },
         "envelope":   { "schema_version": "u32", "kind": "string", "records": "T[]" },
         "error":      { "schema_version": "u32", "type": "string (URI)", "title": "string", "status": "i32", "detail": "string", "retryable": "bool" }
     })

@@ -132,6 +132,68 @@ fn raw_query_runs() {
 }
 
 #[test]
+fn diff_classifies_added_removed_grew() {
+    let dir = temp_dir();
+    fs::write(dir.join("stay.bin"), vec![0u8; 4096]).unwrap();
+    fs::write(dir.join("grew.bin"), vec![0u8; 1024]).unwrap();
+    fs::write(dir.join("removed.bin"), vec![0u8; 2048]).unwrap();
+    let snap_a = dir.join("a.db");
+    let out = Command::new(disky_bin())
+        .args(["scan"])
+        .arg(&dir)
+        .args(["--db"])
+        .arg(&snap_a)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{:?}", out);
+
+    // Now mutate the tree.
+    fs::remove_file(dir.join("removed.bin")).unwrap();
+    fs::write(dir.join("grew.bin"), vec![0u8; 8192]).unwrap();
+    fs::write(dir.join("added.bin"), vec![0u8; 512]).unwrap();
+    let snap_b = dir.join("b.db");
+    let out = Command::new(disky_bin())
+        .args(["scan"])
+        .arg(&dir)
+        .args(["--db"])
+        .arg(&snap_b)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{:?}", out);
+
+    let v = run_json(&[
+        "diff",
+        snap_a.to_str().unwrap(),
+        snap_b.to_str().unwrap(),
+        "--format",
+        "json",
+    ]);
+    assert_eq!(v["kind"], "diff");
+    let by_path: std::collections::HashMap<&str, &Value> = v["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| (r["path"].as_str().unwrap(), r))
+        .collect();
+    let added = by_path
+        .values()
+        .find(|r| r["path"].as_str().unwrap().ends_with("/added.bin"))
+        .expect("added.bin missing");
+    assert_eq!(added["kind"], "added");
+    let removed = by_path
+        .values()
+        .find(|r| r["path"].as_str().unwrap().ends_with("/removed.bin"))
+        .expect("removed.bin missing");
+    assert_eq!(removed["kind"], "removed");
+    let grew = by_path
+        .values()
+        .find(|r| r["path"].as_str().unwrap().ends_with("/grew.bin"))
+        .expect("grew.bin missing");
+    assert_eq!(grew["kind"], "grew");
+    assert!(grew["delta"].as_i64().unwrap() > 0);
+}
+
+#[test]
 fn scan_emit_bundle_includes_top_and_stats() {
     let dir = temp_dir();
     fs::write(dir.join("big.bin"), vec![0u8; 16 * 1024]).unwrap();

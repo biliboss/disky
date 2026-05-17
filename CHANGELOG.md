@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `disky diff <a> <b>` (+ `disky_diff` MCP tool): compares two snapshots
+  and reports added / removed / grew / shrank files ordered by absolute
+  delta. Uses DuckDB `ATTACH` for a single-statement FULL OUTER JOIN.
+  New `query::diff` + `render::diff` + `DiffRow` record. Lets agents
+  answer "what changed since the last scan?" without bespoke SQL.
 - `disky scan --emit-top N --emit-dirs N --emit-ext N --emit-stats` bundles
   the query results into a `scan_bundle` envelope so agents skip the usual
   scan→stats→top→dirs round-trip. MCP `disky_scan` accepts the same
