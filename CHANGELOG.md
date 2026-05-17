@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Integration test suite (`tests/agentic.rs`): 6 tests covering JSON
+  envelope, partial flag, RFC 9457 not-found stderr, schema descriptor,
+  raw SQL, cleanup dry-run.
+- CI now runs `cargo test --release`.
+- README documents agentic surface (JSON/NDJSON, MCP, exit codes).
+
 ## [0.6.0] - 2026-05-17
 
 ### Added

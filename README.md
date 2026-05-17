@@ -13,7 +13,11 @@
 - **Scans** your entire disk in ~3 minutes (6.8M files) using parallel traversal
 - **Stores** results as DuckDB snapshots — compare before/after cleanup
 - **Explores** interactively via ncdu-style TUI
-- **Exports** HTML cleanup reports with actionable commands
+- **Cleans** known disk hoggers (`node_modules`, `target`, `__pycache__`, …)
+- **Talks JSON / NDJSON** — `--format json` everywhere, RFC 9457 errors, stable
+  exit codes — so it slots into agentic workflows
+- **Ships an MCP server** (`disky-mcp`) — Claude Code / Cursor / Zed bind to
+  typed tools instead of shelling out and regex-parsing tables
 
 ## Install
 
@@ -30,14 +34,31 @@ Or download a pre-built binary from [Releases](https://github.com/biliboss/disky
 disky scan /
 disky
 
-# CLI queries
-disky top          # largest files
-disky dirs         # largest directories
-disky ext          # usage by extension
-disky find "*.log" # find by pattern
-disky stats        # totals
-disky list         # available snapshots
+# CLI queries — all accept --format json|ndjson and --snapshot @latest|<id>|<path>
+disky top                          # largest files
+disky dirs                         # largest directories
+disky ext                          # usage by extension
+disky find "*.log"                 # find by pattern
+disky stats                        # totals (partial: true if last scan was cancelled)
+disky list                         # snapshot IDs + sizes
+disky query "SELECT ext, SUM(size) FROM files GROUP BY ext"
+disky cleanup --target node_modules,target  # dry-run; add --apply to delete
+disky schema                       # JSON descriptor of commands + records
 ```
+
+### Agentic / MCP
+
+Run as an MCP server over stdio for Claude Code / Cursor / Zed:
+
+```bash
+disky-mcp  # exposes disky_scan, disky_top, disky_dirs, disky_ext, disky_find,
+           # disky_stats, disky_query, disky_cleanup, disky_schema,
+           # disky_list_snapshots
+```
+
+Output is JSON by default when stdout is piped. Exit codes are stable:
+`0` ok · `1` generic · `2` usage · `3` io · `4` not-found · `5` partial-scan ·
+`6` lock-held. Error payloads on stderr follow RFC 9457 problem details.
 
 ## TUI keybindings
 
@@ -70,8 +91,9 @@ Benchmarks on a 500GB SSD with 6.8M files:
 Snapshots live in `~/Library/Application Support/disky/YYYY-MM-DD_HH-MM.db`.
 
 ```bash
-disky list                          # show all snapshots
-disky tui --db /path/to/snap.db    # open specific snapshot
+disky list                                # show all snapshots
+disky tui --snapshot 2026-05-15_11-56     # open by ID
+disky tui --snapshot /path/to/snap.db     # open by path
 ```
 
 ## Requirements
