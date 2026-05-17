@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- TUI header now shows a red `PARTIAL` badge when the loaded snapshot's
+  last scan was cancelled. Surfaces F12 state to humans, matching the
+  `partial: true` flag exposed to agents in `disky stats --format json`.
 - `disky diff <a> <b>` (+ `disky_diff` MCP tool): compares two snapshots
   and reports added / removed / grew / shrank files ordered by absolute
   delta. Uses DuckDB `ATTACH` for a single-statement FULL OUTER JOIN.

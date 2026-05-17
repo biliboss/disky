@@ -22,7 +22,7 @@ pub fn render(frame: &mut Frame, app: &App, list_state: &mut ListState) {
         .split(area);
 
     // header
-    let header = Paragraph::new(Line::from(vec![
+    let mut header_spans = vec![
         Span::styled(
             " disky ",
             Style::default()
@@ -32,7 +32,24 @@ pub fn render(frame: &mut Frame, app: &App, list_state: &mut ListState) {
         ),
         Span::raw(" "),
         Span::styled(&app.db_path, Style::default().fg(Color::DarkGray)),
-    ]));
+    ];
+    if let Some(meta) = &app.scan_meta {
+        if !meta.completed {
+            header_spans.push(Span::raw("  "));
+            header_spans.push(Span::styled(
+                " PARTIAL ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Red)
+                    .add_modifier(Modifier::BOLD),
+            ));
+            header_spans.push(Span::styled(
+                " (scan was cancelled)",
+                Style::default().fg(Color::Red),
+            ));
+        }
+    }
+    let header = Paragraph::new(Line::from(header_spans));
     frame.render_widget(header, chunks[0]);
 
     // tree list

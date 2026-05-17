@@ -33,7 +33,8 @@ pub fn run(snapshot_spec: Option<String>) -> Result<()> {
     eprintln!("Loading snapshot {}...", path);
     let root = load_root(&conn, &root_path)?;
 
-    let mut app = App::new(path.clone(), root);
+    let scan_meta = disky::db::read_scan_meta(&conn);
+    let mut app = App::new(path.clone(), root, scan_meta);
     let mut list_state = ListState::default();
     list_state.select(Some(0));
 

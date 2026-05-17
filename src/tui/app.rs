@@ -1,5 +1,6 @@
 use super::tree::{load_children, DirEntry};
 use anyhow::Result;
+use disky::db::ScanMeta;
 use duckdb::Connection;
 
 pub struct App {
@@ -9,6 +10,7 @@ pub struct App {
     pub selected: usize,
     pub status: String,
     pub _quitting: bool,
+    pub scan_meta: Option<ScanMeta>,
 }
 
 #[derive(Clone)]
@@ -22,7 +24,7 @@ pub struct FlatItem {
 }
 
 impl App {
-    pub fn new(db_path: String, root: DirEntry) -> Self {
+    pub fn new(db_path: String, root: DirEntry, scan_meta: Option<ScanMeta>) -> Self {
         let mut app = Self {
             db_path,
             root,
@@ -30,6 +32,7 @@ impl App {
             selected: 0,
             status: String::new(),
             _quitting: false,
+            scan_meta,
         };
         app.rebuild_flat();
         app
