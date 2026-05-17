@@ -21,9 +21,56 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
             is_dir      BOOLEAN NOT NULL DEFAULT false,
             depth       INTEGER NOT NULL DEFAULT 0
         );
+        DROP TABLE IF EXISTS scan_meta;
+        CREATE TABLE scan_meta (
+            root         TEXT NOT NULL,
+            started_at   BIGINT NOT NULL,
+            completed    BOOLEAN NOT NULL DEFAULT false,
+            entries      BIGINT NOT NULL DEFAULT 0,
+            bytes        BIGINT NOT NULL DEFAULT 0
+        );
     ",
     )?;
     Ok(())
+}
+
+pub fn write_scan_meta(
+    conn: &Connection,
+    root: &str,
+    started_at: i64,
+    completed: bool,
+    entries: u64,
+    bytes: u64,
+) -> Result<()> {
+    conn.execute("DELETE FROM scan_meta", [])?;
+    conn.execute(
+        "INSERT INTO scan_meta (root, started_at, completed, entries, bytes) VALUES (?, ?, ?, ?, ?)",
+        duckdb::params![root, started_at, completed, entries as i64, bytes as i64],
+    )?;
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub struct ScanMeta {
+    pub root: String,
+    pub completed: bool,
+    pub entries: u64,
+    pub bytes: u64,
+}
+
+pub fn read_scan_meta(conn: &Connection) -> Option<ScanMeta> {
+    let mut stmt = conn
+        .prepare("SELECT root, completed, entries, bytes FROM scan_meta LIMIT 1")
+        .ok()?;
+    stmt.query_row([], |row| {
+        Ok(ScanMeta {
+            root: row.get::<_, String>(0)?,
+            completed: row.get::<_, bool>(1)?,
+            entries: row.get::<_, i64>(2)? as u64,
+            bytes: row.get::<_, i64>(3)? as u64,
+        })
+    })
+    .ok()
 }
 
 pub fn build_indexes(conn: &Connection) -> Result<()> {

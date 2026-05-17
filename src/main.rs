@@ -9,6 +9,8 @@ use disky::render::{resolve_format, Format};
 use disky::{cleanup, db, query, render, scan, schema, snapshots};
 use serde_json::json;
 use std::process::ExitCode as ProcExit;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 fn main() -> ProcExit {
     let cli = Cli::parse();
@@ -52,7 +54,25 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                 Some(p) => p,
                 None => snapshots::new_snapshot_path()?,
             };
-            scan::run(&path, &db_path)?;
+            let cancel = Arc::new(AtomicBool::new(false));
+            let cancel_handler = Arc::clone(&cancel);
+            // Best-effort SIGINT handler. Errors here just mean ctrl-c reverts
+            // to the default behaviour (immediate abort), which is acceptable.
+            let _ = ctrlc::set_handler(move || {
+                cancel_handler.store(true, Ordering::Relaxed);
+            });
+            let outcome = scan::run_cancellable(&path, &db_path, cancel)?;
+            if !outcome.complete {
+                return Err(disky::exit::DiskyError::new(
+                    ExitCode::PartialScan,
+                    "scan cancelled",
+                    format!(
+                        "interrupted at {} entries ({} bytes); snapshot left partial at {}",
+                        outcome.entries, outcome.bytes, db_path
+                    ),
+                )
+                .into());
+            }
         }
         Command::Top {
             snapshot,

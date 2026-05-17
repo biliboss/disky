@@ -37,6 +37,9 @@ pub struct Stats {
     pub total_bytes: u64,
     pub largest_bytes: u64,
     pub avg_bytes: u64,
+    /// True when the snapshot's last scan was cancelled before completing.
+    /// Agents should treat the data as best-effort.
+    pub partial: bool,
 }
 
 fn rfc3339(mtime: Option<i64>) -> Option<String> {
@@ -222,14 +225,18 @@ pub fn stats(conn: &Connection) -> Result<Stats> {
             COALESCE(AVG(size) FILTER (WHERE is_dir = false AND size > 0), 0) as avg_size
          FROM files",
     )?;
-    let row = stmt.query_row([], |row| {
+    let mut row = stmt.query_row([], |row| {
         Ok(Stats {
             files: row.get::<_, i64>(0)? as u64,
             dirs: row.get::<_, i64>(1)? as u64,
             total_bytes: row.get::<_, i64>(2)? as u64,
             largest_bytes: row.get::<_, i64>(3)? as u64,
             avg_bytes: row.get::<_, f64>(4)? as u64,
+            partial: false,
         })
     })?;
+    if let Some(meta) = crate::db::read_scan_meta(conn) {
+        row.partial = !meta.completed;
+    }
     Ok(row)
 }

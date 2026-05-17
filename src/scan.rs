@@ -5,10 +5,10 @@ use jwalk::{Parallelism, WalkDir};
 use memchr::memrchr;
 use serde_json::json;
 use std::io::IsTerminal;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::db::{self, FileRecord};
 use crate::query::SCHEMA_VERSION;
@@ -99,9 +99,29 @@ impl Progress {
     }
 }
 
-pub fn run(root: &str, db_path: &str) -> Result<()> {
+/// Outcome of a scan — `complete=false` when the user cancelled mid-flight.
+/// The DB on disk is still queryable (partial); main maps `complete=false` to
+/// `ExitCode::PartialScan` (5).
+#[derive(Debug, Clone, Copy)]
+pub struct ScanOutcome {
+    pub complete: bool,
+    pub entries: u64,
+    pub bytes: u64,
+}
+
+pub fn run(root: &str, db_path: &str) -> Result<ScanOutcome> {
+    run_cancellable(root, db_path, Arc::new(AtomicBool::new(false)))
+}
+
+pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Result<ScanOutcome> {
     let conn = db::open(db_path)?;
     db::create_schema(&conn)?;
+
+    let started_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    db::write_scan_meta(&conn, root, started_at, false, 0, 0)?;
 
     let cpus = num_cpus::get();
 
@@ -114,6 +134,7 @@ pub fn run(root: &str, db_path: &str) -> Result<()> {
     let root_owned = root.to_string();
     let counter_clone = Arc::clone(&counter);
     let bytes_clone = Arc::clone(&bytes_seen);
+    let cancel_clone = Arc::clone(&cancel);
 
     let walker = thread::Builder::new()
         .name("walker".into())
@@ -128,6 +149,9 @@ pub fn run(root: &str, db_path: &str) -> Result<()> {
                 .into_iter()
                 .flatten()
             {
+                if cancel_clone.load(Ordering::Relaxed) {
+                    break;
+                }
                 let path = entry.path();
                 let meta = match entry.metadata() {
                     Ok(m) => m,
@@ -195,11 +219,18 @@ pub fn run(root: &str, db_path: &str) -> Result<()> {
 
     walker.join().expect("walker thread panicked")?;
 
+    let cancelled = cancel.load(Ordering::Relaxed);
+
     progress.message("Building indexes...");
     db::build_indexes(&conn)?;
 
     let total = counter.load(Ordering::Relaxed);
     let bytes = bytes_seen.load(Ordering::Relaxed);
+    db::write_scan_meta(&conn, root, started_at, !cancelled, total, bytes)?;
     progress.finish(total, bytes, db_path);
-    Ok(())
+    Ok(ScanOutcome {
+        complete: !cancelled,
+        entries: total,
+        bytes,
+    })
 }

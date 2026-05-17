@@ -70,6 +70,13 @@ Tools: `disky_scan`, `disky_top`, `disky_dirs`, `disky_ext`, `disky_find`,
 `@latest`. Errors arrive as `isError: true` content carrying the same
 RFC 9457 payload the CLI emits on stderr.
 
+## Cancellable scan
+
+`disky scan` installs a SIGINT handler. On Ctrl-C it drains the in-flight
+batch, marks the snapshot partial in `scan_meta`, and exits with status
+`5` (`partial-scan`). The DB is still queryable; `disky stats` returns
+`partial: true`.
+
 ## Scan progress (NDJSON on stderr)
 
 When stderr is piped, `disky scan` emits NDJSON events instead of the spinner:

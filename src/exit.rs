@@ -78,6 +78,10 @@ impl std::error::Error for DiskyError {}
 /// `Generic` so behaviour matches today, but specific underlying errors get
 /// mapped to stable codes.
 pub fn classify(err: anyhow::Error) -> DiskyError {
+    if err.downcast_ref::<DiskyError>().is_some() {
+        return err.downcast::<DiskyError>().unwrap();
+    }
+
     let msg = format!("{:#}", err);
     let lower = msg.to_lowercase();
 

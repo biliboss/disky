@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-17
+
+### Added
+- Cancellable scan: `Ctrl-C` during `disky scan` now drains the in-flight
+  batch, marks the snapshot partial, and exits with status `5`
+  (`partial-scan`). The DB on disk is still queryable.
+- `scan_meta` table per snapshot — `root, started_at, completed, entries,
+  bytes`. `disky stats` surfaces `partial: true` (text + JSON) when the
+  last scan was cancelled.
+- `scan::ScanOutcome { complete, entries, bytes }` returned from
+  `scan::run` and `scan::run_cancellable`.
+- `exit::classify` preserves a `DiskyError` if the underlying error
+  already is one (lets call sites raise specific codes without going
+  through string heuristics).
+
+### Changed
+- `ctrlc` dependency added for cross-platform SIGINT handling.
+
 ## [0.5.0] - 2026-05-17
 
 ### Added

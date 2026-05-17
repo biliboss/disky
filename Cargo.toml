@@ -1,6 +1,6 @@
 [package]
 name = "disky"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 description = "Fast macOS disk analyzer — scan, explore, clean up"
 license = "MIT OR Apache-2.0"
@@ -41,6 +41,7 @@ arboard = "3"
 dirs = "5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+ctrlc = "3"
 
 [profile.release]
 opt-level = 3

@@ -145,6 +145,9 @@ pub fn stats(s: &Stats, format: Format) -> Result<()> {
     println!("Total size: {:>12}", format_size(s.total_bytes, BINARY));
     println!("Largest:    {:>12}", format_size(s.largest_bytes, BINARY));
     println!("Avg size:   {:>12}", format_size(s.avg_bytes, BINARY));
+    if s.partial {
+        println!("Status:        PARTIAL (scan was cancelled)");
+    }
     Ok(())
 }
 
