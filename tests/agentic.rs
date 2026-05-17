@@ -132,6 +132,53 @@ fn raw_query_runs() {
 }
 
 #[test]
+fn cleanup_reversible_moves_to_trash() {
+    let dir = temp_dir();
+    fs::create_dir_all(dir.join("proj/node_modules")).unwrap();
+    fs::write(dir.join("proj/node_modules/big.js"), vec![0u8; 1024]).unwrap();
+    let db = dir.join("snap.db");
+    let out = Command::new(disky_bin())
+        .args(["scan"])
+        .arg(&dir)
+        .args(["--db"])
+        .arg(&db)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "scan: {:?}", out);
+
+    let v = run_json(&[
+        "cleanup",
+        "--snapshot",
+        db.to_str().unwrap(),
+        "--apply",
+        "--reversible",
+        "--target",
+        "node_modules",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(v["applied"], true);
+    let removed = v["removed"].as_array().unwrap();
+    assert!(!removed.is_empty(), "removed empty: {}", v);
+    let nm = dir.join("proj/node_modules");
+    assert!(!nm.exists(), "node_modules should have been moved to trash");
+
+    // Best-effort cleanup of the trash entry we just created so we don't
+    // leak across test runs. Match prefix on basename + unix ts suffix.
+    if let Some(home) = dirs::home_dir() {
+        let trash = home.join(".Trash");
+        if let Ok(entries) = fs::read_dir(&trash) {
+            for e in entries.flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                if name.starts_with("node_modules-") {
+                    let _ = fs::remove_dir_all(e.path());
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn cleanup_dry_run_finds_nothing_in_clean_tree() {
     let (_dir, db) = scan_tiny_tree();
     let v = run_json(&[

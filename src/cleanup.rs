@@ -108,17 +108,55 @@ pub fn scan(conn: &Connection, targets: &[String], limit: usize) -> Result<Vec<C
     Ok(out)
 }
 
-/// Recursively delete the listed paths. Returns paths that were actually removed.
-pub fn apply(hits: &[CleanupHit]) -> Result<Vec<String>> {
-    let mut removed = Vec::new();
+/// How destructive `apply` should be.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApplyMode {
+    /// Permanently `remove_dir_all` each path.
+    Delete,
+    /// Move each path to `~/.Trash/<name>-<unix-secs>` so the user can undo.
+    Trash,
+}
+
+/// Remove or trash the listed paths. Returns paths that were actually handled.
+pub fn apply(hits: &[CleanupHit], mode: ApplyMode) -> Result<Vec<String>> {
+    let mut handled = Vec::new();
     for h in hits {
-        match std::fs::remove_dir_all(&h.path) {
-            Ok(()) => removed.push(h.path.clone()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                // Path vanished between scan and apply — skip silently.
-            }
-            Err(e) => return Err(e.into()),
+        match mode {
+            ApplyMode::Delete => match std::fs::remove_dir_all(&h.path) {
+                Ok(()) => handled.push(h.path.clone()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e.into()),
+            },
+            ApplyMode::Trash => match move_to_trash(&h.path) {
+                Ok(_) => handled.push(h.path.clone()),
+                Err(e) => {
+                    if !std::path::Path::new(&h.path).exists() {
+                        // Vanished between scan and apply — skip silently.
+                        continue;
+                    }
+                    return Err(e);
+                }
+            },
         }
     }
-    Ok(removed)
+    Ok(handled)
+}
+
+fn move_to_trash(path: &str) -> Result<std::path::PathBuf> {
+    let trash = dirs::home_dir()
+        .ok_or_else(|| anyhow::anyhow!("home dir unavailable"))?
+        .join(".Trash");
+    std::fs::create_dir_all(&trash)?;
+    let src = std::path::Path::new(path);
+    let name = src
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "disky-trashed".into());
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let dest = trash.join(format!("{}-{}", name, ts));
+    std::fs::rename(src, &dest)?;
+    Ok(dest)
 }

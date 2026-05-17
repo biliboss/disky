@@ -44,7 +44,8 @@ fn commands() -> Value {
             "args": {
                 "target": "string[] (comma-separated)",
                 "snapshot": "@latest|<id>|<path>",
-                "apply": "bool (default false — dry-run unless set)"
+                "apply": "bool (default false — dry-run unless set)",
+                "reversible": "bool (default false — with apply, trash instead of rm)"
             },
             "output": "CleanupHit[]",
             "targets": TARGETS.iter().map(|(n, b)| json!({"name": n, "basenames": b})).collect::<Vec<_>>()

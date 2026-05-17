@@ -121,6 +121,7 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             snapshot,
             limit,
             apply,
+            reversible,
         } => {
             let conn = open_snapshot(&snapshot)?;
             let targets: Vec<String> = if target.is_empty() {
@@ -133,7 +134,12 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             };
             let hits = cleanup::scan(&conn, &targets, limit)?;
             let removed = if apply {
-                Some(cleanup::apply(&hits)?)
+                let mode = if reversible {
+                    cleanup::ApplyMode::Trash
+                } else {
+                    cleanup::ApplyMode::Delete
+                };
+                Some(cleanup::apply(&hits, mode)?)
             } else {
                 None
             };

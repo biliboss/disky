@@ -227,7 +227,8 @@ fn tools_list() -> Value {
                         "target": { "type": "array", "items": { "type": "string" }, "description": "Categories (default: all)" },
                         "snapshot": { "type": "string", "default": "@latest" },
                         "limit": { "type": "integer", "default": 100 },
-                        "apply": { "type": "boolean", "default": false, "description": "Actually delete the listed paths" }
+                        "apply": { "type": "boolean", "default": false, "description": "Actually delete the listed paths" },
+                        "reversible": { "type": "boolean", "default": false, "description": "With apply=true, move paths to ~/.Trash instead of permanent delete" }
                     }
                 }
             },
@@ -385,6 +386,10 @@ fn tool_cleanup(args: &Value) -> anyhow::Result<Value> {
     let conn = db::open(&db_path)?;
     let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(100) as usize;
     let apply = args.get("apply").and_then(Value::as_bool).unwrap_or(false);
+    let reversible = args
+        .get("reversible")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let targets: Vec<String> = args
         .get("target")
         .and_then(Value::as_array)
@@ -403,7 +408,12 @@ fn tool_cleanup(args: &Value) -> anyhow::Result<Value> {
 
     let hits = cleanup::scan(&conn, &targets, limit)?;
     let removed = if apply {
-        Some(cleanup::apply(&hits)?)
+        let mode = if reversible {
+            cleanup::ApplyMode::Trash
+        } else {
+            cleanup::ApplyMode::Delete
+        };
+        Some(cleanup::apply(&hits, mode)?)
     } else {
         None
     };

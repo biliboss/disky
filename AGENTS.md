@@ -19,8 +19,9 @@ Fast macOS disk analyzer — scan, explore, clean up.
 `.venv`/`venv`, `.gradle`, `.pytest_cache`). Default is dry-run.
 
 ```
-disky cleanup --snapshot @latest                     # preview
-disky cleanup --target node_modules,target --apply   # actually delete
+disky cleanup --snapshot @latest                              # preview
+disky cleanup --target node_modules,target --apply            # rm -rf
+disky cleanup --target node_modules,target --apply --reversible  # → ~/.Trash
 ```
 
 JSON output: `{kind:"cleanup", applied:bool, removed:[paths], records:[CleanupHit]}`.

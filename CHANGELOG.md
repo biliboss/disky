@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `disky cleanup --apply --reversible` (and `disky_cleanup` MCP arg
+  `reversible: true`) moves paths to `~/.Trash/<name>-<unix-ts>` instead
+  of `rm -rf`-ing them, so a misfire can be undone from Finder. Default
+  `--apply` without `--reversible` keeps the permanent-delete behaviour.
+  Implements the `--reversible` pattern called out in plan §3.
+- `cleanup::ApplyMode { Delete, Trash }` enum in the lib.
+- Integration test covers the trash path (synthesises a `node_modules`,
+  asserts source gone, then sweeps the matching trash entry).
 - `Stats` now carries scan provenance: `scan_root`, `scanned_at` (RFC 3339),
   `scan_duration_s`. `disky stats` text mode prints them under the totals;
   JSON mode adds them as optional fields. Lets agents tell whether a query

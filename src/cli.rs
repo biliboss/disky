@@ -114,6 +114,10 @@ pub enum Command {
         /// Actually delete the listed paths (default: dry-run)
         #[arg(long, default_value_t = false)]
         apply: bool,
+        /// With `--apply`, move paths to ~/.Trash instead of permanently
+        /// deleting them so they can be restored.
+        #[arg(long, default_value_t = false)]
+        reversible: bool,
     },
 
     /// Emit a JSON descriptor of every command, record shape, and error type
