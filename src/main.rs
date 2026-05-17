@@ -49,19 +49,47 @@ fn open_snapshot(spec: &str) -> anyhow::Result<duckdb::Connection> {
 
 fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
     match cli.command.unwrap_or(Command::Tui { snapshot: None }) {
-        Command::Scan { path, db } => {
+        Command::Scan {
+            path,
+            db,
+            emit_top,
+            emit_dirs,
+            emit_ext,
+            emit_stats,
+        } => {
             let db_path = match db {
                 Some(p) => p,
                 None => snapshots::new_snapshot_path()?,
             };
             let cancel = Arc::new(AtomicBool::new(false));
             let cancel_handler = Arc::clone(&cancel);
-            // Best-effort SIGINT handler. Errors here just mean ctrl-c reverts
-            // to the default behaviour (immediate abort), which is acceptable.
             let _ = ctrlc::set_handler(move || {
                 cancel_handler.store(true, Ordering::Relaxed);
             });
             let outcome = scan::run_cancellable(&path, &db_path, cancel)?;
+
+            let want_bundle =
+                emit_top.is_some() || emit_dirs.is_some() || emit_ext.is_some() || emit_stats;
+            if want_bundle {
+                let conn = db::open(&db_path)?;
+                let mut bundle = serde_json::Map::new();
+                bundle.insert("schema_version".into(), json!(disky::query::SCHEMA_VERSION));
+                bundle.insert("kind".into(), json!("scan_bundle"));
+                bundle.insert("snapshot".into(), json!(db_path));
+                bundle.insert("complete".into(), json!(outcome.complete));
+                bundle.insert("stats".into(), json!(query::stats(&conn)?));
+                if let Some(n) = emit_top {
+                    bundle.insert("top".into(), json!(query::top_files(&conn, n, 0)?));
+                }
+                if let Some(n) = emit_dirs {
+                    bundle.insert("dirs".into(), json!(query::top_dirs(&conn, n)?));
+                }
+                if let Some(n) = emit_ext {
+                    bundle.insert("ext".into(), json!(query::by_extension(&conn, n)?));
+                }
+                println!("{}", serde_json::to_string(&bundle)?);
+            }
+
             if !outcome.complete {
                 return Err(disky::exit::DiskyError::new(
                     ExitCode::PartialScan,

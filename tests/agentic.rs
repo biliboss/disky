@@ -132,6 +132,30 @@ fn raw_query_runs() {
 }
 
 #[test]
+fn scan_emit_bundle_includes_top_and_stats() {
+    let dir = temp_dir();
+    fs::write(dir.join("big.bin"), vec![0u8; 16 * 1024]).unwrap();
+    fs::write(dir.join("small.txt"), vec![0u8; 64]).unwrap();
+    let db = dir.join("snap.db");
+    let out = Command::new(disky_bin())
+        .args(["scan"])
+        .arg(&dir)
+        .args(["--db"])
+        .arg(&db)
+        .args(["--emit-top", "5", "--emit-ext", "5", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{:?}", out);
+    let body = String::from_utf8(out.stdout).unwrap();
+    let v: Value = serde_json::from_str(body.trim()).expect("scan_bundle JSON");
+    assert_eq!(v["kind"], "scan_bundle");
+    assert_eq!(v["complete"], true);
+    assert!(v["stats"]["files"].as_u64().unwrap() >= 2);
+    assert!(!v["top"].as_array().unwrap().is_empty());
+    assert!(!v["ext"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn cleanup_reversible_moves_to_trash() {
     let dir = temp_dir();
     fs::create_dir_all(dir.join("proj/node_modules")).unwrap();

@@ -45,6 +45,24 @@ pub enum Command {
         /// Output DuckDB file path (default: auto-named in data dir)
         #[arg(short, long)]
         db: Option<String>,
+
+        /// Also emit the top N largest files in the result (cuts a round-trip
+        /// for agents — avoids needing a separate `disky top` call).
+        #[arg(long, value_name = "N")]
+        emit_top: Option<usize>,
+
+        /// Also emit the top N directories by aggregated size.
+        #[arg(long, value_name = "N")]
+        emit_dirs: Option<usize>,
+
+        /// Also emit the top N extensions by total size.
+        #[arg(long, value_name = "N")]
+        emit_ext: Option<usize>,
+
+        /// Also emit overall stats (root, totals, duration). Implied by any
+        /// other `--emit-*` flag.
+        #[arg(long, default_value_t = false)]
+        emit_stats: bool,
     },
 
     /// Show largest files

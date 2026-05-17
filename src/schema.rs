@@ -27,10 +27,14 @@ fn commands() -> Value {
         {
             "name": "scan", "args": {
                 "path": "string (default '/')",
-                "db": "string? (default auto-named in data dir)"
+                "db": "string? (default auto-named in data dir)",
+                "emit_top": "int?",
+                "emit_dirs": "int?",
+                "emit_ext": "int?",
+                "emit_stats": "bool"
             },
             "stderr": "NDJSON {start,progress,done} when stderr piped, else spinner",
-            "output": null
+            "output": "scan_bundle when any emit_* flag is set"
         },
         { "name": "top",    "args": snapshot_with(&["limit:int=50", "min_size:int=0"]), "output": "FileRow[]" },
         { "name": "dirs",   "args": snapshot_with(&["limit:int=30"]),                   "output": "DirRow[]" },

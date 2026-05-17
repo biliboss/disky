@@ -78,6 +78,18 @@ batch, marks the snapshot partial in `scan_meta`, and exits with status
 `5` (`partial-scan`). The DB is still queryable; `disky stats` returns
 `partial: true`.
 
+## Bundled scan (cut round-trips)
+
+`disky scan` can attach query results to its output so one CLI / MCP call
+does what used to take four:
+
+```
+disky scan / --emit-top 50 --emit-dirs 20 --emit-ext 30 --format json
+```
+
+Returns a `scan_bundle` envelope with `stats`, `top`, `dirs`, `ext`. MCP
+`disky_scan` accepts the same `emit_top` / `emit_dirs` / `emit_ext` ints.
+
 ## Scan progress (NDJSON on stderr)
 
 When stderr is piped, `disky scan` emits NDJSON events instead of the spinner:

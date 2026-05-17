@@ -144,7 +144,10 @@ fn tools_list() -> Value {
                     "type": "object",
                     "properties": {
                         "path": { "type": "string", "description": "Directory to scan", "default": "/" },
-                        "db": { "type": "string", "description": "Snapshot DB path (default: auto-named in ~/Library/Application Support/disky/)" }
+                        "db": { "type": "string", "description": "Snapshot DB path (default: auto-named in ~/Library/Application Support/disky/)" },
+                        "emit_top": { "type": "integer", "description": "Also return top-N files in result (cuts a round-trip)" },
+                        "emit_dirs": { "type": "integer", "description": "Also return top-N dirs in result" },
+                        "emit_ext": { "type": "integer", "description": "Also return top-N extensions in result" }
                     }
                 }
             },
@@ -300,15 +303,26 @@ fn tool_scan(args: &Value) -> anyhow::Result<Value> {
         Some(s) => s.to_string(),
         None => snapshots::new_snapshot_path()?,
     };
-    scan::run(&path, &db_path)?;
+    let outcome = scan::run(&path, &db_path)?;
     let conn = db::open(&db_path)?;
     let stats = query::stats(&conn)?;
-    Ok(json!({
-        "schema_version": SCHEMA_VERSION,
-        "kind": "scan_result",
-        "snapshot": db_path,
-        "stats": stats,
-    }))
+
+    let mut bundle = serde_json::Map::new();
+    bundle.insert("schema_version".into(), json!(SCHEMA_VERSION));
+    bundle.insert("kind".into(), json!("scan_bundle"));
+    bundle.insert("snapshot".into(), json!(db_path));
+    bundle.insert("complete".into(), json!(outcome.complete));
+    bundle.insert("stats".into(), json!(stats));
+    if let Some(n) = args.get("emit_top").and_then(Value::as_u64) {
+        bundle.insert("top".into(), json!(query::top_files(&conn, n as usize, 0)?));
+    }
+    if let Some(n) = args.get("emit_dirs").and_then(Value::as_u64) {
+        bundle.insert("dirs".into(), json!(query::top_dirs(&conn, n as usize)?));
+    }
+    if let Some(n) = args.get("emit_ext").and_then(Value::as_u64) {
+        bundle.insert("ext".into(), json!(query::by_extension(&conn, n as usize)?));
+    }
+    Ok(Value::Object(bundle))
 }
 
 fn envelope(kind: &str, records: Value) -> Value {

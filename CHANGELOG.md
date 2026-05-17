@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `disky scan --emit-top N --emit-dirs N --emit-ext N --emit-stats` bundles
+  the query results into a `scan_bundle` envelope so agents skip the usual
+  scan→stats→top→dirs round-trip. MCP `disky_scan` accepts the same
+  `emit_top`/`emit_dirs`/`emit_ext` integers and now always returns a
+  `scan_bundle` (with `complete` from the cancellable scan outcome).
 - `disky cleanup --apply --reversible` (and `disky_cleanup` MCP arg
   `reversible: true`) moves paths to `~/.Trash/<name>-<unix-ts>` instead
   of `rm -rf`-ing them, so a misfire can be undone from Finder. Default
