@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
-use crate::render::Format;
+use disky::render::Format;
 
 #[derive(Parser)]
 #[command(name = "disky", about = "Fast macOS disk analyzer", version)]

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-17
+
+### Added
+- `disky-mcp` binary: minimal stdio MCP server (JSON-RPC 2.0) exposing the
+  query layer as typed tools (`disky_scan`, `disky_top`, `disky_dirs`,
+  `disky_ext`, `disky_find`, `disky_stats`, `disky_list_snapshots`). No
+  external SDK dep — handcrafted protocol covers `initialize`, `tools/list`,
+  `tools/call`. Tool errors carry the RFC 9457 payload as `isError` content.
+- `[lib]` target — `db`, `exit`, `query`, `render`, `scan`, `snapshots`
+  modules now public via the `disky` crate so both binaries reuse the core.
+- NDJSON scan progress on stderr when stderr is not a TTY: `start`,
+  `progress` (throttled 500ms), `done` events. Spinner keeps working
+  interactively.
+
+### Changed
+- `Cargo.toml` declares `[lib]` + two `[[bin]]` targets (`disky`, `disky-mcp`).
+- `main.rs`, `cli.rs`, `tui/mod.rs` switched from `crate::` to `disky::`
+  imports so the binary consumes the library.
+
 ## [0.2.0] - 2026-05-17
 
 ### Added

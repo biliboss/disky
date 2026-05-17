@@ -3,15 +3,101 @@ use flume::bounded;
 use indicatif::{ProgressBar, ProgressStyle};
 use jwalk::{Parallelism, WalkDir};
 use memchr::memrchr;
+use serde_json::json;
+use std::io::IsTerminal;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use crate::db::{self, FileRecord};
+use crate::query::SCHEMA_VERSION;
 
 const BATCH_SIZE: usize = 50_000;
 const CHANNEL_CAP: usize = 256;
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(500);
+
+/// Abstraction over progress reporting: indicatif spinner on a TTY, NDJSON
+/// events on stderr when piped (so agents can monitor without parsing prose).
+enum Progress {
+    Tty(ProgressBar),
+    Ndjson { last: Instant },
+}
+
+impl Progress {
+    fn new() -> Self {
+        if std::io::stderr().is_terminal() {
+            let pb = ProgressBar::new_spinner();
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .template("{spinner:.cyan} {msg} [{elapsed}] [{per_sec}]")
+                    .unwrap(),
+            );
+            pb.enable_steady_tick(Duration::from_millis(80));
+            Progress::Tty(pb)
+        } else {
+            // Emit initial start event so agents see something immediately.
+            eprintln!(
+                "{}",
+                json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "event": "start",
+                })
+            );
+            Progress::Ndjson {
+                last: Instant::now() - PROGRESS_INTERVAL,
+            }
+        }
+    }
+
+    fn tick(&mut self, scanned: u64, bytes: u64) {
+        match self {
+            Progress::Tty(pb) => {
+                pb.set_message(format!("Scanned {:>9} entries", scanned));
+            }
+            Progress::Ndjson { last } => {
+                if last.elapsed() >= PROGRESS_INTERVAL {
+                    eprintln!(
+                        "{}",
+                        json!({
+                            "schema_version": SCHEMA_VERSION,
+                            "event": "progress",
+                            "scanned": scanned,
+                            "bytes": bytes,
+                        })
+                    );
+                    *last = Instant::now();
+                }
+            }
+        }
+    }
+
+    fn message(&self, msg: &str) {
+        if let Progress::Tty(pb) = self {
+            pb.set_message(msg.to_string());
+        }
+    }
+
+    fn finish(self, scanned: u64, bytes: u64, db_path: &str) {
+        match self {
+            Progress::Tty(pb) => {
+                pb.finish_with_message(format!("Done: {} entries → {}", scanned, db_path));
+            }
+            Progress::Ndjson { .. } => {
+                eprintln!(
+                    "{}",
+                    json!({
+                        "schema_version": SCHEMA_VERSION,
+                        "event": "done",
+                        "scanned": scanned,
+                        "bytes": bytes,
+                        "db": db_path,
+                    })
+                );
+            }
+        }
+    }
+}
 
 pub fn run(root: &str, db_path: &str) -> Result<()> {
     let conn = db::open(db_path)?;
@@ -19,20 +105,15 @@ pub fn run(root: &str, db_path: &str) -> Result<()> {
 
     let cpus = num_cpus::get();
 
-    let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.cyan} {msg} [{elapsed}] [{per_sec}]")
-            .unwrap(),
-    );
-    pb.enable_steady_tick(Duration::from_millis(80));
+    let mut progress = Progress::new();
 
     let counter = Arc::new(AtomicU64::new(0));
+    let bytes_seen = Arc::new(AtomicU64::new(0));
     let (tx, rx) = bounded::<Vec<FileRecord>>(CHANNEL_CAP);
 
     let root_owned = root.to_string();
-    let pb_clone = pb.clone();
     let counter_clone = Arc::clone(&counter);
+    let bytes_clone = Arc::clone(&bytes_seen);
 
     let walker = thread::Builder::new()
         .name("walker".into())
@@ -86,9 +167,9 @@ pub fn run(root: &str, db_path: &str) -> Result<()> {
                     depth: entry.depth() as i32,
                 });
 
-                let n = counter_clone.fetch_add(1, Ordering::Relaxed) + 1;
-                if n % 10_000 == 0 {
-                    pb_clone.set_message(format!("Scanned {:>9} entries", n));
+                counter_clone.fetch_add(1, Ordering::Relaxed);
+                if size > 0 {
+                    bytes_clone.fetch_add(size as u64, Ordering::Relaxed);
                 }
 
                 if batch.len() >= BATCH_SIZE {
@@ -107,14 +188,18 @@ pub fn run(root: &str, db_path: &str) -> Result<()> {
 
     for batch in rx {
         db::append_batch(&conn, &batch)?;
+        let n = counter.load(Ordering::Relaxed);
+        let b = bytes_seen.load(Ordering::Relaxed);
+        progress.tick(n, b);
     }
 
     walker.join().expect("walker thread panicked")?;
 
-    pb.set_message("Building indexes...");
+    progress.message("Building indexes...");
     db::build_indexes(&conn)?;
 
     let total = counter.load(Ordering::Relaxed);
-    pb.finish_with_message(format!("Done: {} entries → {}", total, db_path));
+    let bytes = bytes_seen.load(Ordering::Relaxed);
+    progress.finish(total, bytes, db_path);
     Ok(())
 }

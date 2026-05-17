@@ -1,20 +1,14 @@
 mod cli;
-mod db;
-mod exit;
-mod query;
-mod render;
-mod scan;
-mod snapshots;
 mod tui;
 
 use clap::Parser;
 use cli::{Cli, Command};
-use exit::{classify, DiskyError, ExitCode};
-use render::{resolve_format, Format};
+use disky::exit::{classify, DiskyError, ExitCode};
+use disky::query::SCHEMA_VERSION;
+use disky::render::{resolve_format, Format};
+use disky::{db, query, render, scan, snapshots};
 use serde_json::json;
 use std::process::ExitCode as ProcExit;
-
-use crate::query::SCHEMA_VERSION;
 
 fn main() -> ProcExit {
     let cli = Cli::parse();

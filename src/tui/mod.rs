@@ -12,10 +12,10 @@ use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 use std::io;
 use std::time::Duration;
 
-use crate::db;
-use crate::render;
-use crate::snapshots;
 use app::App;
+use disky::db;
+use disky::render;
+use disky::snapshots;
 use tree::load_root;
 
 pub fn run(db_path: Option<String>) -> Result<()> {

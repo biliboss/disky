@@ -12,6 +12,36 @@ Fast macOS disk analyzer — scan, explore, clean up.
 | `flume 0.11` | Bounded channel walker→writer, cap 256 |
 | `memchr 2` | `memrchr(b'.', ...)` for ext extraction (2-3x faster than `Path::extension`) |
 
+## MCP server
+
+`disky-mcp` is a stdio JSON-RPC 2.0 server exposing the query layer as typed
+tools. Add to a Claude Code / Cursor / Zed MCP config:
+
+```json
+{
+  "mcpServers": {
+    "disky": { "command": "/usr/local/bin/disky-mcp" }
+  }
+}
+```
+
+Tools: `disky_scan`, `disky_top`, `disky_dirs`, `disky_ext`, `disky_find`,
+`disky_stats`, `disky_list_snapshots`. All accept `snapshot` as a path or
+`@latest`. Errors arrive as `isError: true` content carrying the same
+RFC 9457 payload the CLI emits on stderr.
+
+## Scan progress (NDJSON on stderr)
+
+When stderr is piped, `disky scan` emits NDJSON events instead of the spinner:
+
+```
+{"schema_version":1,"event":"start"}
+{"schema_version":1,"event":"progress","scanned":120000,"bytes":48294821}
+{"schema_version":1,"event":"done","scanned":342118,"bytes":81293048203,"db":"…"}
+```
+
+Throttled to 500ms between `progress` events.
+
 ## Agent-native output
 
 Query commands (`top`, `dirs`, `ext`, `find`, `stats`, `list`) honour `--format`:
