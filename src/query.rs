@@ -55,12 +55,34 @@ fn rfc3339(mtime: Option<i64>) -> Option<String> {
 }
 
 pub fn top_files(conn: &Connection, limit: usize, min_size: u64) -> Result<Vec<FileRow>> {
-    let mut stmt = conn.prepare(
-        "SELECT path, size, ext, mtime FROM files
-         WHERE is_dir = false AND size >= ?
-         ORDER BY size DESC
-         LIMIT ?",
-    )?;
+    top_files_inner(conn, limit, min_size, false)
+}
+
+/// Variant that orders + returns by physical_size when `physical = true`.
+/// Falls back to logical size when physical_size column missing (older
+/// snapshots).
+pub fn top_files_physical(conn: &Connection, limit: usize, min_size: u64) -> Result<Vec<FileRow>> {
+    top_files_inner(conn, limit, min_size, true)
+}
+
+fn top_files_inner(
+    conn: &Connection,
+    limit: usize,
+    min_size: u64,
+    physical: bool,
+) -> Result<Vec<FileRow>> {
+    let size_expr = if physical {
+        "COALESCE(physical_size, size)"
+    } else {
+        "size"
+    };
+    let sql = format!(
+        "SELECT path, {size_expr} AS size, ext, mtime FROM files
+         WHERE is_dir = false AND {size_expr} >= ?
+         ORDER BY {size_expr} DESC
+         LIMIT ?"
+    );
+    let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(duckdb::params![min_size as i64, limit as i64], |row| {
         Ok(FileRow {
             path: row.get::<_, String>(0)?,

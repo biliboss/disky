@@ -71,6 +71,7 @@ fn open_snapshot(spec: &str) -> anyhow::Result<duckdb::Connection> {
 }
 
 fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
+    let physical = cli.physical;
     match cli.command.unwrap_or(Command::Tui { snapshot: None }) {
         Command::Scan {
             path,
@@ -131,7 +132,11 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             min_size,
         } => {
             let conn = open_snapshot(&snapshot)?;
-            let rows = query::top_files(&conn, limit, min_size)?;
+            let rows = if physical {
+                query::top_files_physical(&conn, limit, min_size)?
+            } else {
+                query::top_files(&conn, limit, min_size)?
+            };
             render::top_files(&rows, format)?;
         }
         Command::Ext { snapshot, limit } => {

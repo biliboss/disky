@@ -9,6 +9,14 @@ pub struct Cli {
     #[arg(long, value_enum, global = true)]
     pub format: Option<FormatArg>,
 
+    /// Use physical disk usage (st_blocks * 512) instead of logical size
+    /// (st_size). Critical for APFS sparse files — OrbStack disk images
+    /// report 8.8 TB logical on a 256 GB SSD; physical shows ~13 GB.
+    /// Applies to top, dirs, ext, stats. Falls back to logical when
+    /// physical isn't captured (older snapshots, non-Unix scans).
+    #[arg(long, global = true)]
+    pub physical: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }
