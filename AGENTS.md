@@ -166,6 +166,37 @@ fontFamily: { display:['Fraunces','serif'], sans:['Manrope','sans-serif'],
 
 When the FastHTML + Monster UI surface lands (see `claude-skill/disky/`), these tokens become the only legal colors. Any one-off hex outside this set is a bug.
 
+## MCP scope (decision, 2026-05-22)
+
+`disky-mcp` exists. It will stay **minimal** until non-Claude-Code users emerge or until we implement the spec features that can't be done in CLI.
+
+**Three surfaces, three jobs:**
+
+| Surface | When it wins |
+|---------|--------------|
+| CLI (`disky <cmd> --format json`) | Anything an agent can shell out to. Default. |
+| `/disky` Claude Code skill | One-shot UX inside Claude Code: scan + queries + HTML report. |
+| `disky-mcp` (MCP server) | Hosts that can't / don't shell out (Claude Desktop, Cursor, Zed). OR features that need MCP-only capabilities (resources, prompts, progress notifications, subscriptions). |
+
+**The trap (avoid):** wrapping a CLI subcommand in an MCP tool of the same shape adds zero value but doubles maintenance. An agent on Claude Code calling `disky_growth` via MCP gets the same JSON it would get from `Bash(disky growth --format json)`. Don't do this.
+
+**What `disky-mcp` keeps exposing (today):**
+
+- `disky_scan`, `disky_top`, `disky_dirs`, `disky_ext`, `disky_find`, `disky_stats`, `disky_query`, `disky_diff`, `disky_cleanup`, `disky_list_snapshots`, `disky_schema`, `disky_discover`, `disky_forget` — these predate the new CLI surface and stay for host-only users.
+
+**What `disky-mcp` does NOT expose (deliberately):**
+
+- `disky_growth`, `disky_churn`, `disky_predict`, `disky_empty`, `disky_old`, `disky_filter` — newer CLI commands. Claude Code agents use the CLI. Other hosts will get them when **resources/prompts/progress** ship and there's an actual non-CLI user.
+
+**Earn-back criteria** (when MCP-only tools become worth adding):
+
+1. We ship `resources/list` (snapshots as host-browsable URIs).
+2. We ship `prompts/list` (host-side slash commands like `/find-disk-hoggers`).
+3. We ship progress notifications (long scan streaming to host).
+4. A user on Claude Desktop / Cursor / Zed / Continue actually asks for a tool we haven't exposed.
+
+Until then, **new CLI commands stop at the CLI**. Skill renderer (`claude-skill/disky/render.py`) consumes JSON envelopes from the CLI directly — no MCP needed in that path.
+
 ## Claude Code skill — `/disky`
 
 Ships at `claude-skill/disky/` alongside the binary. Once installed (copy or symlink to `~/.claude*/skills/disky/`), invoking `/disky` produces an interactive HTML report identical-in-spirit to `~/disky-dogfood-report.html` but generated programmatically.
