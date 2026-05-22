@@ -153,6 +153,58 @@ pub fn old_files(conn: &Connection, cutoff: i64, limit: usize) -> Result<Vec<Fil
     Ok(rows.flatten().collect())
 }
 
+/// Per-directory mtime-based churn within a single snapshot. Counts files
+/// whose `mtime > cutoff_unix`, sums their bytes, and emits a churn score
+/// = recent_bytes / total_bytes per parent dir. High score = active log
+/// generator or hot working directory.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ChurnRow {
+    pub path: String,
+    pub recent_files: u64,
+    pub recent_bytes: u64,
+    pub total_files: u64,
+    pub total_bytes: u64,
+    /// recent_bytes / total_bytes (0.0 .. 1.0). NaN-safe (0 when denom = 0).
+    pub churn_score: f64,
+}
+
+pub fn churn(conn: &Connection, cutoff_unix: i64, limit: usize) -> Result<Vec<ChurnRow>> {
+    let mut stmt = conn.prepare(
+        "WITH dir_stats AS (
+             SELECT regexp_replace(path, '/[^/]+$', '') AS d,
+                    COUNT(*)                            AS total_files,
+                    SUM(size)                           AS total_bytes,
+                    COUNT(*) FILTER (WHERE mtime > ?)   AS recent_files,
+                    COALESCE(SUM(size) FILTER (WHERE mtime > ?), 0) AS recent_bytes
+             FROM files
+             WHERE is_dir = false
+             GROUP BY d
+         )
+         SELECT d, recent_files, recent_bytes, total_files, total_bytes,
+                CASE WHEN total_bytes > 0
+                     THEN CAST(recent_bytes AS DOUBLE) / CAST(total_bytes AS DOUBLE)
+                     ELSE 0.0 END AS churn_score
+         FROM dir_stats
+         WHERE recent_files > 0
+         ORDER BY recent_bytes DESC
+         LIMIT ?",
+    )?;
+    let rows = stmt.query_map(
+        duckdb::params![cutoff_unix, cutoff_unix, limit as i64],
+        |row| {
+            Ok(ChurnRow {
+                path: row.get::<_, String>(0)?,
+                recent_files: row.get::<_, i64>(1)? as u64,
+                recent_bytes: row.get::<_, i64>(2)? as u64,
+                total_files: row.get::<_, i64>(3)? as u64,
+                total_bytes: row.get::<_, i64>(4)? as u64,
+                churn_score: row.get::<_, f64>(5)?,
+            })
+        },
+    )?;
+    Ok(rows.flatten().collect())
+}
+
 /// Per-directory growth between two snapshots. Aggregates file sizes by
 /// direct parent path. Returns up to `limit` rows ordered by absolute Δ.
 ///

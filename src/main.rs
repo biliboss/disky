@@ -251,11 +251,50 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
         Command::Growth {
             since,
             until,
+            over,
             limit,
         } => {
-            let path_a = snapshots::resolve(&since)?;
+            // --over wins over --since. Pick oldest snapshot whose age >= window.
+            let resolved_since = if let Some(ref dur) = over {
+                let secs = disky::duration::parse_seconds(dur).map_err(|e| {
+                    DiskyError::new(ExitCode::Usage, "invalid --over", e.to_string())
+                })?;
+                let cutoff = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0)
+                    - secs;
+                let snaps = snapshots::list_snapshots();
+                let oldest = snaps
+                    .iter()
+                    .filter_map(|(p, _)| {
+                        let id = snapshots::id_for(p)?;
+                        let dt = snapshots::parse_id(&id)?;
+                        Some((p.clone(), dt.timestamp()))
+                    })
+                    .filter(|(_, ts)| *ts <= cutoff)
+                    .max_by_key(|(_, ts)| *ts);
+                match oldest {
+                    Some((p, _)) => p,
+                    None => {
+                        return Err(DiskyError::new(
+                            ExitCode::NotFound,
+                            "no snapshot in window",
+                            format!(
+                                "no snapshot older than {} found (need scan history covering the window)",
+                                dur
+                            ),
+                        )
+                        .into())
+                    }
+                }
+            } else {
+                snapshots::resolve(&since)?
+            };
             let path_b = snapshots::resolve(&until)?;
-            let rows = query::growth(&path_a, &path_b, limit)?;
+            let rows = query::growth(&resolved_since, &path_b, limit)?;
+            let since_label = over.as_deref().unwrap_or(since.as_str());
+            let since = since_label.to_string();
             if format.is_machine() {
                 let payload = serde_json::json!({
                     "schema_version": SCHEMA_VERSION,
@@ -284,6 +323,54 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                         r.delta_bytes,
                         r.rate_bytes_per_day,
                         r.kind
+                    );
+                }
+            }
+        }
+        Command::Churn {
+            over,
+            snapshot,
+            limit,
+        } => {
+            let secs = disky::duration::parse_seconds(&over)
+                .map_err(|e| DiskyError::new(ExitCode::Usage, "invalid --over", e.to_string()))?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            let cutoff = now - secs;
+            let conn = open_snapshot(&snapshot)?;
+            let rows = query::churn(&conn, cutoff, limit)?;
+            if format.is_machine() {
+                let payload = json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "kind": "churn",
+                    "over": over,
+                    "cutoff_unix": cutoff,
+                    "records": rows,
+                });
+                println!("{}", payload);
+            } else if rows.is_empty() {
+                println!("No churn detected within {}.", over);
+            } else {
+                println!(
+                    "{:<60} {:>8} {:>14} {:>10} {:>8}",
+                    "PATH", "FILES", "BYTES", "OF TOTAL", "SCORE"
+                );
+                println!("{}", "-".repeat(108));
+                for r in &rows {
+                    let truncated = if r.path.len() > 60 {
+                        format!("...{}", &r.path[r.path.len() - 57..])
+                    } else {
+                        r.path.clone()
+                    };
+                    println!(
+                        "{:<60} {:>8} {:>14} {:>9.1}% {:>8.3}",
+                        truncated,
+                        r.recent_files,
+                        r.recent_bytes,
+                        r.churn_score * 100.0,
+                        r.churn_score
                     );
                 }
             }

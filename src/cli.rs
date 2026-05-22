@@ -190,6 +190,8 @@ pub enum Command {
     /// Per-directory growth between two snapshots. Default compares
     /// `@latest` against `@latest~1` so agents see "what grew since the
     /// previous scan". Rate is bytes/day computed from snapshot timestamps.
+    /// Pass `--over <DURATION>` to auto-pick the oldest snapshot within
+    /// the window (e.g. `--over 7d`).
     Growth {
         /// Earlier snapshot. Accepts @latest, @latest~N, ID, or path.
         #[arg(long, default_value = "@latest~1")]
@@ -197,6 +199,22 @@ pub enum Command {
         /// Later snapshot (default @latest).
         #[arg(long, default_value = "@latest")]
         until: String,
+        /// Auto-pick oldest snapshot whose age >= this duration. Overrides
+        /// --since. Format: `7d`, `2w`, `6mo`, `1y` (see duration.rs).
+        #[arg(long, value_name = "DURATION")]
+        over: Option<String>,
+        #[arg(short, long, default_value_t = 50)]
+        limit: usize,
+    },
+
+    /// Per-directory churn — files modified within the last N hours/days.
+    /// Identifies log generators and hot working directories.
+    Churn {
+        /// Time window (e.g. `24h`, `7d`, `30d`).
+        #[arg(long, default_value = "24h")]
+        over: String,
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
         #[arg(short, long, default_value_t = 50)]
         limit: usize,
     },

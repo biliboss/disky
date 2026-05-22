@@ -151,6 +151,50 @@ fn growth_detects_added_grew_and_removed_dirs() {
 }
 
 #[test]
+fn churn_detects_recently_modified_files() {
+    use std::time::{Duration, SystemTime};
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("tree");
+    fs::create_dir_all(root.join("hot")).unwrap();
+    fs::create_dir_all(root.join("cold")).unwrap();
+    fs::write(root.join("hot/fresh1.log"), vec![0u8; 4096]).unwrap();
+    fs::write(root.join("hot/fresh2.log"), vec![0u8; 8192]).unwrap();
+    fs::write(root.join("cold/stable.bin"), vec![0u8; 16384]).unwrap();
+    // Force `cold/stable.bin` mtime far in the past (180 days).
+    let old = SystemTime::now() - Duration::from_secs(180 * 86400);
+    let f = fs::File::options()
+        .write(true)
+        .open(root.join("cold/stable.bin"))
+        .unwrap();
+    let times = std::fs::FileTimes::new().set_modified(old);
+    f.set_times(times).unwrap();
+
+    let snap = dir.path().join("snap.db");
+    disky::scan::run(root.to_str().unwrap(), snap.to_str().unwrap()).unwrap();
+
+    let conn = disky::db::open(snap.to_str().unwrap()).unwrap();
+    let now = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    // Cutoff: 1 day ago. `hot/*` should appear, `cold/*` should not.
+    let cutoff = now - 86400;
+    let rows = disky::query::churn(&conn, cutoff, 100).unwrap();
+
+    let hot = rows
+        .iter()
+        .find(|r| r.path.ends_with("/hot"))
+        .expect("hot dir missing");
+    assert_eq!(hot.recent_files, 2);
+    assert!(hot.recent_bytes >= 4096 + 8192);
+    assert!(hot.churn_score > 0.0);
+
+    // `cold` should NOT appear (no recent files).
+    assert!(rows.iter().all(|r| !r.path.ends_with("/cold")));
+}
+
+#[test]
 fn id_for_round_trips_through_resolve() {
     let f = fixture();
     let path = f.db_path.to_str().unwrap();

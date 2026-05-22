@@ -59,8 +59,13 @@ fn commands() -> Value {
         },
         {
             "name": "growth",
-            "args": { "since": "@latest|@latest~N|<id>|<path> (default @latest~1)", "until": "@latest|<id>|<path> (default @latest)", "limit": "int=50" },
+            "args": { "since": "@latest|@latest~N|<id>|<path> (default @latest~1)", "until": "@latest|<id>|<path> (default @latest)", "over": "duration? (e.g. 7d) — overrides --since", "limit": "int=50" },
             "output": "GrowthRow[] under kind='growth'. Records: {path, kind: grew|shrank|added|removed, size_a:u64, size_b:u64, delta_bytes:i64, rate_bytes_per_day:f64, days_between:f64}"
+        },
+        {
+            "name": "churn",
+            "args": { "over": "duration (default 24h)", "snapshot": "@latest|<id>|<path>", "limit": "int=50" },
+            "output": "ChurnRow[] under kind='churn'. Records: {path, recent_files:u64, recent_bytes:u64, total_files:u64, total_bytes:u64, churn_score:f64 (0..1)}"
         },
         { "name": "empty", "args": snapshot_with(&["limit:int=100"]), "output": "FileRow[] under kind='empty'" },
         { "name": "old", "args": snapshot_with(&["older_than:duration", "limit:int=100"]), "output": "FileRow[] under kind='old' (older_than: 30d|2w|6mo|1y syntax)" },
@@ -121,6 +126,7 @@ fn records() -> Value {
         "CategorySummary": { "category": "string", "paths": "u64", "bytes": "u64", "files": "u64" },
         "DiffRow":    { "path": "string", "kind": "added|removed|grew|shrank", "size_a": "u64", "size_b": "u64", "delta": "i64" },
         "GrowthRow":  { "path": "string", "kind": "grew|shrank|added|removed", "size_a": "u64", "size_b": "u64", "delta_bytes": "i64", "rate_bytes_per_day": "f64", "days_between": "f64" },
+        "ChurnRow":   { "path": "string", "recent_files": "u64", "recent_bytes": "u64", "total_files": "u64", "total_bytes": "u64", "churn_score": "f64 (0..1)" },
         "envelope":   { "schema_version": "u32", "kind": "string", "records": "T[]" },
         "error":      { "schema_version": "u32", "type": "string (URI)", "title": "string", "status": "i32", "detail": "string", "retryable": "bool", "instance": "string (per-error UUID, RFC 9457 instance)" }
     })
