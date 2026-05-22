@@ -101,6 +101,8 @@ pub fn build_indexes(conn: &Connection) -> Result<()> {
         "
         CREATE INDEX idx_size ON files(size DESC);
         CREATE INDEX idx_ext  ON files(ext);
+        CREATE INDEX idx_path ON files(path);
+        CREATE INDEX idx_name ON files(name);
         ANALYZE;
     ",
     )?;

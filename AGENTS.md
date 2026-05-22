@@ -122,6 +122,75 @@ Query commands (`top`, `dirs`, `ext`, `find`, `stats`, `list`) honour `--format`
 | `--format json` (default when stdout is piped) | Single JSON envelope `{schema_version, kind, records}`. Bytes as `u64`, paths absolute, `mtime` as RFC 3339 UTC |
 | `--format ndjson` | One JSON record per line — stream-friendly for `jq -c` |
 
+## Design Feel — visual identity
+
+disky's UX has a goal: **magic-feeling, safe, useful**. The CLI is honest. The HTML reports + the Claude Code skill should *delight*. Three pillars carry it:
+
+1. **Contrast.** Paper (`#F5F1E8`) vs ink (`#14110F`). Rust (`#B23A1F`) for the single most important thing on a page. Olive (`#5C6831`) for wins / deltas. No grey-on-grey. No off-white-on-off-white. Numbers in Fraunces (variable serif, opsz 144) so they feel weighty next to Manrope body.
+2. **Space.** Generous gutters (`gap-14` between sections). Section numbers as 3-rem Fraunces at left, blood-rust color — leaves an oversized indent without filler text. Tables breathe — 10–12 px padding, never cramped. Empty space carries the user's attention without instruction.
+3. **Minimalism.** No cards inside cards. Every chart earns its place — Mermaid only when structure matters; tables otherwise. Status pills use a 7-color palette tied to meaning (done/partial/deferred/risk + 3 neutrals). No box shadows. No gradients. Editorial brutalism, not SaaS marketing.
+
+Plus a fourth pillar quietly: **motion**. Hover lifts on cards (`hover:bg-paper-100`). Sparklines/charts animate-in on first paint. A spinner only appears when work crosses 200 ms. Otherwise the UI feels *instant* — that's the magic.
+
+**Palette (use these tokens, not freelance hex):**
+
+```
+paper    #F5F1E8   page background, soft cream
+ink      #14110F   primary text, near-black with warmth
+rust     #B23A1F   accent — section markers, critical CTAs
+olive    #5C6831   success / wins / positive Δ
+dim      #6B655E   secondary text
+line     #D9D2C2   table dividers, card borders
+card     #FBF8F0   raised surfaces
+done     #3F6B2A   pill green
+partial  #B8841C   pill yellow
+risk     #B23A1F   pill red (= rust)
+deferred #8C857B   pill grey
+```
+
+**Type stack:**
+```
+display    'Fraunces' (variable serif, opsz 9..144, weight 300..900)
+body       'Manrope'
+mono/code  'JetBrains Mono'
+```
+
+**Tailwind config snippet (copy into any FastHTML or HTML target):**
+```js
+colors: { paper:'#F5F1E8', ink:'#14110F', rust:'#B23A1F', olive:'#5C6831',
+          dim:'#6B655E', line:'#D9D2C2', card:'#FBF8F0',
+          done:'#3F6B2A', partial:'#B8841C', deferred:'#8C857B', risk:'#B23A1F' }
+fontFamily: { display:['Fraunces','serif'], sans:['Manrope','sans-serif'],
+              mono:['JetBrains Mono','monospace'] }
+```
+
+When the FastHTML + Monster UI surface lands (see `claude-skill/disky/`), these tokens become the only legal colors. Any one-off hex outside this set is a bug.
+
+## Claude Code skill — `/disky`
+
+Ships at `claude-skill/disky/` alongside the binary. Once installed (copy or symlink to `~/.claude*/skills/disky/`), invoking `/disky` produces an interactive HTML report identical-in-spirit to `~/disky-dogfood-report.html` but generated programmatically.
+
+Mechanics:
+
+1. `/disky` triggers `claude-skill/disky/SKILL.md`.
+2. The skill runs `disky scan` against `$HOME` (or `--path` override) into a temp DuckDB.
+3. The skill runs the standard query bundle (top, dirs, ext, churn, growth, cleanup, empty, old).
+4. A single `claude-skill/disky/render.py` (FastHTML + Monster UI) reads the JSON envelopes, renders a styled HTML page, and `open`s it in the default browser.
+5. Render also embeds **action buttons** that emit copy-pastable `disky cleanup --apply --target ...` commands — clicking opens a tooltip with the exact safe command for the agent or user to run.
+
+The Python file is intentionally single-file. FastHTML lets us define routes + components inline; Monster UI gives Tailwind-styled primitives (Card, Hero, Button, Table) we wrap once with the disky palette. No build step. `uv run render.py` is the entrypoint.
+
+**Skill UX promises (the four MUSTs):**
+
+| MUST | Realised by |
+|------|-------------|
+| **Motion** | CSS transitions on cards (hover lift, expand). Progress bar during scan. Numbers count up via small `animateNumber` IIFE. |
+| **Fun** | Tone in copy ("eating our own dog food", "the lying sparse file"). Surprising-but-correct insights like "this dir is a log generator". |
+| **Safe** | Every destructive button needs an explicit toggle. <code>--apply</code> commands always pair with <code>--reversible</code> by default. Every command shown verbatim *before* the user is asked to copy it. |
+| **Useful** | Action-oriented sections: "free 30 GB" first, "explain disk contents" second. Each insight ends with a *next move*. |
+
+Layout follows the dogfood report (sections 00–06): metrics block, story, churn, reclaimable, product findings, agent flow, next steps. Skill enforces the standard report rule by construction.
+
 ## Composability — `disky filter --json-input`
 
 Chain disky commands together without re-scanning. Any command emitting a

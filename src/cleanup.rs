@@ -146,59 +146,61 @@ pub fn scan(conn: &Connection, targets: &[String], limit: usize) -> Result<Vec<C
     let basenames: Vec<String> = pairs.iter().map(|(_, b)| (*b).to_string()).collect();
     let placeholders: Vec<String> = (0..basenames.len()).map(|_| "?".to_string()).collect();
 
-    // Find candidate directories. Sum children via prefix match on path.
-    // `WHERE name IN (?, ?, …) AND is_dir`. Cap with subquery LIMIT for safety.
-    let sql = format!(
-        "WITH targets AS (
-             SELECT path, name FROM files
-             WHERE is_dir AND name IN ({})
-         )
-         SELECT t.name, t.path,
-                COALESCE(SUM(f.size), 0) AS bytes,
-                COUNT(f.path) AS files
-         FROM targets t
-         LEFT JOIN files f
-           ON f.path LIKE (t.path || '/%')
-         GROUP BY t.name, t.path
-         ORDER BY bytes DESC
-         LIMIT ?",
+    // Two-stage approach: (1) materialise target dirs into Rust; (2) for each
+    // target, run a bounded range scan over the path-indexed files table.
+    //
+    // Why not one SQL JOIN? On a 1.77 M-row snapshot, `LEFT JOIN files f ON
+    // f.path LIKE (t.path || '/%')` ran 79 s because DuckDB planned it as a
+    // nested-loop join with per-row LIKE evaluation. The range below
+    // (`path >= t/ AND path < t0`, where '0' = '/' + 1 byte) lets DuckDB
+    // use idx_path to range-scan each target's subtree.
+    let target_sql = format!(
+        "SELECT path, name FROM files WHERE is_dir AND name IN ({})",
         placeholders.join(",")
     );
-
-    let mut params: Vec<duckdb::types::Value> = basenames
+    let target_params: Vec<duckdb::types::Value> = basenames
         .iter()
         .map(|b| duckdb::types::Value::Text(b.clone()))
         .collect();
-    params.push(duckdb::types::Value::BigInt(limit as i64));
+    let target_refs: Vec<&dyn duckdb::ToSql> = target_params
+        .iter()
+        .map(|v| v as &dyn duckdb::ToSql)
+        .collect();
+    let mut stmt = conn.prepare(&target_sql)?;
+    let target_rows = stmt.query_map(target_refs.as_slice(), |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let target_dirs: Vec<(String, String)> = target_rows.flatten().collect();
 
+    let mut agg = conn.prepare(
+        "SELECT COALESCE(SUM(size), 0), COUNT(*)
+         FROM files
+         WHERE path >= ? AND path < ? AND is_dir = false",
+    )?;
     let basename_to_category: std::collections::HashMap<&'static str, &'static str> =
         pairs.iter().map(|(cat, base)| (*base, *cat)).collect();
 
-    let mut stmt = conn.prepare(&sql)?;
-    let param_refs: Vec<&dyn duckdb::ToSql> =
-        params.iter().map(|v| v as &dyn duckdb::ToSql).collect();
-    let rows = stmt.query_map(param_refs.as_slice(), |row| {
-        let name: String = row.get(0)?;
-        let path: String = row.get(1)?;
-        let bytes: i64 = row.get(2)?;
-        let files: i64 = row.get(3)?;
-        Ok((name, path, bytes as u64, files as u64))
-    })?;
-
-    let mut out = Vec::new();
-    for r in rows.flatten() {
+    let mut out: Vec<CleanupHit> = Vec::with_capacity(target_dirs.len());
+    for (path, name) in &target_dirs {
+        let lo = format!("{}/", path);
+        let hi = format!("{}0", path);
+        let (bytes, files): (i64, i64) = agg.query_row(duckdb::params![lo, hi], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+        })?;
         let category = basename_to_category
-            .get(r.0.as_str())
+            .get(name.as_str())
             .copied()
             .unwrap_or("unknown")
             .to_string();
         out.push(CleanupHit {
             category,
-            path: r.1,
-            bytes: r.2,
-            files: r.3,
+            path: path.clone(),
+            bytes: bytes as u64,
+            files: files as u64,
         });
     }
+    out.sort_by_key(|h| std::cmp::Reverse(h.bytes));
+    out.truncate(limit);
     Ok(out)
 }
 
