@@ -5,6 +5,7 @@
 //! `initialize`, `tools/list`, `tools/call`. No external MCP SDK dependency.
 
 use disky::exit::{classify, DiskyError, ExitCode};
+use disky::policy::{apply_policy, Policy, SnapshotMeta};
 use disky::query::{self, SCHEMA_VERSION};
 use disky::{cleanup, db, scan, schema, snapshots};
 use serde_json::{json, Value};
@@ -115,6 +116,7 @@ fn tool_error_result(id: Value, err: &DiskyError) -> Value {
         "status": err.code as i32,
         "detail": err.detail,
         "retryable": err.retryable,
+        "instance": err.instance,
     });
     success(
         id,
@@ -140,6 +142,13 @@ fn tools_list() -> Value {
             {
                 "name": "disky_scan",
                 "description": "Scan a directory tree and write a new DuckDB snapshot. Returns the snapshot path + final stats.",
+                "annotations": {
+                    "title": "Scan filesystem",
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": false,
+                    "openWorldHint": true
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -154,6 +163,12 @@ fn tools_list() -> Value {
             {
                 "name": "disky_top",
                 "description": "Largest files in a snapshot. Bytes are u64, paths absolute, mtime RFC 3339 UTC.",
+                "annotations": {
+                    "title": "Top files by size",
+                    "readOnlyHint": true,
+                    "idempotentHint": true,
+                    "destructiveHint": false
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -236,7 +251,13 @@ fn tools_list() -> Value {
             },
             {
                 "name": "disky_cleanup",
-                "description": "Find well-known disk-hoggy directories (node_modules, target, …). Dry-run unless apply=true.",
+                "description": "Find well-known disk-hoggy directories (node_modules, target, …). Dry-run unless apply=true. CAUTION: with apply=true this is DESTRUCTIVE — gate behind user confirmation.",
+                "annotations": {
+                    "title": "Clean disk-hoggy directories",
+                    "readOnlyHint": false,
+                    "destructiveHint": true,
+                    "idempotentHint": false
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -256,7 +277,43 @@ fn tools_list() -> Value {
             {
                 "name": "disky_list_snapshots",
                 "description": "List available DuckDB snapshots in ~/Library/Application Support/disky/.",
+                "annotations": {
+                    "title": "List snapshots",
+                    "readOnlyHint": true,
+                    "idempotentHint": true
+                },
                 "inputSchema": { "type": "object", "properties": {} }
+            },
+            {
+                "name": "disky_discover",
+                "description": "Self-describe: return the full schema descriptor plus runtime context (cwd, active snapshot, data dir, version). One call replaces what used to take schema + list_snapshots + version.",
+                "annotations": {
+                    "title": "Discover disky",
+                    "readOnlyHint": true,
+                    "idempotentHint": true
+                },
+                "inputSchema": { "type": "object", "properties": {} }
+            },
+            {
+                "name": "disky_forget",
+                "description": "Apply restic-style retention policy to snapshots. Default dry-run; pass apply=true to delete. Refuses with usage error if no keep_* flag set. DESTRUCTIVE with apply=true — gate behind user confirmation.",
+                "annotations": {
+                    "title": "Forget snapshots (retention policy)",
+                    "readOnlyHint": false,
+                    "destructiveHint": true,
+                    "idempotentHint": false
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "keep_last": { "type": "integer" },
+                        "keep_daily": { "type": "integer" },
+                        "keep_weekly": { "type": "integer" },
+                        "keep_monthly": { "type": "integer" },
+                        "keep_yearly": { "type": "integer" },
+                        "apply": { "type": "boolean", "default": false }
+                    }
+                }
             }
         ]
     })
@@ -281,6 +338,8 @@ fn handle_tool_call(id: Value, params: Value) -> Value {
         "disky_cleanup" => tool_cleanup(&args),
         "disky_schema" => Ok(schema::document()),
         "disky_list_snapshots" => tool_list_snapshots(),
+        "disky_discover" => tool_discover(),
+        "disky_forget" => tool_forget(&args),
         other => {
             return tool_error_result(
                 id,
@@ -487,4 +546,83 @@ fn tool_list_snapshots() -> anyhow::Result<Value> {
         })
         .collect();
     Ok(envelope("snapshots", json!(records)))
+}
+
+/// One-shot context for an agent connecting to disky-mcp: schema + cwd +
+/// active snapshot + data dir + tool version. Cuts the typical
+/// "schema then list_snapshots then version" sequence to a single call.
+fn tool_discover() -> anyhow::Result<Value> {
+    Ok(json!({
+        "schema_version": SCHEMA_VERSION,
+        "kind": "discover",
+        "tool": "disky",
+        "version": env!("CARGO_PKG_VERSION"),
+        "cwd": std::env::current_dir().ok().map(|p| p.to_string_lossy().into_owned()),
+        "data_dir": snapshots::snapshot_dir().to_string_lossy(),
+        "active_snapshot": snapshots::latest_snapshot(),
+        "schema": schema::document(),
+    }))
+}
+
+fn tool_forget(args: &Value) -> anyhow::Result<Value> {
+    let policy = Policy {
+        keep_last: args
+            .get("keep_last")
+            .and_then(Value::as_u64)
+            .map(|n| n as usize),
+        keep_daily: args
+            .get("keep_daily")
+            .and_then(Value::as_u64)
+            .map(|n| n as usize),
+        keep_weekly: args
+            .get("keep_weekly")
+            .and_then(Value::as_u64)
+            .map(|n| n as usize),
+        keep_monthly: args
+            .get("keep_monthly")
+            .and_then(Value::as_u64)
+            .map(|n| n as usize),
+        keep_yearly: args
+            .get("keep_yearly")
+            .and_then(Value::as_u64)
+            .map(|n| n as usize),
+    };
+    if policy.is_empty() {
+        return Err(DiskyError::new(
+            ExitCode::Usage,
+            "no retention policy",
+            "pass at least one keep_last / keep_daily / keep_weekly / keep_monthly / keep_yearly",
+        )
+        .into());
+    }
+    let apply = args.get("apply").and_then(Value::as_bool).unwrap_or(false);
+    let snaps: Vec<SnapshotMeta> = snapshots::list_snapshots()
+        .into_iter()
+        .filter_map(|(path, bytes)| {
+            let id = snapshots::id_for(&path)?;
+            let created = snapshots::parse_id(&id).map(|d| d.to_rfc3339());
+            Some(SnapshotMeta {
+                id,
+                path,
+                bytes,
+                created,
+            })
+        })
+        .collect();
+    let plan = apply_policy(&snaps, &policy);
+    if apply {
+        for s in &plan.removed {
+            std::fs::remove_file(&s.path)
+                .map_err(|e| DiskyError::io(format!("failed to remove {}: {}", s.path, e)))?;
+        }
+    }
+    Ok(json!({
+        "schema_version": SCHEMA_VERSION,
+        "kind": "forget",
+        "applied": apply,
+        "kept": plan.kept,
+        "removed": plan.removed,
+        "skipped_unparseable": plan.skipped_unparseable,
+        "total_removed_bytes": plan.total_removed_bytes,
+    }))
 }
