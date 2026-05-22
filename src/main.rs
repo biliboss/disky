@@ -141,12 +141,20 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
         }
         Command::Ext { snapshot, limit } => {
             let conn = open_snapshot(&snapshot)?;
-            let rows = query::by_extension(&conn, limit)?;
+            let rows = if physical {
+                query::by_extension_physical(&conn, limit)?
+            } else {
+                query::by_extension(&conn, limit)?
+            };
             render::by_extension(&rows, format)?;
         }
         Command::Dirs { snapshot, limit } => {
             let conn = open_snapshot(&snapshot)?;
-            let rows = query::top_dirs(&conn, limit)?;
+            let rows = if physical {
+                query::top_dirs_physical(&conn, limit)?
+            } else {
+                query::top_dirs(&conn, limit)?
+            };
             render::top_dirs(&rows, format)?;
         }
         Command::Find {
@@ -164,7 +172,11 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             raw,
         } => {
             let conn = open_snapshot(&snapshot)?;
-            let s = query::stats(&conn)?;
+            let s = if physical {
+                query::stats_physical(&conn)?
+            } else {
+                query::stats(&conn)?
+            };
             if raw {
                 println!("{}", s.total_bytes);
             } else if summarize {

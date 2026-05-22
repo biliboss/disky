@@ -406,8 +406,7 @@ def main() -> int:
         return 2
 
     page = build_page(data_dir)
-    # FastHTML's `to_xml` renders an FT tree to a string; prepend doctype.
-    print("<!doctype html>")
+    # `to_xml` on an `Html` FT element already emits the doctype.
     print(to_xml(page))
     return 0
 

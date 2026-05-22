@@ -95,16 +95,30 @@ fn top_files_inner(
 }
 
 pub fn by_extension(conn: &Connection, limit: usize) -> Result<Vec<ExtRow>> {
-    let mut stmt = conn.prepare(
+    by_extension_inner(conn, limit, false)
+}
+
+pub fn by_extension_physical(conn: &Connection, limit: usize) -> Result<Vec<ExtRow>> {
+    by_extension_inner(conn, limit, true)
+}
+
+fn by_extension_inner(conn: &Connection, limit: usize, physical: bool) -> Result<Vec<ExtRow>> {
+    let size_expr = if physical {
+        "COALESCE(physical_size, size)"
+    } else {
+        "size"
+    };
+    let sql = format!(
         "SELECT COALESCE(ext, '(none)') as ext,
                 COUNT(*) as count,
-                SUM(size) as total_size
+                SUM({size_expr}) as total_size
          FROM files
          WHERE is_dir = false
          GROUP BY ext
          ORDER BY total_size DESC
-         LIMIT ?",
-    )?;
+         LIMIT ?"
+    );
+    let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(duckdb::params![limit as i64], |row| {
         Ok(ExtRow {
             ext: row.get::<_, String>(0)?,
@@ -116,16 +130,31 @@ pub fn by_extension(conn: &Connection, limit: usize) -> Result<Vec<ExtRow>> {
 }
 
 pub fn top_dirs(conn: &Connection, limit: usize) -> Result<Vec<DirRow>> {
-    let mut stmt = conn.prepare(
+    top_dirs_inner(conn, limit, false)
+}
+
+pub fn top_dirs_physical(conn: &Connection, limit: usize) -> Result<Vec<DirRow>> {
+    top_dirs_inner(conn, limit, true)
+}
+
+fn top_dirs_inner(conn: &Connection, limit: usize, physical: bool) -> Result<Vec<DirRow>> {
+    let size_expr = if physical {
+        "COALESCE(physical_size, size)"
+    } else {
+        "size"
+    };
+    let sql = format!(
         "SELECT parent_path, SUM(size) as total FROM (
-             SELECT regexp_replace(path, '/[^/]+$', '') as parent_path, size
+             SELECT regexp_replace(path, '/[^/]+$', '') as parent_path,
+                    {size_expr} as size
              FROM files
              WHERE is_dir = false
          )
          GROUP BY parent_path
          ORDER BY total DESC
-         LIMIT ?",
-    )?;
+         LIMIT ?"
+    );
+    let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(duckdb::params![limit as i64], |row| {
         Ok(DirRow {
             path: row.get::<_, String>(0)?,
@@ -576,15 +605,29 @@ mod tests {
 }
 
 pub fn stats(conn: &Connection) -> Result<Stats> {
-    let mut stmt = conn.prepare(
+    stats_inner(conn, false)
+}
+
+pub fn stats_physical(conn: &Connection) -> Result<Stats> {
+    stats_inner(conn, true)
+}
+
+fn stats_inner(conn: &Connection, physical: bool) -> Result<Stats> {
+    let size_expr = if physical {
+        "COALESCE(physical_size, size)"
+    } else {
+        "size"
+    };
+    let sql = format!(
         "SELECT
             COUNT(*) FILTER (WHERE is_dir = false) as files,
             COUNT(*) FILTER (WHERE is_dir = true)  as dirs,
-            COALESCE(SUM(size), 0) as total_bytes,
-            COALESCE(MAX(size), 0) as largest,
-            COALESCE(AVG(size) FILTER (WHERE is_dir = false AND size > 0), 0) as avg_size
-         FROM files",
-    )?;
+            COALESCE(SUM({size_expr}), 0) as total_bytes,
+            COALESCE(MAX({size_expr}), 0) as largest,
+            COALESCE(AVG({size_expr}) FILTER (WHERE is_dir = false AND {size_expr} > 0), 0) as avg_size
+         FROM files"
+    );
+    let mut stmt = conn.prepare(&sql)?;
     let mut row = stmt.query_row([], |row| {
         Ok(Stats {
             files: row.get::<_, i64>(0)? as u64,
