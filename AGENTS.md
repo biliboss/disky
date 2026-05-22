@@ -122,6 +122,27 @@ Query commands (`top`, `dirs`, `ext`, `find`, `stats`, `list`) honour `--format`
 | `--format json` (default when stdout is piped) | Single JSON envelope `{schema_version, kind, records}`. Bytes as `u64`, paths absolute, `mtime` as RFC 3339 UTC |
 | `--format ndjson` | One JSON record per line — stream-friendly for `jq -c` |
 
+## Config file
+
+`~/.config/disky/config.toml` (or `$DISKY_CONFIG_PATH`) supplies per-flag defaults so agents don't repeat `--format json --snapshot @latest` every call. Layer order: built-in defaults → file → env (`DISKY_FORMAT`, `DISKY_SNAPSHOT`) → CLI flag (CLI always wins).
+
+```toml
+[defaults]
+format = "json"
+snapshot = "@latest"
+
+[scan]
+threads = 0          # 0 = num_cpus
+strategy = "parallel"  # parallel | sequential | adaptive
+respect_gitignore = false
+cross_device = false
+
+[output]
+color = "auto"       # auto | always | never (NO_COLOR env wins)
+```
+
+Malformed config fails fast with exit code 2 (usage) — typos are surfaced rather than silently ignored.
+
 ### Scalar stats (cheapest readout)
 
 `disky stats` carries two extra flags for agents that only need totals:

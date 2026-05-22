@@ -3,6 +3,7 @@ mod tui;
 
 use clap::Parser;
 use cli::{Cli, Command};
+use disky::config::Config;
 use disky::exit::{classify, DiskyError, ExitCode};
 use disky::query::SCHEMA_VERSION;
 use disky::render::{resolve_format, Format};
@@ -14,7 +15,27 @@ use std::sync::Arc;
 
 fn main() -> ProcExit {
     let cli = Cli::parse();
-    let format = resolve_format(cli.format.map(Into::into));
+    // Layered config: file → env → CLI. Malformed file fails fast so the
+    // user sees the parse error rather than silently falling back.
+    let config = match Config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: {:#}", e);
+            return ProcExit::from(ExitCode::Usage as u8);
+        }
+    };
+    // CLI flag wins; config supplies the default when CLI is silent.
+    let cli_format = cli.format.map(Into::into).or_else(|| {
+        config
+            .format()
+            .and_then(|s| match s.to_ascii_lowercase().as_str() {
+                "text" => Some(Format::Text),
+                "json" => Some(Format::Json),
+                "ndjson" => Some(Format::Ndjson),
+                _ => None,
+            })
+    });
+    let format = resolve_format(cli_format);
 
     match dispatch(cli, format) {
         Ok(()) => ProcExit::from(ExitCode::Ok as u8),
