@@ -398,3 +398,17 @@ No containers, no registry, no CI gating for releases — artifacts ship direct.
 **Before any release tag:** `cargo clippy -- -D warnings && cargo fmt --check` must pass locally — CI will fail otherwise and the release job depends on the build job.
 
 **Versioning:** bump `version` in `Cargo.toml` + add CHANGELOG entry before tagging.
+
+## Three surfaces — CLI, web, MCP (re-revised 2026-05-22)
+
+Earlier guidance ("MCP shims are bad") was half-right: pure CLI-mirror tools without annotations are bad, but MCP tools paired with `readOnlyHint`/`destructiveHint`/`idempotentHint` annotations + progress notifications + cross-host reach do earn their keep.
+
+| Surface | When it wins |
+|---------|--------------|
+| **CLI** | Any agent that can shell out. JSON envelope is portable. |
+| **`disky web`** (FastHTML local server, v0.10.0) | Interactive HTML with action buttons that POST to a local server which shells out to the CLI. Solves "open report, click button, confirm delete". |
+| **`disky-mcp`** (stdio JSON-RPC) | Chat-driven flows in any MCP host (Claude Code / Desktop / Cursor / Zed). Tool annotations gate destructive ops. Progress notifications stream scan progress. `resources/list` puts snapshots in host UI. `prompts/list` adds host-side slash commands. |
+
+**Critical clarity:** HTML in browser cannot invoke MCP directly. The "button → cleanup" flow needs `disky web` (FastHTML server) — MCP can't bridge browser-to-process. For chat-driven cleanup, use MCP. They're complementary, not competing.
+
+Install path (per user directive): symlink `disky-mcp` into both `~/.claude-pessoal/` and `~/.claude-mukutu/` MCP configs. `disky install-mcp` subcommand to ship in v0.10.0.
