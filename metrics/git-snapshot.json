@@ -1,12 +1,12 @@
 {
-  "ts": "2026-05-22T08:02:39Z",
-  "commit": "d0f63c7",
-  "commit_full": "d0f63c789829ea9c083d3e100c78e67efd92452d",
-  "subject": "feat(churn,growth): disky churn + growth --over <duration>",
+  "ts": "2026-05-22T08:50:22Z",
+  "commit": "03e8374",
+  "commit_full": "03e837421dd2acf18654933776abab1598ab182c",
+  "subject": "feat(skill,perf): Claude Code /disky skill + Design Feel + idx_path",
   "branch": "main",
   "dirty": false,
   "ahead_of_main": 0,
   "behind_main": 0,
   "author": "Gabriel",
-  "author_date": "2026-05-22T05:02:15-03:00"
+  "author_date": "2026-05-22T05:50:06-03:00"
 }
