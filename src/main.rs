@@ -218,6 +218,61 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
         Command::Tui { snapshot } => {
             tui::run(snapshot)?;
         }
+        Command::Empty { snapshot, limit } => {
+            let conn = open_snapshot(&snapshot)?;
+            let rows = query::empty_files(&conn, limit)?;
+            // Reuse FileRow renderer; `empty` envelope kind for agents.
+            if format.is_machine() {
+                let payload = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "kind": "empty",
+                    "records": rows,
+                });
+                println!("{}", payload);
+            } else if rows.is_empty() {
+                println!("No empty files found.");
+            } else {
+                for r in &rows {
+                    println!("{}", r.path);
+                }
+            }
+        }
+        Command::Old {
+            older_than,
+            snapshot,
+            limit,
+        } => {
+            let secs = disky::duration::parse_seconds(&older_than).map_err(|e| {
+                DiskyError::new(ExitCode::Usage, "invalid --older-than", e.to_string())
+            })?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            let cutoff = now - secs;
+            let conn = open_snapshot(&snapshot)?;
+            let rows = query::old_files(&conn, cutoff, limit)?;
+            if format.is_machine() {
+                let payload = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "kind": "old",
+                    "cutoff_unix": cutoff,
+                    "older_than": older_than,
+                    "records": rows,
+                });
+                println!("{}", payload);
+            } else if rows.is_empty() {
+                println!("No files older than {}.", older_than);
+            } else {
+                for r in &rows {
+                    println!(
+                        "{:<70} {}",
+                        r.path,
+                        r.mtime.as_deref().unwrap_or("(no mtime)")
+                    );
+                }
+            }
+        }
         Command::Forget {
             keep_last,
             keep_daily,

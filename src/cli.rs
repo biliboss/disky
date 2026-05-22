@@ -169,6 +169,27 @@ pub enum Command {
     /// List available snapshots
     List,
 
+    /// List empty files in a snapshot (size = 0). Useful for finding
+    /// placeholders, leftover lockfiles, and interrupted-write detritus.
+    Empty {
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
+        #[arg(short, long, default_value_t = 100)]
+        limit: usize,
+    },
+
+    /// List files older than the given duration (e.g. `365d`, `6mo`, `2y`).
+    /// Excludes files whose mtime is unknown.
+    Old {
+        /// Cutoff age — `30d`, `2w`, `6mo`, `1y`.
+        #[arg(long, value_name = "DURATION")]
+        older_than: String,
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
+        #[arg(short, long, default_value_t = 100)]
+        limit: usize,
+    },
+
     /// Apply restic-style retention policy to snapshots. Default is dry-run;
     /// pass `--apply` to delete. Refuses to run with no `--keep-*` flag.
     Forget {

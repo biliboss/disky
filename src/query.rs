@@ -113,6 +113,46 @@ pub fn top_dirs(conn: &Connection, limit: usize) -> Result<Vec<DirRow>> {
     Ok(rows.flatten().collect())
 }
 
+/// Files with `size = 0`. Empty files are usually placeholders, lockfiles,
+/// or leftovers from interrupted writes — cheap to identify, easy to clean.
+pub fn empty_files(conn: &Connection, limit: usize) -> Result<Vec<FileRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT path, size, ext, mtime FROM files
+         WHERE is_dir = false AND size = 0
+         ORDER BY path
+         LIMIT ?",
+    )?;
+    let rows = stmt.query_map(duckdb::params![limit as i64], |row| {
+        Ok(FileRow {
+            path: row.get::<_, String>(0)?,
+            size: row.get::<_, i64>(1)? as u64,
+            ext: row.get::<_, Option<String>>(2)?,
+            mtime: rfc3339(row.get::<_, Option<i64>>(3)?),
+        })
+    })?;
+    Ok(rows.flatten().collect())
+}
+
+/// Files older than `cutoff_unix_seconds`. Comparison is against the file's
+/// `mtime`; files with NULL mtime are excluded.
+pub fn old_files(conn: &Connection, cutoff: i64, limit: usize) -> Result<Vec<FileRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT path, size, ext, mtime FROM files
+         WHERE is_dir = false AND mtime IS NOT NULL AND mtime < ?
+         ORDER BY mtime ASC
+         LIMIT ?",
+    )?;
+    let rows = stmt.query_map(duckdb::params![cutoff, limit as i64], |row| {
+        Ok(FileRow {
+            path: row.get::<_, String>(0)?,
+            size: row.get::<_, i64>(1)? as u64,
+            ext: row.get::<_, Option<String>>(2)?,
+            mtime: rfc3339(row.get::<_, Option<i64>>(3)?),
+        })
+    })?;
+    Ok(rows.flatten().collect())
+}
+
 pub fn find_files(conn: &Connection, pattern: &str, limit: usize) -> Result<Vec<FileRow>> {
     let sql_pattern = pattern.replace('*', "%").replace('?', "_");
     let mut stmt = conn.prepare(

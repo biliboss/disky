@@ -48,6 +48,8 @@ fn commands() -> Value {
             "args": { "a": "@latest|<id>|<path>", "b": "@latest|<id>|<path>", "limit": "int=100" },
             "output": "DiffRow[]"
         },
+        { "name": "empty", "args": snapshot_with(&["limit:int=100"]), "output": "FileRow[] under kind='empty'" },
+        { "name": "old", "args": snapshot_with(&["older_than:duration", "limit:int=100"]), "output": "FileRow[] under kind='old' (older_than: 30d|2w|6mo|1y syntax)" },
         {
             "name": "forget",
             "args": {

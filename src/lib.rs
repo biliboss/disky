@@ -8,6 +8,7 @@
 pub mod cleanup;
 pub mod config;
 pub mod db;
+pub mod duration;
 pub mod exit;
 pub mod policy;
 pub mod query;
