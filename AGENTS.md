@@ -217,6 +217,29 @@ disky growth --format json | disky filter --where "delta_bytes > 100MB"
 
 **Envelope output** `{kind: "filter", input_kind: "top", records: [...]}` — preserves the originating kind so downstream chains can dispatch.
 
+## Physical vs logical size (APFS sparse files)
+
+`files.size` is `st_size` — the logical/declared size of a file.
+`files.physical_size` is `st_blocks * 512` — actual bytes on disk.
+
+On macOS/APFS these can differ by orders of magnitude:
+
+| File | Logical (`size`) | Physical (`physical_size`) |
+|------|------------------|----------------------------|
+| OrbStack `data.img.raw` | 8.8 TB | 13.1 GB |
+| OrbStack `swap.img` | 1 GB | 4 KB |
+| Regular files | identical | identical |
+
+Use `physical_size` when answering "how much disk would I free if I delete this?" — that's what `du` measures. Use `size` when answering "how big does this file appear to applications?".
+
+Raw SQL access today:
+```sql
+SELECT path, size, physical_size FROM files
+WHERE is_dir = false ORDER BY physical_size DESC LIMIT 10
+```
+
+`disky top --physical` / `dirs --physical` / `stats --physical` flags land next.
+
 ## Snapshot retention (`disky forget`)
 
 restic-style retention policy. Default dry-run; pass `--apply` to delete.

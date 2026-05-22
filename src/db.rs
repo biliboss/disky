@@ -13,13 +13,14 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
         "
         DROP TABLE IF EXISTS files;
         CREATE TABLE files (
-            path        TEXT NOT NULL,
-            name        TEXT NOT NULL,
-            ext         TEXT,
-            size        BIGINT NOT NULL DEFAULT 0,
-            mtime       BIGINT,
-            is_dir      BOOLEAN NOT NULL DEFAULT false,
-            depth       INTEGER NOT NULL DEFAULT 0
+            path           TEXT NOT NULL,
+            name           TEXT NOT NULL,
+            ext            TEXT,
+            size           BIGINT NOT NULL DEFAULT 0,
+            physical_size  BIGINT,
+            mtime          BIGINT,
+            is_dir         BOOLEAN NOT NULL DEFAULT false,
+            depth          INTEGER NOT NULL DEFAULT 0
         );
         DROP TABLE IF EXISTS scan_meta;
         CREATE TABLE scan_meta (
@@ -113,7 +114,13 @@ pub struct FileRecord {
     pub path: String,
     pub name: String,
     pub ext: Option<String>,
+    /// Logical size (`st_size`). On macOS this can wildly exceed physical
+    /// for APFS clones and sparse files (OrbStack disk images, Time Machine
+    /// local snapshots, qcow2 backings).
     pub size: i64,
+    /// Physical bytes on disk = `st_blocks * 512`. Matches `du`'s accounting.
+    /// `None` for directories or when stat doesn't expose it (Windows TBD).
+    pub physical_size: Option<i64>,
     pub mtime: Option<i64>,
     pub is_dir: bool,
     pub depth: i32,
@@ -123,7 +130,14 @@ pub fn append_batch(conn: &Connection, records: &[FileRecord]) -> Result<()> {
     let mut app = conn.appender("files")?;
     for r in records {
         app.append_row(duckdb::params![
-            r.path, r.name, r.ext, r.size, r.mtime, r.is_dir, r.depth,
+            r.path,
+            r.name,
+            r.ext,
+            r.size,
+            r.physical_size,
+            r.mtime,
+            r.is_dir,
+            r.depth,
         ])?;
     }
     app.flush()?;

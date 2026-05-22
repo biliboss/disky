@@ -175,6 +175,21 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
 
                 let size = if is_dir { 0 } else { meta.len() as i64 };
 
+                // Physical bytes on disk: `st_blocks * 512` on Unix.
+                // Fixes APFS sparse file reporting (OrbStack data.img.raw
+                // reported 8.8 TB logical on a 256 GB SSD before this).
+                #[cfg(unix)]
+                let physical_size = {
+                    use std::os::unix::fs::MetadataExt;
+                    if is_dir {
+                        None
+                    } else {
+                        Some(meta.blocks() as i64 * 512)
+                    }
+                };
+                #[cfg(not(unix))]
+                let physical_size: Option<i64> = None;
+
                 let mtime = meta
                     .modified()
                     .ok()
@@ -186,6 +201,7 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
                     name,
                     ext,
                     size,
+                    physical_size,
                     mtime,
                     is_dir,
                     depth: entry.depth() as i32,

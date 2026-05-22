@@ -112,6 +112,7 @@ fn snapshot_with(extras: &[&str]) -> Value {
 fn records() -> Value {
     json!({
         "FileRow":    { "path": "string", "size": "u64", "ext": "string?", "mtime": "string? (RFC3339 UTC)" },
+        "files_table": { "columns": "path, name, ext, size, physical_size, mtime, is_dir, depth", "note": "physical_size = st_blocks*512 on Unix; differs wildly from size for APFS sparse files (e.g. OrbStack data.img: 8.8TB logical vs 13GB physical)" },
         "DirRow":     { "path": "string", "total_size": "u64" },
         "ExtRow":     { "ext": "string", "files": "u64", "total_size": "u64" },
         "Stats":      {
