@@ -153,6 +153,100 @@ pub fn old_files(conn: &Connection, cutoff: i64, limit: usize) -> Result<Vec<Fil
     Ok(rows.flatten().collect())
 }
 
+/// Per-directory growth between two snapshots. Aggregates file sizes by
+/// direct parent path. Returns up to `limit` rows ordered by absolute Δ.
+///
+/// `days_between` is derived from `scan_meta.started_at` of each snapshot;
+/// when missing, falls back to `1.0` so `rate_bytes_per_day == delta_bytes`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GrowthRow {
+    pub path: String,
+    pub kind: &'static str, // "grew" | "shrank" | "added" | "removed"
+    pub size_a: u64,
+    pub size_b: u64,
+    pub delta_bytes: i64,
+    pub rate_bytes_per_day: f64,
+    pub days_between: f64,
+}
+
+pub fn growth(snap_a: &str, snap_b: &str, limit: usize) -> Result<Vec<GrowthRow>> {
+    use duckdb::Connection;
+    let conn = Connection::open_in_memory()?;
+    let attach_sql = format!(
+        "ATTACH '{a}' AS db_a (READ_ONLY);\
+         ATTACH '{b}' AS db_b (READ_ONLY);",
+        a = snap_a.replace('\'', "''"),
+        b = snap_b.replace('\'', "''"),
+    );
+    conn.execute_batch(&attach_sql)?;
+
+    // Pull scan_meta timestamps for days_between calc. Missing → fall back to 1d.
+    let secs_a: Option<i64> = conn
+        .query_row("SELECT started_at FROM db_a.scan_meta", [], |r| r.get(0))
+        .ok();
+    let secs_b: Option<i64> = conn
+        .query_row("SELECT started_at FROM db_b.scan_meta", [], |r| r.get(0))
+        .ok();
+    let days_between = match (secs_a, secs_b) {
+        (Some(a), Some(b)) if b > a => (b - a) as f64 / 86400.0,
+        _ => 1.0,
+    };
+
+    let mut stmt = conn.prepare(
+        "WITH dir_a AS (
+             SELECT regexp_replace(path, '/[^/]+$', '') AS d, SUM(size) AS s
+             FROM db_a.files
+             WHERE is_dir = false
+             GROUP BY d
+         ),
+         dir_b AS (
+             SELECT regexp_replace(path, '/[^/]+$', '') AS d, SUM(size) AS s
+             FROM db_b.files
+             WHERE is_dir = false
+             GROUP BY d
+         )
+         SELECT COALESCE(dir_a.d, dir_b.d)         AS path,
+                COALESCE(dir_a.s, 0)               AS size_a,
+                COALESCE(dir_b.s, 0)               AS size_b,
+                COALESCE(dir_b.s, 0) - COALESCE(dir_a.s, 0) AS delta
+         FROM dir_a
+         FULL OUTER JOIN dir_b ON dir_a.d = dir_b.d
+         WHERE COALESCE(dir_b.s, 0) <> COALESCE(dir_a.s, 0)
+         ORDER BY ABS(COALESCE(dir_b.s, 0) - COALESCE(dir_a.s, 0)) DESC
+         LIMIT ?",
+    )?;
+    let rows = stmt.query_map(duckdb::params![limit as i64], |row| {
+        let path: String = row.get(0)?;
+        let size_a: i64 = row.get(1)?;
+        let size_b: i64 = row.get(2)?;
+        let delta: i64 = row.get(3)?;
+        let kind = if size_a == 0 {
+            "added"
+        } else if size_b == 0 {
+            "removed"
+        } else if delta > 0 {
+            "grew"
+        } else {
+            "shrank"
+        };
+        let rate = if days_between > 0.0 {
+            delta as f64 / days_between
+        } else {
+            delta as f64
+        };
+        Ok(GrowthRow {
+            path,
+            kind,
+            size_a: size_a.max(0) as u64,
+            size_b: size_b.max(0) as u64,
+            delta_bytes: delta,
+            rate_bytes_per_day: rate,
+            days_between,
+        })
+    })?;
+    Ok(rows.flatten().collect())
+}
+
 pub fn find_files(conn: &Connection, pattern: &str, limit: usize) -> Result<Vec<FileRow>> {
     let sql_pattern = pattern.replace('*', "%").replace('?', "_");
     let mut stmt = conn.prepare(

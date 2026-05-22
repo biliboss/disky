@@ -93,6 +93,64 @@ fn raw_query_runs_arbitrary_sql() {
 }
 
 #[test]
+fn growth_detects_added_grew_and_removed_dirs() {
+    use std::thread::sleep;
+    use std::time::Duration;
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("tree");
+    fs::create_dir_all(root.join("stable")).unwrap();
+    fs::create_dir_all(root.join("growing")).unwrap();
+    fs::create_dir_all(root.join("going-away")).unwrap();
+    fs::write(root.join("stable/keep.bin"), vec![0u8; 1024]).unwrap();
+    fs::write(root.join("growing/small.bin"), vec![0u8; 1024]).unwrap();
+    fs::write(root.join("going-away/doomed.bin"), vec![0u8; 4096]).unwrap();
+
+    let snap_a = dir.path().join("a.db");
+    disky::scan::run(root.to_str().unwrap(), snap_a.to_str().unwrap()).unwrap();
+
+    // Mutate: grow `growing`, remove `going-away`, add `new-dir`.
+    sleep(Duration::from_millis(50)); // ensure mtime delta
+    fs::write(root.join("growing/big.bin"), vec![0u8; 16 * 1024]).unwrap();
+    fs::remove_dir_all(root.join("going-away")).unwrap();
+    fs::create_dir_all(root.join("new-dir")).unwrap();
+    fs::write(root.join("new-dir/hello.txt"), vec![0u8; 2048]).unwrap();
+
+    let snap_b = dir.path().join("b.db");
+    disky::scan::run(root.to_str().unwrap(), snap_b.to_str().unwrap()).unwrap();
+
+    let rows =
+        disky::query::growth(snap_a.to_str().unwrap(), snap_b.to_str().unwrap(), 100).unwrap();
+
+    let by_path: std::collections::HashMap<String, &disky::query::GrowthRow> =
+        rows.iter().map(|r| (r.path.clone(), r)).collect();
+
+    let growing = by_path
+        .values()
+        .find(|r| r.path.ends_with("/growing"))
+        .expect("growing dir missing from results");
+    assert_eq!(growing.kind, "grew");
+    assert!(growing.delta_bytes > 0);
+
+    let going = by_path
+        .values()
+        .find(|r| r.path.ends_with("/going-away"))
+        .expect("going-away dir missing");
+    assert_eq!(going.kind, "removed");
+    assert!(going.delta_bytes < 0);
+
+    let new = by_path
+        .values()
+        .find(|r| r.path.ends_with("/new-dir"))
+        .expect("new-dir missing");
+    assert_eq!(new.kind, "added");
+    assert!(new.delta_bytes > 0);
+
+    // `stable` should NOT appear — unchanged size.
+    assert!(by_path.values().all(|r| !r.path.ends_with("/stable")));
+}
+
+#[test]
 fn id_for_round_trips_through_resolve() {
     let f = fixture();
     let path = f.db_path.to_str().unwrap();

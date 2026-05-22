@@ -48,6 +48,11 @@ fn commands() -> Value {
             "args": { "a": "@latest|<id>|<path>", "b": "@latest|<id>|<path>", "limit": "int=100" },
             "output": "DiffRow[]"
         },
+        {
+            "name": "growth",
+            "args": { "since": "@latest|@latest~N|<id>|<path> (default @latest~1)", "until": "@latest|<id>|<path> (default @latest)", "limit": "int=50" },
+            "output": "GrowthRow[] under kind='growth'. Records: {path, kind: grew|shrank|added|removed, size_a:u64, size_b:u64, delta_bytes:i64, rate_bytes_per_day:f64, days_between:f64}"
+        },
         { "name": "empty", "args": snapshot_with(&["limit:int=100"]), "output": "FileRow[] under kind='empty'" },
         { "name": "old", "args": snapshot_with(&["older_than:duration", "limit:int=100"]), "output": "FileRow[] under kind='old' (older_than: 30d|2w|6mo|1y syntax)" },
         {
@@ -106,6 +111,7 @@ fn records() -> Value {
         "CleanupHit":      { "category": "string", "path": "string", "bytes": "u64", "files": "u64" },
         "CategorySummary": { "category": "string", "paths": "u64", "bytes": "u64", "files": "u64" },
         "DiffRow":    { "path": "string", "kind": "added|removed|grew|shrank", "size_a": "u64", "size_b": "u64", "delta": "i64" },
+        "GrowthRow":  { "path": "string", "kind": "grew|shrank|added|removed", "size_a": "u64", "size_b": "u64", "delta_bytes": "i64", "rate_bytes_per_day": "f64", "days_between": "f64" },
         "envelope":   { "schema_version": "u32", "kind": "string", "records": "T[]" },
         "error":      { "schema_version": "u32", "type": "string (URI)", "title": "string", "status": "i32", "detail": "string", "retryable": "bool", "instance": "string (per-error UUID, RFC 9457 instance)" }
     })

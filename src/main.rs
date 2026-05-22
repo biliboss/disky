@@ -218,6 +218,46 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
         Command::Tui { snapshot } => {
             tui::run(snapshot)?;
         }
+        Command::Growth {
+            since,
+            until,
+            limit,
+        } => {
+            let path_a = snapshots::resolve(&since)?;
+            let path_b = snapshots::resolve(&until)?;
+            let rows = query::growth(&path_a, &path_b, limit)?;
+            if format.is_machine() {
+                let payload = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "kind": "growth",
+                    "since": since,
+                    "until": until,
+                    "records": rows,
+                });
+                println!("{}", payload);
+            } else if rows.is_empty() {
+                println!("No growth detected between {} and {}.", since, until);
+            } else {
+                println!(
+                    "{:<70} {:>14} {:>14} {:>10}",
+                    "PATH", "Δ BYTES", "RATE B/DAY", "KIND"
+                );
+                println!("{}", "-".repeat(112));
+                for r in &rows {
+                    println!(
+                        "{:<70} {:>14} {:>14.0} {:>10}",
+                        if r.path.len() > 70 {
+                            format!("...{}", &r.path[r.path.len() - 67..])
+                        } else {
+                            r.path.clone()
+                        },
+                        r.delta_bytes,
+                        r.rate_bytes_per_day,
+                        r.kind
+                    );
+                }
+            }
+        }
         Command::Empty { snapshot, limit } => {
             let conn = open_snapshot(&snapshot)?;
             let rows = query::empty_files(&conn, limit)?;

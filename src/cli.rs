@@ -169,6 +169,20 @@ pub enum Command {
     /// List available snapshots
     List,
 
+    /// Per-directory growth between two snapshots. Default compares
+    /// `@latest` against `@latest~1` so agents see "what grew since the
+    /// previous scan". Rate is bytes/day computed from snapshot timestamps.
+    Growth {
+        /// Earlier snapshot. Accepts @latest, @latest~N, ID, or path.
+        #[arg(long, default_value = "@latest~1")]
+        since: String,
+        /// Later snapshot (default @latest).
+        #[arg(long, default_value = "@latest")]
+        until: String,
+        #[arg(short, long, default_value_t = 50)]
+        limit: usize,
+    },
+
     /// List empty files in a snapshot (size = 0). Useful for finding
     /// placeholders, leftover lockfiles, and interrupted-write detritus.
     Empty {
