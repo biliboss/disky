@@ -1,0 +1,12 @@
+{
+  "ts": "2026-05-22T07:20:18Z",
+  "commit": "1e441d3",
+  "commit_full": "1e441d31c72aee14074b610d8f81423a3740dc25",
+  "subject": "feat(snapshots): @latest~N time-relative ref",
+  "branch": "main",
+  "dirty": true,
+  "ahead_of_main": 0,
+  "behind_main": 0,
+  "author": "Gabriel",
+  "author_date": "2026-05-22T03:46:53-03:00"
+}

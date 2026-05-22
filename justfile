@@ -40,3 +40,21 @@ install-fast:
     cargo install --path . --debug --bins
 
 ci: fmt-check lint test test-cli
+
+# Append a metrics line to metrics/build-timings.jsonl (~10s)
+metrics:
+    bash scripts/collect-metrics.sh
+
+# Cold-build metrics (cargo clean + release rebuild). ~3min. Tag-time only.
+metrics-cold:
+    bash scripts/collect-metrics.sh --cold
+
+# Competitor benchmark on 10k-file synthetic tree. Updates metrics/competitors-latest.json.
+bench-cmp-10k:
+    bash scripts/bench-competitors.sh 10000
+
+# Reset baseline to current measurements. Commits the JSON deliberately.
+metrics-reseed-baseline:
+    bash scripts/collect-metrics.sh
+    cp metrics/latest.json metrics/baseline.json
+    @echo "→ baseline updated. Review with: jq . metrics/baseline.json"

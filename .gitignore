@@ -3,3 +3,6 @@
 auto
 dist/
 .claude/
+# metrics/*.json IS committed (trend visible in git history).
+# Only ignore raw nextest scratch + tmp tree paths.
+/tmp/
