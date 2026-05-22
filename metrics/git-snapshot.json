@@ -1,12 +1,12 @@
 {
-  "ts": "2026-05-22T07:54:58Z",
-  "commit": "54de372",
-  "commit_full": "54de372ac08204d61ef3fc72629982e415d91b6d",
-  "subject": "feat(filter): disky filter --where with --json-input chain mode",
+  "ts": "2026-05-22T08:02:39Z",
+  "commit": "d0f63c7",
+  "commit_full": "d0f63c789829ea9c083d3e100c78e67efd92452d",
+  "subject": "feat(churn,growth): disky churn + growth --over <duration>",
   "branch": "main",
-  "dirty": true,
+  "dirty": false,
   "ahead_of_main": 0,
   "behind_main": 0,
   "author": "Gabriel",
-  "author_date": "2026-05-22T04:54:09-03:00"
+  "author_date": "2026-05-22T05:02:15-03:00"
 }
