@@ -1,12 +1,12 @@
 {
-  "ts": "2026-05-22T09:01:14Z",
-  "commit": "2a77519",
-  "commit_full": "2a775196585c6cde8dc9e5b05b22e3c0389cb538",
-  "subject": "feat(top): --physical flag for honest sparse-file size",
+  "ts": "2026-05-22T09:06:49Z",
+  "commit": "0375e60",
+  "commit_full": "0375e6007eb2d0a6d6ba9336709c0bc7c42cab7d",
+  "subject": "feat(physical): wire --physical to dirs / ext / stats + render.py polish",
   "branch": "main",
   "dirty": false,
   "ahead_of_main": 0,
   "behind_main": 0,
   "author": "Gabriel",
-  "author_date": "2026-05-22T06:00:55-03:00"
+  "author_date": "2026-05-22T06:06:12-03:00"
 }
