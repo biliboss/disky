@@ -1,12 +1,12 @@
 {
-  "ts": "2026-05-22T09:06:49Z",
-  "commit": "0375e60",
-  "commit_full": "0375e6007eb2d0a6d6ba9336709c0bc7c42cab7d",
-  "subject": "feat(physical): wire --physical to dirs / ext / stats + render.py polish",
+  "ts": "2026-05-22T09:06:59Z",
+  "commit": "3accd68",
+  "commit_full": "3accd68701a74d231e99ffa75fdafbe5f3925c45",
+  "subject": "chore(metrics): JSONL entry at v0.9.0 tag",
   "branch": "main",
   "dirty": false,
   "ahead_of_main": 0,
   "behind_main": 0,
   "author": "Gabriel",
-  "author_date": "2026-05-22T06:06:12-03:00"
+  "author_date": "2026-05-22T06:06:49-03:00"
 }
