@@ -1,7 +1,14 @@
 use anyhow::{anyhow, Result};
-use chrono::Local;
+use chrono::{DateTime, Local, NaiveDateTime, TimeZone};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+/// Parse a snapshot ID like `2026-05-15_11-56` into a local datetime.
+/// Returns `None` for user-renamed files that don't fit the canonical format.
+pub fn parse_id(id: &str) -> Option<DateTime<Local>> {
+    let naive = NaiveDateTime::parse_from_str(id, "%Y-%m-%d_%H-%M").ok()?;
+    Local.from_local_datetime(&naive).single()
+}
 
 pub fn snapshot_dir() -> PathBuf {
     dirs::data_local_dir()

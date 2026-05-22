@@ -5,6 +5,7 @@ use clap::Parser;
 use cli::{Cli, Command};
 use disky::config::Config;
 use disky::exit::{classify, DiskyError, ExitCode};
+use disky::policy::{apply_policy, Policy, SnapshotMeta};
 use disky::query::SCHEMA_VERSION;
 use disky::render::{resolve_format, Format};
 use disky::{cleanup, db, query, render, scan, schema, snapshots};
@@ -216,6 +217,71 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
         }
         Command::Tui { snapshot } => {
             tui::run(snapshot)?;
+        }
+        Command::Forget {
+            keep_last,
+            keep_daily,
+            keep_weekly,
+            keep_monthly,
+            keep_yearly,
+            apply,
+        } => {
+            let p = Policy {
+                keep_last,
+                keep_daily,
+                keep_weekly,
+                keep_monthly,
+                keep_yearly,
+            };
+            if p.is_empty() {
+                return Err(DiskyError::new(
+                    ExitCode::Usage,
+                    "no retention policy",
+                    "pass at least one --keep-last / --keep-daily / --keep-weekly / --keep-monthly / --keep-yearly",
+                )
+                .into());
+            }
+            let snaps: Vec<SnapshotMeta> = snapshots::list_snapshots()
+                .into_iter()
+                .filter_map(|(path, bytes)| {
+                    let id = snapshots::id_for(&path)?;
+                    let created = snapshots::parse_id(&id).map(|d| d.to_rfc3339());
+                    Some(SnapshotMeta {
+                        id,
+                        path,
+                        bytes,
+                        created,
+                    })
+                })
+                .collect();
+            let plan = apply_policy(&snaps, &p);
+            if apply {
+                for s in &plan.removed {
+                    std::fs::remove_file(&s.path).map_err(|e| {
+                        DiskyError::io(format!("failed to remove {}: {}", s.path, e))
+                    })?;
+                }
+            }
+            let payload = json!({
+                "schema_version": SCHEMA_VERSION,
+                "kind": "forget",
+                "applied": apply,
+                "kept": plan.kept,
+                "removed": plan.removed,
+                "skipped_unparseable": plan.skipped_unparseable,
+                "total_removed_bytes": plan.total_removed_bytes,
+            });
+            if format.is_machine() {
+                println!("{}", payload);
+            } else {
+                println!(
+                    "{} dry-run · kept {} · would-remove {} · {} bytes",
+                    if apply { "applied" } else { "DRY-RUN" },
+                    plan.kept.len(),
+                    plan.removed.len(),
+                    plan.total_removed_bytes
+                );
+            }
         }
         Command::List => {
             let snaps = snapshots::list_snapshots();

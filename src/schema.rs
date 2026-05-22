@@ -49,6 +49,18 @@ fn commands() -> Value {
             "output": "DiffRow[]"
         },
         {
+            "name": "forget",
+            "args": {
+                "keep_last": "int?",
+                "keep_daily": "int?",
+                "keep_weekly": "int?",
+                "keep_monthly": "int?",
+                "keep_yearly": "int?",
+                "apply": "bool (default false — dry-run)"
+            },
+            "output": "forget envelope: {kind:'forget', applied:bool, kept:[KeptSnapshot], removed:[SnapshotMeta], skipped_unparseable:[string], total_removed_bytes:u64}"
+        },
+        {
             "name": "cleanup",
             "args": {
                 "target": "string[] (comma-separated)",

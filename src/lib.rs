@@ -9,6 +9,7 @@ pub mod cleanup;
 pub mod config;
 pub mod db;
 pub mod exit;
+pub mod policy;
 pub mod query;
 pub mod render;
 pub mod scan;

@@ -168,4 +168,21 @@ pub enum Command {
 
     /// List available snapshots
     List,
+
+    /// Apply restic-style retention policy to snapshots. Default is dry-run;
+    /// pass `--apply` to delete. Refuses to run with no `--keep-*` flag.
+    Forget {
+        #[arg(long, value_name = "N")]
+        keep_last: Option<usize>,
+        #[arg(long, value_name = "N")]
+        keep_daily: Option<usize>,
+        #[arg(long, value_name = "N")]
+        keep_weekly: Option<usize>,
+        #[arg(long, value_name = "N")]
+        keep_monthly: Option<usize>,
+        #[arg(long, value_name = "N")]
+        keep_yearly: Option<usize>,
+        #[arg(long, default_value_t = false)]
+        apply: bool,
+    },
 }

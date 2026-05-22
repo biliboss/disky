@@ -122,6 +122,38 @@ Query commands (`top`, `dirs`, `ext`, `find`, `stats`, `list`) honour `--format`
 | `--format json` (default when stdout is piped) | Single JSON envelope `{schema_version, kind, records}`. Bytes as `u64`, paths absolute, `mtime` as RFC 3339 UTC |
 | `--format ndjson` | One JSON record per line — stream-friendly for `jq -c` |
 
+## Snapshot retention (`disky forget`)
+
+restic-style retention policy. Default dry-run; pass `--apply` to delete.
+At least one `--keep-*` flag is required (otherwise exit code 2).
+
+```
+disky forget --keep-last 7 --keep-daily 30 --keep-weekly 12 --keep-monthly 12 --keep-yearly 5
+disky forget --keep-last 5 --apply
+```
+
+Buckets keep the **newest** snapshot per bucket key:
+
+| Flag | Bucket |
+|------|--------|
+| `--keep-last N` | N newest snapshots |
+| `--keep-daily N` | newest per local date, up to N distinct dates |
+| `--keep-weekly N` | newest per ISO week |
+| `--keep-monthly N` | newest per calendar month |
+| `--keep-yearly N` | newest per calendar year |
+
+JSON envelope:
+```
+{"kind":"forget","applied":false,
+ "kept":[{"id":"...","path":"...","bytes":N,"reasons":["last","daily"]}],
+ "removed":[{"id":"...","path":"...","bytes":N}],
+ "skipped_unparseable":["my-manual-snapshot"],
+ "total_removed_bytes":N}
+```
+
+User-renamed snapshots (IDs that don't match `YYYY-MM-DD_HH-MM`) land in
+`skipped_unparseable` and are **never** removed.
+
 ## Config file
 
 `~/.config/disky/config.toml` (or `$DISKY_CONFIG_PATH`) supplies per-flag defaults so agents don't repeat `--format json --snapshot @latest` every call. Layer order: built-in defaults → file → env (`DISKY_FORMAT`, `DISKY_SNAPSHOT`) → CLI flag (CLI always wins).
