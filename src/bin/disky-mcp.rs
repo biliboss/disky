@@ -295,6 +295,115 @@ fn tools_list() -> Value {
                 "inputSchema": { "type": "object", "properties": {} }
             },
             {
+                "name": "disky_growth",
+                "description": "Per-directory growth between two snapshots — kind/delta_bytes/rate_bytes_per_day per parent dir. Default compares @latest vs @latest~1. Pass `over` (e.g. '7d') to auto-pick the oldest snapshot within a window.",
+                "annotations": {
+                    "title": "Growth between snapshots",
+                    "readOnlyHint": true,
+                    "idempotentHint": true,
+                    "destructiveHint": false
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "since": { "type": "string", "default": "@latest~1" },
+                        "until": { "type": "string", "default": "@latest" },
+                        "over":  { "type": "string", "description": "Duration like 7d / 2w / 6mo / 1y — overrides `since`" },
+                        "limit": { "type": "integer", "default": 50 }
+                    }
+                }
+            },
+            {
+                "name": "disky_churn",
+                "description": "Per-directory mtime-based churn. Files modified within the last N hours/days, sum bytes, churn_score = recent_bytes / total_bytes. Identifies log generators and hot working directories.",
+                "annotations": {
+                    "title": "Directory churn",
+                    "readOnlyHint": true,
+                    "idempotentHint": true,
+                    "destructiveHint": false
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "over":     { "type": "string", "default": "24h", "description": "Duration like 24h / 7d / 30d" },
+                        "snapshot": { "type": "string", "default": "@latest" },
+                        "limit":    { "type": "integer", "default": 50 }
+                    }
+                }
+            },
+            {
+                "name": "disky_predict",
+                "description": "Linear extrapolation of disk fill-by date. Reads every snapshot in the data dir, fits an OLS line through (timestamp, total_bytes), projects when usage crosses the free-space ceiling. Pass `free_bytes` to compute the date.",
+                "annotations": {
+                    "title": "Predict disk-fill date",
+                    "readOnlyHint": true,
+                    "idempotentHint": true,
+                    "destructiveHint": false
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "free_bytes": { "type": "integer", "description": "Bytes currently free on the volume" },
+                        "physical":   { "type": "boolean", "default": false }
+                    }
+                }
+            },
+            {
+                "name": "disky_empty",
+                "description": "List files with size = 0. Placeholders, leftover lockfiles, interrupted writes.",
+                "annotations": {
+                    "title": "Empty files",
+                    "readOnlyHint": true,
+                    "idempotentHint": true,
+                    "destructiveHint": false
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "snapshot": { "type": "string", "default": "@latest" },
+                        "limit":    { "type": "integer", "default": 100 }
+                    }
+                }
+            },
+            {
+                "name": "disky_old",
+                "description": "List files older than DURATION (e.g. 30d, 6mo, 1y). Excludes mtime=epoch noise from cargo/npm packs.",
+                "annotations": {
+                    "title": "Old files",
+                    "readOnlyHint": true,
+                    "idempotentHint": true,
+                    "destructiveHint": false
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "older_than": { "type": "string", "description": "Duration like 30d / 6mo / 1y" },
+                        "snapshot":   { "type": "string", "default": "@latest" },
+                        "limit":      { "type": "integer", "default": 100 }
+                    },
+                    "required": ["older_than"]
+                }
+            },
+            {
+                "name": "disky_filter",
+                "description": "Filter records from a prior disky envelope by predicate. Accepts an envelope JSON object directly (no stdin) plus a `where` clause. Composable with any record-emitting tool.",
+                "annotations": {
+                    "title": "Filter envelope records",
+                    "readOnlyHint": true,
+                    "idempotentHint": true,
+                    "destructiveHint": false
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "envelope": { "type": "object", "description": "A prior disky JSON envelope (must have schema_version, kind, records)" },
+                        "where":    { "type": "string", "description": "Predicate like \"size > 1GB AND ext = 'log'\"" },
+                        "limit":    { "type": "integer", "default": 1000 }
+                    },
+                    "required": ["envelope"]
+                }
+            },
+            {
                 "name": "disky_forget",
                 "description": "Apply restic-style retention policy to snapshots. Default dry-run; pass apply=true to delete. Refuses with usage error if no keep_* flag set. DESTRUCTIVE with apply=true — gate behind user confirmation.",
                 "annotations": {
@@ -339,6 +448,12 @@ fn handle_tool_call(id: Value, params: Value) -> Value {
         "disky_schema" => Ok(schema::document()),
         "disky_list_snapshots" => tool_list_snapshots(),
         "disky_discover" => tool_discover(),
+        "disky_growth" => tool_growth(&args),
+        "disky_churn" => tool_churn(&args),
+        "disky_predict" => tool_predict(&args),
+        "disky_empty" => tool_empty(&args),
+        "disky_old" => tool_old(&args),
+        "disky_filter" => tool_filter(&args),
         "disky_forget" => tool_forget(&args),
         other => {
             return tool_error_result(
@@ -561,6 +676,188 @@ fn tool_discover() -> anyhow::Result<Value> {
         "data_dir": snapshots::snapshot_dir().to_string_lossy(),
         "active_snapshot": snapshots::latest_snapshot(),
         "schema": schema::document(),
+    }))
+}
+
+fn tool_growth(args: &Value) -> anyhow::Result<Value> {
+    let since_arg = args
+        .get("since")
+        .and_then(Value::as_str)
+        .unwrap_or("@latest~1");
+    let until_arg = args
+        .get("until")
+        .and_then(Value::as_str)
+        .unwrap_or("@latest");
+    let limit = args
+        .get("limit")
+        .and_then(Value::as_u64)
+        .map(|n| n as usize)
+        .unwrap_or(50);
+    let over = args.get("over").and_then(Value::as_str);
+
+    let since_path = if let Some(dur) = over {
+        let secs = disky::duration::parse_seconds(dur)
+            .map_err(|e| DiskyError::new(ExitCode::Usage, "invalid over", e.to_string()))?;
+        let cutoff = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+            - secs;
+        let snaps = snapshots::list_snapshots();
+        let chosen = snaps
+            .iter()
+            .filter_map(|(p, _)| {
+                let id = snapshots::id_for(p)?;
+                let dt = snapshots::parse_id(&id)?;
+                Some((p.clone(), dt.timestamp()))
+            })
+            .filter(|(_, ts)| *ts <= cutoff)
+            .max_by_key(|(_, ts)| *ts);
+        match chosen {
+            Some((p, _)) => p,
+            None => {
+                return Err(DiskyError::new(
+                    ExitCode::NotFound,
+                    "no snapshot in window",
+                    format!("no snapshot older than {} found", dur),
+                )
+                .into());
+            }
+        }
+    } else {
+        snapshots::resolve(since_arg)?
+    };
+    let until_path = snapshots::resolve(until_arg)?;
+    let rows = disky::query::growth(&since_path, &until_path, limit)?;
+    Ok(json!({
+        "schema_version": SCHEMA_VERSION,
+        "kind": "growth",
+        "since": since_arg,
+        "until": until_arg,
+        "records": rows,
+    }))
+}
+
+fn tool_churn(args: &Value) -> anyhow::Result<Value> {
+    let over = args.get("over").and_then(Value::as_str).unwrap_or("24h");
+    let limit = args
+        .get("limit")
+        .and_then(Value::as_u64)
+        .map(|n| n as usize)
+        .unwrap_or(50);
+    let secs = disky::duration::parse_seconds(over)
+        .map_err(|e| DiskyError::new(ExitCode::Usage, "invalid over", e.to_string()))?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let cutoff = now - secs;
+    let path = resolve_snapshot(args)?;
+    let conn = db::open(&path)?;
+    let rows = disky::query::churn(&conn, cutoff, limit)?;
+    Ok(json!({
+        "schema_version": SCHEMA_VERSION,
+        "kind": "churn",
+        "over": over,
+        "cutoff_unix": cutoff,
+        "records": rows,
+    }))
+}
+
+fn tool_predict(args: &Value) -> anyhow::Result<Value> {
+    let free_bytes = args.get("free_bytes").and_then(Value::as_u64);
+    let physical = args
+        .get("physical")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let rec = disky::predict::predict(physical, free_bytes)?;
+    Ok(json!({
+        "schema_version": SCHEMA_VERSION,
+        "kind": "predict",
+        "record": rec,
+    }))
+}
+
+fn tool_empty(args: &Value) -> anyhow::Result<Value> {
+    let limit = args
+        .get("limit")
+        .and_then(Value::as_u64)
+        .map(|n| n as usize)
+        .unwrap_or(100);
+    let path = resolve_snapshot(args)?;
+    let conn = db::open(&path)?;
+    let rows = disky::query::empty_files(&conn, limit)?;
+    Ok(envelope("empty", json!(rows)))
+}
+
+fn tool_old(args: &Value) -> anyhow::Result<Value> {
+    let dur = args
+        .get("older_than")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            DiskyError::new(
+                ExitCode::Usage,
+                "missing older_than",
+                "older_than is required (e.g. '30d')",
+            )
+        })?;
+    let limit = args
+        .get("limit")
+        .and_then(Value::as_u64)
+        .map(|n| n as usize)
+        .unwrap_or(100);
+    let secs = disky::duration::parse_seconds(dur)
+        .map_err(|e| DiskyError::new(ExitCode::Usage, "invalid older_than", e.to_string()))?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let cutoff = now - secs;
+    let path = resolve_snapshot(args)?;
+    let conn = db::open(&path)?;
+    let rows = disky::query::old_files(&conn, cutoff, limit)?;
+    Ok(json!({
+        "schema_version": SCHEMA_VERSION,
+        "kind": "old",
+        "cutoff_unix": cutoff,
+        "older_than": dur,
+        "records": rows,
+    }))
+}
+
+fn tool_filter(args: &Value) -> anyhow::Result<Value> {
+    let env_value = args.get("envelope").cloned().ok_or_else(|| {
+        DiskyError::new(
+            ExitCode::Usage,
+            "missing envelope",
+            "envelope (object) is required",
+        )
+    })?;
+    let env = disky::envelope::parse_value(env_value)?;
+    disky::envelope::require_kind(
+        &env,
+        &[
+            "top", "find", "dirs", "ext", "empty", "old", "filter", "growth",
+        ],
+    )?;
+    let where_clause = args.get("where").and_then(Value::as_str).unwrap_or("");
+    let limit = args
+        .get("limit")
+        .and_then(Value::as_u64)
+        .map(|n| n as usize)
+        .unwrap_or(1000);
+    let pred = disky::filter::Predicate::parse(where_clause)?;
+    let kept: Vec<serde_json::Value> = env
+        .records
+        .into_iter()
+        .filter(|r| pred.matches(r))
+        .take(limit)
+        .collect();
+    Ok(json!({
+        "schema_version": SCHEMA_VERSION,
+        "kind": "filter",
+        "input_kind": env.kind,
+        "records": kept,
     }))
 }
 
