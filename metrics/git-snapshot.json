@@ -1,12 +1,12 @@
 {
-  "ts": "2026-05-22T10:43:13Z",
-  "commit": "9b3fa1e",
-  "commit_full": "9b3fa1e23f15bb3b67e1a9e65d9d8ee1308c635d",
-  "subject": "docs(scope): three surfaces \u2014 CLI / web / MCP \u2014 re-revised",
+  "ts": "2026-05-22T10:50:02Z",
+  "commit": "7402647",
+  "commit_full": "7402647468b7c3ecae35e61691089edea8c3f815",
+  "subject": "feat(mcp): re-add 6 annotated tools \u2014 growth/churn/predict/empty/old/filter",
   "branch": "main",
   "dirty": false,
   "ahead_of_main": 0,
   "behind_main": 0,
   "author": "Gabriel",
-  "author_date": "2026-05-22T07:38:04-03:00"
+  "author_date": "2026-05-22T07:49:53-03:00"
 }
