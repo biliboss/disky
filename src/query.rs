@@ -186,21 +186,35 @@ pub fn empty_files(conn: &Connection, limit: usize) -> Result<Vec<FileRow>> {
 
 /// Files older than `cutoff_unix_seconds`. Comparison is against the file's
 /// `mtime`; files with NULL mtime are excluded.
+///
+/// Sanity floor: rows with `mtime <= EPOCH_NOISE_FLOOR` are also excluded.
+/// Cargo packs registry crates with mtime=1; npm tarballs with mtime=0;
+/// neither represents "old data the user could clean" — both flood the
+/// top of an ORDER BY mtime ASC query with junk.
 pub fn old_files(conn: &Connection, cutoff: i64, limit: usize) -> Result<Vec<FileRow>> {
+    /// 2000-01-01 UTC. Anything before this on a real machine is a
+    /// distributor's deterministic build-output timestamp, not real history.
+    const EPOCH_NOISE_FLOOR: i64 = 946_684_800;
     let mut stmt = conn.prepare(
         "SELECT path, size, ext, mtime FROM files
-         WHERE is_dir = false AND mtime IS NOT NULL AND mtime < ?
+         WHERE is_dir = false
+           AND mtime IS NOT NULL
+           AND mtime > ?
+           AND mtime < ?
          ORDER BY mtime ASC
          LIMIT ?",
     )?;
-    let rows = stmt.query_map(duckdb::params![cutoff, limit as i64], |row| {
-        Ok(FileRow {
-            path: row.get::<_, String>(0)?,
-            size: row.get::<_, i64>(1)? as u64,
-            ext: row.get::<_, Option<String>>(2)?,
-            mtime: rfc3339(row.get::<_, Option<i64>>(3)?),
-        })
-    })?;
+    let rows = stmt.query_map(
+        duckdb::params![EPOCH_NOISE_FLOOR, cutoff, limit as i64],
+        |row| {
+            Ok(FileRow {
+                path: row.get::<_, String>(0)?,
+                size: row.get::<_, i64>(1)? as u64,
+                ext: row.get::<_, Option<String>>(2)?,
+                mtime: rfc3339(row.get::<_, Option<i64>>(3)?),
+            })
+        },
+    )?;
     Ok(rows.flatten().collect())
 }
 

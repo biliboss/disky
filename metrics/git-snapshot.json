@@ -1,12 +1,12 @@
 {
-  "ts": "2026-05-22T09:06:59Z",
-  "commit": "3accd68",
-  "commit_full": "3accd68701a74d231e99ffa75fdafbe5f3925c45",
-  "subject": "chore(metrics): JSONL entry at v0.9.0 tag",
+  "ts": "2026-05-22T10:21:07Z",
+  "commit": "40ac29e",
+  "commit_full": "40ac29eb2023cc9a07a7a126400c2f3eb384ba4c",
+  "subject": "fix(cleanup): protect cargo registry / OS caches / plugin sources",
   "branch": "main",
   "dirty": false,
   "ahead_of_main": 0,
   "behind_main": 0,
   "author": "Gabriel",
-  "author_date": "2026-05-22T06:06:49-03:00"
+  "author_date": "2026-05-22T07:16:20-03:00"
 }
