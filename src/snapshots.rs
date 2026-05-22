@@ -63,6 +63,27 @@ pub fn resolve(spec: &str) -> Result<String> {
         return latest_snapshot()
             .ok_or_else(|| anyhow!("no snapshot found; run `disky scan` first (not found)"));
     }
+    // Time-relative ref: `@latest~N` → N-th newest (0 = latest).
+    if let Some(rest) = spec.strip_prefix("@latest~") {
+        let n: usize = rest
+            .parse()
+            .map_err(|_| anyhow!("invalid snapshot ref '{}' (expected @latest~<N>)", spec))?;
+        let snaps = list_snapshots();
+        // list_snapshots returns name-sorted ascending; newest at end.
+        if snaps.is_empty() {
+            return Err(anyhow!(
+                "no snapshot found; run `disky scan` first (not found)"
+            ));
+        }
+        let idx = snaps.len().checked_sub(n + 1).ok_or_else(|| {
+            anyhow!(
+                "@latest~{} out of range — only {} snapshots",
+                n,
+                snaps.len()
+            )
+        })?;
+        return Ok(snaps[idx].0.clone());
+    }
     if spec.contains('/') || Path::new(spec).extension().is_some() {
         return Ok(spec.to_string());
     }
@@ -110,6 +131,13 @@ mod tests {
         // A bare filename with `.db` is treated as a path (extension present),
         // not as a snapshot ID lookup.
         assert_eq!(resolve("local.db").unwrap(), "local.db");
+    }
+
+    #[test]
+    fn parse_id_handles_canonical_format() {
+        assert!(parse_id("2026-05-15_11-56").is_some());
+        assert!(parse_id("not-a-date").is_none());
+        assert!(parse_id("2026-13-99_99-99").is_none());
     }
 
     #[test]
