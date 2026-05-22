@@ -1,12 +1,12 @@
 {
-  "ts": "2026-05-22T07:34:41Z",
-  "commit": "9ba78c5",
-  "commit_full": "9ba78c5024aa157e127982a7f12404a83243ed6e",
-  "subject": "feat(query): disky empty + disky old --older-than DURATION",
+  "ts": "2026-05-22T07:43:22Z",
+  "commit": "2a53f27",
+  "commit_full": "2a53f277a8c6ffaa864a6a5713cc1b9140d0e00e",
+  "subject": "feat(growth): disky growth \u2014 per-directory \u0394 between two snapshots",
   "branch": "main",
   "dirty": false,
   "ahead_of_main": 0,
   "behind_main": 0,
   "author": "Gabriel",
-  "author_date": "2026-05-22T04:34:20-03:00"
+  "author_date": "2026-05-22T04:42:58-03:00"
 }
