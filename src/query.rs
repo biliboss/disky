@@ -284,6 +284,89 @@ pub fn raw_query(
     Ok(out)
 }
 
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod tests {
+    use super::*;
+    use duckdb::Connection;
+
+    /// Build an in-memory DB with a tiny seeded files table.
+    fn seeded() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::create_schema(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO files (path, name, ext, size, mtime, is_dir, depth) VALUES
+             ('/a/big.bin',   'big.bin',   'bin', 16384, 1700000000, false, 2),
+             ('/a/mid.log',   'mid.log',   'log',  4096, 1700000000, false, 2),
+             ('/a/small.txt', 'small.txt', 'txt',   256, 1700000000, false, 2),
+             ('/b/other.bin', 'other.bin', 'bin',  8192, 1700000000, false, 2),
+             ('/a',           'a',         NULL,      0, 1700000000, true,  1),
+             ('/b',           'b',         NULL,      0, 1700000000, true,  1);",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn schema_version_is_one() {
+        assert_eq!(SCHEMA_VERSION, 1);
+    }
+
+    #[test]
+    fn top_files_returns_size_descending_with_limit() {
+        let conn = seeded();
+        let rows = top_files(&conn, 2, 0).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].size, 16384);
+        assert_eq!(rows[1].size, 8192);
+    }
+
+    #[test]
+    fn top_files_respects_min_size_filter() {
+        let conn = seeded();
+        let rows = top_files(&conn, 10, 5000).unwrap();
+        // Only files with size >= 5000 — big.bin (16384) and other.bin (8192).
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|r| r.size >= 5000));
+    }
+
+    #[test]
+    fn top_files_excludes_directories() {
+        let conn = seeded();
+        let rows = top_files(&conn, 100, 0).unwrap();
+        assert_eq!(rows.len(), 4);
+        assert!(!rows.iter().any(|r| r.path == "/a" || r.path == "/b"));
+    }
+
+    #[test]
+    fn by_extension_aggregates_by_ext() {
+        let conn = seeded();
+        let rows = by_extension(&conn, 10).unwrap();
+        let bin = rows.iter().find(|r| r.ext == "bin").unwrap();
+        assert_eq!(bin.files, 2);
+        assert_eq!(bin.total_size, 16384 + 8192);
+    }
+
+    #[test]
+    fn stats_aggregates_correctly() {
+        let conn = seeded();
+        let s = stats(&conn).unwrap();
+        assert_eq!(s.files, 4);
+        assert_eq!(s.dirs, 2);
+        assert_eq!(s.total_bytes, 16384 + 4096 + 256 + 8192);
+        assert_eq!(s.largest_bytes, 16384);
+        assert!(!s.partial);
+    }
+
+    #[test]
+    fn rfc3339_handles_none() {
+        assert!(rfc3339(None).is_none());
+        let s = rfc3339(Some(1_700_000_000)).unwrap();
+        assert!(s.starts_with("2023-"));
+        assert!(s.ends_with("Z"));
+    }
+}
+
 pub fn stats(conn: &Connection) -> Result<Stats> {
     let mut stmt = conn.prepare(
         "SELECT

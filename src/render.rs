@@ -41,6 +41,39 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_machine_classifies_formats() {
+        assert!(!Format::Text.is_machine());
+        assert!(Format::Json.is_machine());
+        assert!(Format::Ndjson.is_machine());
+    }
+
+    #[test]
+    fn resolve_format_honours_user_choice() {
+        // Explicit user choice always wins, even if stdout would auto-pick differently.
+        assert_eq!(resolve_format(Some(Format::Text)), Format::Text);
+        assert_eq!(resolve_format(Some(Format::Json)), Format::Json);
+        assert_eq!(resolve_format(Some(Format::Ndjson)), Format::Ndjson);
+    }
+
+    #[test]
+    fn truncate_passes_short_strings_through() {
+        assert_eq!(truncate("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncate_prepends_ellipsis_for_long_strings() {
+        let result = truncate("aaaaaaaaaaaaaaaaaaaa", 10);
+        assert!(result.starts_with("..."));
+        assert_eq!(result.len(), 10);
+    }
+}
+
 fn emit_records<T: Serialize>(rows: &[T], kind: &str, format: Format) -> Result<()> {
     match format {
         Format::Ndjson => {

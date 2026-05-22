@@ -58,7 +58,7 @@ pub fn summarise(hits: &[CleanupHit]) -> Vec<CategorySummary> {
         entry.files += h.files;
     }
     let mut out: Vec<CategorySummary> = acc.into_values().collect();
-    out.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    out.sort_by_key(|s| std::cmp::Reverse(s.bytes));
     out
 }
 
@@ -72,6 +72,69 @@ fn basenames_for(targets: &[String]) -> Vec<(&'static str, &'static str)> {
         }
     }
     out
+}
+
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod tests {
+    use super::*;
+
+    fn hit(category: &str, bytes: u64, files: u64) -> CleanupHit {
+        CleanupHit {
+            category: category.to_string(),
+            path: format!("/tmp/{}-{}", category, bytes),
+            bytes,
+            files,
+        }
+    }
+
+    #[test]
+    fn default_target_names_covers_all_categories() {
+        let names = default_target_names();
+        assert_eq!(names.len(), TARGETS.len());
+        assert!(names.contains(&"node_modules"));
+        assert!(names.contains(&"target"));
+    }
+
+    #[test]
+    fn summarise_aggregates_and_sorts_by_bytes_desc() {
+        let hits = vec![
+            hit("node_modules", 1024, 5),
+            hit("node_modules", 2048, 10),
+            hit("target", 8192, 3),
+        ];
+        let summary = summarise(&hits);
+        assert_eq!(summary.len(), 2);
+        assert_eq!(summary[0].category, "target");
+        assert_eq!(summary[0].bytes, 8192);
+        assert_eq!(summary[1].category, "node_modules");
+        assert_eq!(summary[1].bytes, 3072);
+        assert_eq!(summary[1].paths, 2);
+        assert_eq!(summary[1].files, 15);
+    }
+
+    #[test]
+    fn summarise_empty_input_returns_empty() {
+        let summary = summarise(&[]);
+        assert!(summary.is_empty());
+    }
+
+    #[test]
+    fn basenames_for_skips_unknown_targets() {
+        let targets = vec!["node_modules".to_string(), "totally-fake".to_string()];
+        let pairs = basenames_for(&targets);
+        assert!(pairs.iter().all(|(n, _)| *n == "node_modules"));
+        assert_eq!(pairs.len(), 1);
+    }
+
+    #[test]
+    fn basenames_for_expands_multi_basename_categories() {
+        let targets = vec!["venv".to_string()];
+        let pairs = basenames_for(&targets);
+        let names: Vec<_> = pairs.iter().map(|(_, b)| *b).collect();
+        assert!(names.contains(&".venv"));
+        assert!(names.contains(&"venv"));
+    }
 }
 
 pub fn scan(conn: &Connection, targets: &[String], limit: usize) -> Result<Vec<CleanupHit>> {
@@ -160,12 +223,12 @@ pub fn apply(hits: &[CleanupHit], mode: ApplyMode) -> Result<Vec<String>> {
             },
             ApplyMode::Trash => match move_to_trash(&h.path) {
                 Ok(_) => handled.push(h.path.clone()),
-                Err(e) => {
+                Err(_) => {
                     if !std::path::Path::new(&h.path).exists() {
-                        // Vanished between scan and apply — skip silently.
                         continue;
                     }
-                    return Err(e);
+                    eprintln!("cleanup: skip {} (move-to-trash failed)", h.path);
+                    continue;
                 }
             },
         }
@@ -183,11 +246,16 @@ fn move_to_trash(path: &str) -> Result<std::path::PathBuf> {
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "disky-trashed".into());
-    let ts = std::time::SystemTime::now()
+    let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let dest = trash.join(format!("{}-{}", name, ts));
+        .unwrap_or_default();
+    let stamp = format!("{}-{}", now.as_secs(), now.subsec_nanos());
+    let mut dest = trash.join(format!("{}-{}", name, stamp));
+    let mut n = 0u32;
+    while dest.exists() {
+        n += 1;
+        dest = trash.join(format!("{}-{}-{}", name, stamp, n));
+    }
     std::fs::rename(src, &dest)?;
     Ok(dest)
 }

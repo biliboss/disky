@@ -97,6 +97,54 @@ fn records() -> Value {
     })
 }
 
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn document_top_level_keys_are_stable() {
+        let doc = document();
+        assert_eq!(doc["tool"], "disky");
+        assert_eq!(doc["schema_version"], SCHEMA_VERSION);
+        assert!(doc["commands"].is_array());
+        assert!(doc["records"].is_object());
+        assert!(doc["errors"].is_array());
+        assert!(doc["snapshot_refs"]["forms"].is_array());
+    }
+
+    #[test]
+    fn every_exit_code_has_schema_entry() {
+        let doc = document();
+        let codes: std::collections::HashSet<i64> = doc["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["code"].as_i64().unwrap())
+            .collect();
+        // ExitCode 0..=6 inclusive
+        for c in 0..=6 {
+            assert!(codes.contains(&c), "missing error code {} in schema", c);
+        }
+    }
+
+    #[test]
+    fn record_shapes_include_core_types() {
+        let doc = document();
+        let records = &doc["records"];
+        for name in [
+            "FileRow",
+            "ExtRow",
+            "DirRow",
+            "Stats",
+            "CleanupHit",
+            "DiffRow",
+        ] {
+            assert!(records[name].is_object(), "missing record {}", name);
+        }
+    }
+}
+
 fn errors() -> Value {
     json!([
         { "code": 0, "slug": "ok",           "type": "https://disky.dev/errors/ok",           "retryable": false },

@@ -1,0 +1,17 @@
+default_job = "clippy-test"
+
+[jobs.check]
+command = ["cargo", "check", "--all-targets", "--color", "always"]
+need_stdout = false
+watch = ["src", "tests", "benches", "Cargo.toml"]
+
+[jobs.clippy-test]
+command = ["cargo", "clippy", "--all-targets", "--color", "always", "--", "-D", "warnings"]
+need_stdout = false
+on_success = "job:test"
+watch = ["src", "tests", "Cargo.toml"]
+
+[jobs.test]
+command = ["cargo", "nextest", "run", "--lib", "--test", "lib_integration", "--color", "always"]
+need_stdout = true
+watch = ["src", "tests"]

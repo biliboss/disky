@@ -77,3 +77,38 @@ pub fn id_for(path: &str) -> Option<String> {
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn id_for_extracts_file_stem() {
+        assert_eq!(
+            id_for("/var/db/2026-05-15_11-56.db"),
+            Some("2026-05-15_11-56".to_string())
+        );
+        assert_eq!(id_for("snap.db"), Some("snap".to_string()));
+    }
+
+    #[test]
+    fn resolve_returns_explicit_path_unchanged() {
+        // Anything containing `/` is treated as a path, not looked up by ID.
+        let path = "/tmp/explicit.db";
+        assert_eq!(resolve(path).unwrap(), path);
+    }
+
+    #[test]
+    fn resolve_returns_path_with_extension_unchanged() {
+        // A bare filename with `.db` is treated as a path (extension present),
+        // not as a snapshot ID lookup.
+        assert_eq!(resolve("local.db").unwrap(), "local.db");
+    }
+
+    #[test]
+    fn resolve_missing_id_returns_not_found_message() {
+        let err = resolve("nonexistent-id-xyz").unwrap_err();
+        let s = format!("{:#}", err);
+        assert!(s.contains("not found"));
+    }
+}

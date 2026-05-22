@@ -6,17 +6,48 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  CARGO_TERM_COLOR: always
+  # sccache + cargo incremental conflict; disable incremental in CI.
+  CARGO_INCREMENTAL: 0
+  RUSTC_WRAPPER: sccache
+  SCCACHE_GHA_ENABLED: "true"
+
 jobs:
-  check:
-    name: Check & Lint
-    runs-on: macos-latest
+  fmt-lint:
+    name: fmt + clippy
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - uses: mozilla-actions/sccache-action@v0.0.6
       - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
-      - run: cargo build --release
-      - run: cargo test --release
+      - run: cargo clippy --all-targets -- -D warnings
+
+  test:
+    name: test (${{ matrix.os }})
+    needs: fmt-lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: mozilla-actions/sccache-action@v0.0.6
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      # Fast tier — unit + in-process integration. No release binary build.
+      - name: fast tier
+        run: cargo nextest run --lib --test lib_integration
+      # CLI tier — needs the release binary.
+      - name: release build
+        run: cargo build --release
+      - name: cli tier
+        run: cargo nextest run --test agentic

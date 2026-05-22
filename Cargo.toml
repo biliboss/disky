@@ -45,9 +45,29 @@ ctrlc = "3"
 
 [dev-dependencies]
 dirs = "5"
+tempfile = "3"
 
 [profile.release]
 opt-level = 3
 lto = "thin"
 codegen-units = 1
 panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = 1
+split-debuginfo = "unpacked"
+incremental = true
+
+# Deps compile once at -O3; our code stays unoptimized for fast iteration.
+[profile.dev.package."*"]
+opt-level = 3
+debug = false
+
+[profile.test]
+inherits = "dev"
+
+[profile.dev-fast]
+inherits = "dev"
+opt-level = 1
+debug = 1
