@@ -169,6 +169,24 @@ pub enum Command {
     /// List available snapshots
     List,
 
+    /// Filter records from a prior disky JSON envelope (stdin) by a
+    /// simple predicate. Composes with any command that emits records.
+    ///
+    /// Example: `disky top --format json | disky filter --where "size > 1GB"`
+    ///
+    /// Supported fields: size (u64), ext (str), name (str), path (str).
+    /// Supported ops: =, !=, >, <, >=, <=, LIKE.
+    /// Literals: integers (with optional KB/MB/GB/TB suffix) or quoted
+    /// strings. Chain with AND. Mutually exclusive with `--snapshot`.
+    Filter {
+        /// Predicate string. Example: `size > 1GB AND ext = 'log'`.
+        #[arg(long = "where")]
+        where_: Option<String>,
+        /// Cap records returned (after filtering).
+        #[arg(short, long, default_value_t = 1000)]
+        limit: usize,
+    },
+
     /// Per-directory growth between two snapshots. Default compares
     /// `@latest` against `@latest~1` so agents see "what grew since the
     /// previous scan". Rate is bytes/day computed from snapshot timestamps.

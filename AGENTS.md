@@ -122,6 +122,32 @@ Query commands (`top`, `dirs`, `ext`, `find`, `stats`, `list`) honour `--format`
 | `--format json` (default when stdout is piped) | Single JSON envelope `{schema_version, kind, records}`. Bytes as `u64`, paths absolute, `mtime` as RFC 3339 UTC |
 | `--format ndjson` | One JSON record per line — stream-friendly for `jq -c` |
 
+## Composability — `disky filter --json-input`
+
+Chain disky commands together without re-scanning. Any command emitting a
+records envelope can pipe into `disky filter` to apply a predicate.
+
+```
+disky top --format json | disky filter --where "size > 1GB"
+disky old --older-than 30d --format json | disky filter --where "ext = 'log'"
+disky growth --format json | disky filter --where "delta_bytes > 100MB"
+```
+
+**Predicate DSL** (intentionally small):
+
+| Element | Examples |
+|---------|----------|
+| Fields | `size`, `ext`, `name`, `path` |
+| Ops | `=`, `!=`, `>`, `<`, `>=`, `<=`, `LIKE` |
+| Literals | `1024`, `1KB`, `1MB`, `1GB`, `1TB`, `1KiB`, `'log'`, `"my string"` |
+| Chain | `AND` (case-insensitive) |
+
+`LIKE` accepts `%` (any chars) and `_` (single char), SQL-style.
+
+**Accepted input kinds:** `top`, `find`, `dirs`, `ext`, `empty`, `old`, `filter`, `growth`. Mismatch → exit 1 with a clear error message.
+
+**Envelope output** `{kind: "filter", input_kind: "top", records: [...]}` — preserves the originating kind so downstream chains can dispatch.
+
 ## Snapshot retention (`disky forget`)
 
 restic-style retention policy. Default dry-run; pass `--apply` to delete.

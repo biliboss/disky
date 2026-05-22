@@ -49,6 +49,15 @@ fn commands() -> Value {
             "output": "DiffRow[]"
         },
         {
+            "name": "filter",
+            "args": {
+                "where": "predicate string (e.g. \"size > 1GB AND ext = 'log'\")",
+                "limit": "int=1000"
+            },
+            "input": "JSON envelope on stdin — kinds: top, find, dirs, ext, empty, old, filter, growth",
+            "output": "kind='filter' envelope: {schema_version, kind, input_kind, records}"
+        },
+        {
             "name": "growth",
             "args": { "since": "@latest|@latest~N|<id>|<path> (default @latest~1)", "until": "@latest|<id>|<path> (default @latest)", "limit": "int=50" },
             "output": "GrowthRow[] under kind='growth'. Records: {path, kind: grew|shrank|added|removed, size_a:u64, size_b:u64, delta_bytes:i64, rate_bytes_per_day:f64, days_between:f64}"

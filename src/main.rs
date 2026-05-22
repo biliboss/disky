@@ -218,6 +218,36 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
         Command::Tui { snapshot } => {
             tui::run(snapshot)?;
         }
+        Command::Filter { where_, limit } => {
+            // Read prior envelope from stdin, filter, re-emit with kind="filter".
+            let env = disky::envelope::parse_json(std::io::stdin().lock())?;
+            disky::envelope::require_kind(
+                &env,
+                &[
+                    "top", "find", "dirs", "ext", "empty", "old", "filter", "growth",
+                ],
+            )?;
+            let pred = disky::filter::Predicate::parse(where_.as_deref().unwrap_or(""))?;
+            let kept: Vec<serde_json::Value> = env
+                .records
+                .into_iter()
+                .filter(|r| pred.matches(r))
+                .take(limit)
+                .collect();
+            if format.is_machine() {
+                let payload = json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "kind": "filter",
+                    "input_kind": env.kind,
+                    "records": kept,
+                });
+                println!("{}", payload);
+            } else {
+                for r in &kept {
+                    println!("{}", r);
+                }
+            }
+        }
         Command::Growth {
             since,
             until,
