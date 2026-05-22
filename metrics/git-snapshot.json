@@ -1,12 +1,12 @@
 {
-  "ts": "2026-05-22T07:43:22Z",
-  "commit": "2a53f27",
-  "commit_full": "2a53f277a8c6ffaa864a6a5713cc1b9140d0e00e",
-  "subject": "feat(growth): disky growth \u2014 per-directory \u0394 between two snapshots",
+  "ts": "2026-05-22T07:54:58Z",
+  "commit": "54de372",
+  "commit_full": "54de372ac08204d61ef3fc72629982e415d91b6d",
+  "subject": "feat(filter): disky filter --where with --json-input chain mode",
   "branch": "main",
-  "dirty": false,
+  "dirty": true,
   "ahead_of_main": 0,
   "behind_main": 0,
   "author": "Gabriel",
-  "author_date": "2026-05-22T04:42:58-03:00"
+  "author_date": "2026-05-22T04:54:09-03:00"
 }
