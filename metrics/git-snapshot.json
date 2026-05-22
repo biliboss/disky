@@ -1,12 +1,12 @@
 {
-  "ts": "2026-05-22T10:27:27Z",
-  "commit": "0eb466f",
-  "commit_full": "0eb466f0330d1b6dd5b1aac215f4e4fb6ef49406",
-  "subject": "feat(predict): disky predict \u2014 linear extrapolation of fill-by date",
+  "ts": "2026-05-22T10:43:13Z",
+  "commit": "9b3fa1e",
+  "commit_full": "9b3fa1e23f15bb3b67e1a9e65d9d8ee1308c635d",
+  "subject": "docs(scope): three surfaces \u2014 CLI / web / MCP \u2014 re-revised",
   "branch": "main",
   "dirty": false,
   "ahead_of_main": 0,
   "behind_main": 0,
   "author": "Gabriel",
-  "author_date": "2026-05-22T07:27:09-03:00"
+  "author_date": "2026-05-22T07:38:04-03:00"
 }
