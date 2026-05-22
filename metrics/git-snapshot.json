@@ -1,12 +1,12 @@
 {
-  "ts": "2026-05-22T10:21:07Z",
-  "commit": "40ac29e",
-  "commit_full": "40ac29eb2023cc9a07a7a126400c2f3eb384ba4c",
-  "subject": "fix(cleanup): protect cargo registry / OS caches / plugin sources",
+  "ts": "2026-05-22T10:27:27Z",
+  "commit": "0eb466f",
+  "commit_full": "0eb466f0330d1b6dd5b1aac215f4e4fb6ef49406",
+  "subject": "feat(predict): disky predict \u2014 linear extrapolation of fill-by date",
   "branch": "main",
   "dirty": false,
   "ahead_of_main": 0,
   "behind_main": 0,
   "author": "Gabriel",
-  "author_date": "2026-05-22T07:16:20-03:00"
+  "author_date": "2026-05-22T07:27:09-03:00"
 }
