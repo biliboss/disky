@@ -56,6 +56,7 @@ fn emit_error(err: &DiskyError, format: Format) {
             "status": err.code as i32,
             "detail": err.detail,
             "retryable": err.retryable,
+            "instance": err.instance,
         });
         eprintln!("{}", payload);
     } else {

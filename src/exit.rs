@@ -37,6 +37,21 @@ pub struct DiskyError {
     pub title: &'static str,
     pub detail: String,
     pub retryable: bool,
+    /// Per-error instance identifier (RFC 9457 `instance` field) so agents can
+    /// correlate stderr payloads with logs.
+    pub instance: String,
+}
+
+fn fresh_instance() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let t = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| (d.as_secs(), d.subsec_nanos()))
+        .unwrap_or((0, 0));
+    format!("disky-{}-{:09}-{}", t.0, t.1, n)
 }
 
 impl DiskyError {
@@ -46,6 +61,7 @@ impl DiskyError {
             title,
             detail: detail.into(),
             retryable: matches!(code, ExitCode::LockHeld | ExitCode::Io),
+            instance: fresh_instance(),
         }
     }
 
@@ -131,6 +147,14 @@ mod tests {
     fn classify_generic_fallback() {
         let err = anyhow::anyhow!("something unexpected");
         assert_eq!(classify(err).code, ExitCode::Generic);
+    }
+
+    #[test]
+    fn instance_is_unique_per_error() {
+        let a = DiskyError::generic("x");
+        let b = DiskyError::generic("y");
+        assert_ne!(a.instance, b.instance);
+        assert!(a.instance.starts_with("disky-"));
     }
 
     #[test]
