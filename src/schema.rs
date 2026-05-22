@@ -40,7 +40,7 @@ fn commands() -> Value {
         { "name": "dirs",   "args": snapshot_with(&["limit:int=30"]),                   "output": "DirRow[]" },
         { "name": "ext",    "args": snapshot_with(&["limit:int=30"]),                   "output": "ExtRow[]" },
         { "name": "find",   "args": snapshot_with(&["pattern:string", "limit:int=50"]), "output": "FileRow[]" },
-        { "name": "stats",  "args": snapshot_with(&[]),                                  "output": "Stats" },
+        { "name": "stats",  "args": snapshot_with(&["summarize:bool", "raw:bool"]),     "output": "Stats | Scalar (with --summarize) | raw u64 (with --raw)" },
         { "name": "query",  "args": snapshot_with(&["sql:string", "limit:int=1000"]),    "output": "Object[]" },
         { "name": "list",   "args": {},                                                  "output": "Snapshot[]" },
         {
@@ -87,6 +87,7 @@ fn records() -> Value {
             "partial": "bool",
             "scan_root": "string?", "scan_duration_s": "i64?", "scanned_at": "string? (RFC3339 UTC)"
         },
+        "Scalar":     { "bytes": "u64", "files": "u64" },
         "Snapshot":   { "path": "string", "id": "string?", "bytes": "u64" },
         "CleanupHit":      { "category": "string", "path": "string", "bytes": "u64", "files": "u64" },
         "CategorySummary": { "category": "string", "paths": "u64", "bytes": "u64", "files": "u64" },

@@ -130,6 +130,18 @@ pub fn find_files(rows: &[FileRow], pattern: &str, format: Format) -> Result<()>
     Ok(())
 }
 
+/// Emit a minimal scalar envelope for agents that only need totals.
+/// Always JSON; `--format` is ignored (the caller chooses --summarize for compactness).
+pub fn stats_scalar(s: &Stats) -> Result<()> {
+    let payload = json!({
+        "schema_version": SCHEMA_VERSION,
+        "kind": "scalar",
+        "records": [{ "bytes": s.total_bytes, "files": s.files }],
+    });
+    println!("{}", serde_json::to_string(&payload)?);
+    Ok(())
+}
+
 pub fn stats(s: &Stats, format: Format) -> Result<()> {
     if format.is_machine() {
         let payload = json!({

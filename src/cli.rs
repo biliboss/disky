@@ -106,6 +106,14 @@ pub enum Command {
     Stats {
         #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
         snapshot: String,
+        /// Emit minimal scalar envelope `{kind:"scalar", records:[{bytes,files}]}`.
+        /// Cuts tokens for agents that only need totals.
+        #[arg(long)]
+        summarize: bool,
+        /// Print only the bare total-bytes integer to stdout (overrides --format).
+        /// Implies --summarize.
+        #[arg(long)]
+        raw: bool,
     },
 
     /// Run an arbitrary SQL query against a snapshot

@@ -319,3 +319,37 @@ fn cleanup_summarises_by_category() {
     assert_eq!(tg["paths"], 1);
     assert!(v["total_bytes"].as_u64().unwrap() >= 13312);
 }
+
+#[test]
+fn stats_summarize_emits_scalar_envelope() {
+    let (_dir, db) = scan_tiny_tree();
+    let v = run_json(&["stats", "--snapshot", db.to_str().unwrap(), "--summarize"]);
+    assert_eq!(v["schema_version"], 1);
+    assert_eq!(v["kind"], "scalar");
+    let records = v["records"].as_array().unwrap();
+    assert_eq!(records.len(), 1);
+    let r = &records[0];
+    assert!(r["bytes"].as_u64().unwrap() >= 13312);
+    assert!(r["files"].as_u64().unwrap() >= 3);
+    // Scalar envelope must not leak heavy fields agents do not need.
+    assert!(r.get("largest_bytes").is_none());
+    assert!(r.get("scan_root").is_none());
+}
+
+#[test]
+fn stats_raw_emits_bare_integer() {
+    let (_dir, db) = scan_tiny_tree();
+    let out = Command::new(disky_bin())
+        .args(["stats", "--snapshot"])
+        .arg(&db)
+        .args(["--raw"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{:?}", out);
+    let body = String::from_utf8(out.stdout).unwrap();
+    let n: u64 = body
+        .trim()
+        .parse()
+        .expect("--raw must print a bare integer");
+    assert!(n >= 13312, "expected total bytes >= 13312, got {}", n);
+}

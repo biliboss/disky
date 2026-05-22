@@ -130,10 +130,20 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             let rows = query::find_files(&conn, &pattern, limit)?;
             render::find_files(&rows, &pattern, format)?;
         }
-        Command::Stats { snapshot } => {
+        Command::Stats {
+            snapshot,
+            summarize,
+            raw,
+        } => {
             let conn = open_snapshot(&snapshot)?;
             let s = query::stats(&conn)?;
-            render::stats(&s, format)?;
+            if raw {
+                println!("{}", s.total_bytes);
+            } else if summarize {
+                render::stats_scalar(&s)?;
+            } else {
+                render::stats(&s, format)?;
+            }
         }
         Command::Query {
             sql,

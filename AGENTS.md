@@ -122,6 +122,17 @@ Query commands (`top`, `dirs`, `ext`, `find`, `stats`, `list`) honour `--format`
 | `--format json` (default when stdout is piped) | Single JSON envelope `{schema_version, kind, records}`. Bytes as `u64`, paths absolute, `mtime` as RFC 3339 UTC |
 | `--format ndjson` | One JSON record per line — stream-friendly for `jq -c` |
 
+### Scalar stats (cheapest readout)
+
+`disky stats` carries two extra flags for agents that only need totals:
+
+| Flag | Output |
+|------|--------|
+| `--summarize` | `{schema_version:1, kind:"scalar", records:[{bytes, files}]}` — omits scan root, mtime, partial flag, largest file |
+| `--raw` | Bare `bytes` integer on stdout, nothing else. Overrides `--format`. Implies `--summarize` semantics |
+
+Use `--raw` for shell pipelines (`disky stats --raw | numfmt`) and `--summarize` when you still want a JSON envelope but want to skip the heavier fields the default `stats` record carries.
+
 Errors in machine mode are emitted to **stderr** as RFC 9457 problem details:
 `{schema_version, type, title, status, detail, retryable}`. The `type` URI
 (`https://disky.dev/errors/<slug>`) is the stable dispatch key — agents should
