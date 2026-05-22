@@ -18,6 +18,42 @@ pub const TARGETS: &[(&str, &[&str])] = &[
     ("pytest", &[".pytest_cache"]),
 ];
 
+/// Hardcoded safety: paths matching ANY of these substrings are NEVER
+/// returned by cleanup, regardless of how their basename matched.
+///
+/// Why: `cleanup --target target` once matched
+/// `~/.cargo/registry/src/index.crates.io-*/cc-1.2.62/src/target/` —
+/// the `cc` Rust crate's source module dir, NOT a cargo build output.
+/// Running that with `--apply` broke the host's build. This list is
+/// the floor; `.diskyignore` will extend it once we ship that feature.
+pub const ALWAYS_SKIP_SUBSTRINGS: &[&str] = &[
+    // Rust / Cargo
+    "/.cargo/registry/",
+    "/.cargo/git/",
+    "/.rustup/",
+    // Node / npm / pnpm
+    "/.npm/",
+    "/.pnpm-store/",
+    "/.yarn/cache/",
+    // Python / pip
+    "/site-packages/",
+    "/.cache/pip/",
+    "/.cache/uv/",
+    // OS caches
+    "/Library/Caches/",
+    "/Library/Group Containers/",
+    "/Library/Application Support/",
+    // Plugin / extension sources
+    "/.vscode/extensions/",
+    "/.windsurf/extensions/",
+    "/.antigravity/",
+];
+
+#[inline]
+fn is_protected(path: &str) -> bool {
+    ALWAYS_SKIP_SUBSTRINGS.iter().any(|s| path.contains(s))
+}
+
 /// Default target set when the caller passes no `--target` flag.
 pub fn default_target_names() -> Vec<&'static str> {
     TARGETS.iter().map(|(name, _)| *name).collect()
@@ -135,6 +171,49 @@ mod tests {
         assert!(names.contains(&".venv"));
         assert!(names.contains(&"venv"));
     }
+
+    #[test]
+    fn is_protected_catches_cargo_registry() {
+        // The bug that started the ignore list: cc-1.2.62/src/target inside
+        // ~/.cargo/registry was matched as a `target` cleanup candidate.
+        assert!(is_protected(
+            "/Users/me/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cc-1.2.62/src/target"
+        ));
+        assert!(is_protected("/Users/me/.cargo/git/checkouts/foo"));
+        assert!(is_protected(
+            "/Users/me/.rustup/toolchains/stable-aarch64-apple-darwin/lib"
+        ));
+    }
+
+    #[test]
+    fn is_protected_catches_python_site_packages() {
+        // venv installs live under site-packages/<pkg>/. We don't want to
+        // accidentally clean a `build` subdir of an installed package.
+        assert!(is_protected(
+            "/Users/me/venv/lib/python3.13/site-packages/foo/build"
+        ));
+    }
+
+    #[test]
+    fn is_protected_catches_os_caches() {
+        assert!(is_protected("/Users/me/Library/Caches/Slack/build"));
+        assert!(is_protected(
+            "/Users/me/Library/Application Support/disky/build"
+        ));
+        assert!(is_protected(
+            "/Users/me/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data"
+        ));
+    }
+
+    #[test]
+    fn is_protected_passes_real_dev_dirs() {
+        // These are the common-case targets we DO want to clean.
+        assert!(!is_protected("/Users/me/src/myapp/target"));
+        assert!(!is_protected("/Users/me/src/myapp/node_modules"));
+        assert!(!is_protected("/Users/me/src/myapp/.venv"));
+        assert!(!is_protected("/Users/me/src/myapp/build"));
+        assert!(!is_protected("/Users/me/src/myapp/dist"));
+    }
 }
 
 pub fn scan(conn: &Connection, targets: &[String], limit: usize) -> Result<Vec<CleanupHit>> {
@@ -170,7 +249,12 @@ pub fn scan(conn: &Connection, targets: &[String], limit: usize) -> Result<Vec<C
     let target_rows = stmt.query_map(target_refs.as_slice(), |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     })?;
-    let target_dirs: Vec<(String, String)> = target_rows.flatten().collect();
+    // Drop protected paths (cargo registry, node module sources, OS caches,
+    // etc.). See ALWAYS_SKIP_SUBSTRINGS for the full list + rationale.
+    let target_dirs: Vec<(String, String)> = target_rows
+        .flatten()
+        .filter(|(p, _)| !is_protected(p))
+        .collect();
 
     let mut agg = conn.prepare(
         "SELECT COALESCE(SUM(size), 0), COUNT(*)
