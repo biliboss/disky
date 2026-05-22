@@ -1,12 +1,12 @@
 {
-  "ts": "2026-05-22T08:50:22Z",
-  "commit": "03e8374",
-  "commit_full": "03e837421dd2acf18654933776abab1598ab182c",
-  "subject": "feat(skill,perf): Claude Code /disky skill + Design Feel + idx_path",
+  "ts": "2026-05-22T09:01:14Z",
+  "commit": "2a77519",
+  "commit_full": "2a775196585c6cde8dc9e5b05b22e3c0389cb538",
+  "subject": "feat(top): --physical flag for honest sparse-file size",
   "branch": "main",
   "dirty": false,
   "ahead_of_main": 0,
   "behind_main": 0,
   "author": "Gabriel",
-  "author_date": "2026-05-22T05:50:06-03:00"
+  "author_date": "2026-05-22T06:00:55-03:00"
 }
