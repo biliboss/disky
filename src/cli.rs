@@ -215,6 +215,16 @@ pub enum Command {
         limit: usize,
     },
 
+    /// Predict when the disk fills based on linear regression over all
+    /// snapshots in the data dir. Pass `--free-bytes <N>` so the fit
+    /// can compute a fill-by date.
+    Predict {
+        /// Bytes currently free on the volume. Get via
+        /// `df -k / | tail -1 | awk '{print $4*1024}'`.
+        #[arg(long, value_name = "BYTES")]
+        free_bytes: Option<u64>,
+    },
+
     /// Per-directory churn — files modified within the last N hours/days.
     /// Identifies log generators and hot working directories.
     Churn {

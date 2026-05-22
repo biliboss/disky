@@ -344,6 +344,36 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                 }
             }
         }
+        Command::Predict { free_bytes } => {
+            let rec = disky::predict::predict(physical, free_bytes)?;
+            if format.is_machine() {
+                let payload = json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "kind": "predict",
+                    "record": rec,
+                });
+                println!("{}", payload);
+            } else {
+                println!("samples:          {}", rec.samples);
+                println!(
+                    "current bytes:    {} ({:.2} GB)",
+                    rec.current_bytes,
+                    rec.current_bytes as f64 / 1024.0_f64.powi(3)
+                );
+                println!(
+                    "growth rate:      {:.2} MB/day",
+                    rec.growth_rate_bytes_per_day / 1024.0 / 1024.0
+                );
+                println!("confidence (r²): {:.3}", rec.confidence_r2);
+                match (&rec.fill_at, rec.days_until_fill) {
+                    (Some(t), Some(d)) => println!("fill-by:          {} ({:.1} days)", t, d),
+                    _ => println!(
+                        "fill-by:          (none — {})",
+                        rec.reason.as_deref().unwrap_or("unknown")
+                    ),
+                }
+            }
+        }
         Command::Churn {
             over,
             snapshot,

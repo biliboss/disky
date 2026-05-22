@@ -13,6 +13,7 @@ pub mod envelope;
 pub mod exit;
 pub mod filter;
 pub mod policy;
+pub mod predict;
 pub mod query;
 pub mod render;
 pub mod scan;
