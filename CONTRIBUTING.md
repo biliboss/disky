@@ -48,7 +48,7 @@ bacon            # uses bacon.toml — clippy → nextest on every save
 2. Toolchain — `rustc` + `cargo` versions.
 3. Machine — OS, CPU model, cores, mem.
 4. Build timings — `cargo check`, `nextest`, debug+release builds.
-5. Binary sizes — `target/release/disky` + `target/release/disky-mcp`.
+5. Binary size — `target/release/disky` (single bin since v0.10.0; `disky-mcp` was removed).
 6. Test count by tier (fast / CLI).
 7. LOC by directory (src / tests / benches).
 8. Competitor benchmark — disky vs `dust` / `dua` / `gdu` / `du` (refreshed monthly or on release tag).
@@ -96,6 +96,72 @@ Before opening a PR:
 - [ ] `just metrics` run; new JSONL line committed
 - [ ] If shipping a release tag: `just metrics-cold` + `just bench-cmp-10k` also run
 
+## Build footprint — kill the 1-2 GB `target/`
+
+Default Rust build dumps a fat `target/` next to every project (~1.5 GB
+here once duckdb + ratatui + jwalk compile). Two changes recover most of
+that without changing iteration speed.
+
+### 1. Global cargo cache (registry + git deps shared, no extra work)
+
+`$CARGO_HOME` defaults to `~/.cargo` already — verify it's not overridden
+per-project:
+
+```bash
+echo "${CARGO_HOME:-$HOME/.cargo}"   # should print ~/.cargo
+ls -lah ~/.cargo/{registry,git} 2>/dev/null | head
+```
+
+If you have a per-project `.cargo/config.toml` setting `[build] target-dir`
+to somewhere local — drop it. The default `target/` is per-project; the
+**deps** are already shared globally via `$CARGO_HOME/registry`. No action
+needed unless you previously overrode this.
+
+### 2. `sccache` — share compiled artifacts across projects
+
+Single biggest win: every other rust project on this machine that touches
+`duckdb-sys`, `ratatui`, etc. re-uses the same `.o` files.
+
+```bash
+brew install sccache                   # one-time
+mkdir -p ~/.cargo
+cat >> ~/.cargo/config.toml <<'EOF'
+
+[build]
+rustc-wrapper = "/opt/homebrew/bin/sccache"
+EOF
+```
+
+Verify the next build hits the wrapper:
+
+```bash
+sccache --zero-stats
+cargo build --release           # first run still cold
+sccache --show-stats            # subsequent runs should show hits >0
+```
+
+Optional — bump the cache size (default 10 GB):
+
+```bash
+echo 'export SCCACHE_CACHE_SIZE="30G"' >> ~/.zshenv
+```
+
+### 3. Recurring hygiene
+
+```bash
+cargo clean                            # nuke this project's target/
+just metrics                           # confirm build timings still in budget
+```
+
+A periodic `find ~/src -name target -type d -exec du -sh {} +` surfaces the
+biggest offenders across all Rust projects.
+
+### Why not delete `target/` aggressively in CI / hooks?
+
+Cold release builds run ~3 min (duckdb bundled C++). sccache turns cold
+builds into warm ones across projects — that's the whole point. Manual
+`cargo clean` only when reclaiming disk explicitly.
+
 ## Pre-commit hook
 
 ```
@@ -110,6 +176,6 @@ Runs `cargo fmt --check && cargo clippy --all-targets -- -D warnings` on every c
 |------|---------|----------|
 | `cargo-nextest` | `cargo install cargo-nextest --locked` | Faster test runner |
 | `bacon` | `cargo install bacon` (optional) | File-watched dev loop |
-| `sccache` | `brew install sccache` | C++ cache for duckdb bundled |
+| `sccache` | `brew install sccache` + wire via `~/.cargo/config.toml` (see "Build footprint" §2) | C++ cache for duckdb bundled · shared across all Rust projects |
 | `hyperfine` | `brew install hyperfine` | Competitor benchmarks |
 | `dust`, `dua-cli`, `gdu` | `brew install dust dua-cli gdu` | Competitor benchmark targets |

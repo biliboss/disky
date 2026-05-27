@@ -40,6 +40,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `CONTRIBUTING.md` "Build footprint" section — receita rust-vs-giants:
+  `$CARGO_HOME` global default + `sccache` wired via `~/.cargo/config.toml`.
+  Cuts the 1-2 GB `target/` per-project tax by sharing compiled artifacts
+  across all Rust repos. Verification commands + cache-size tuning
+  included. Followup from v0.10.0 grill (2026-05-27).
+
+### Fixed
+- `CONTRIBUTING.md` performance/metrics rule no longer references the
+  removed `disky-mcp` binary; rule §5 now mentions only the single
+  `disky` bin (BREAKING note from v0.10.0 cleanup).
+
+
+### Added
 - `disky cleanup` (CLI + MCP) now adds `summary: [CategorySummary]` and
   `total_bytes` to the JSON envelope, aggregating hits across paths per
   category. Text mode prints a second table beneath the per-path list
