@@ -269,8 +269,79 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             since,
             until,
             over,
+            over_n,
+            fill_target,
             limit,
         } => {
+            // --over-n branch: N-snapshot OLS fit. Mutually exclusive with the
+            // 2-snapshot --since/--until/--over path. Routes early.
+            if let Some(n) = over_n {
+                if n < 3 {
+                    return Err(DiskyError::new(
+                        ExitCode::Usage,
+                        "invalid --over-n",
+                        format!("need N >= 3, got {n}"),
+                    )
+                    .into());
+                }
+                let all = snapshots::list_snapshots();
+                let parsed: Vec<(String, i64)> = all
+                    .iter()
+                    .filter_map(|(p, _)| {
+                        let id = snapshots::id_for(p)?;
+                        let dt = snapshots::parse_id(&id)?;
+                        Some((p.clone(), dt.timestamp()))
+                    })
+                    .collect();
+                if parsed.len() < n {
+                    return Err(DiskyError::new(
+                        ExitCode::NotFound,
+                        "insufficient snapshots",
+                        format!(
+                            "--over-n {n} requires {n} parseable snapshots; found {}",
+                            parsed.len()
+                        ),
+                    )
+                    .into());
+                }
+                // list_snapshots() returns oldest..newest; take the last N.
+                let pick: Vec<(String, i64)> = parsed[parsed.len() - n..].to_vec();
+                let rows = query::growth_over_n(&pick, limit, fill_target)?;
+                if format.is_machine() {
+                    let payload = json!({
+                        "schema_version": SCHEMA_VERSION,
+                        "kind": "growth_n",
+                        "n_snapshots": n,
+                        "fill_target": fill_target,
+                        "records": rows,
+                    });
+                    println!("{}", payload);
+                } else if rows.is_empty() {
+                    println!("No N-snapshot growth detected.");
+                } else {
+                    println!(
+                        "{:<70} {:>14} {:>6} {:>14} {:>24}",
+                        "PATH", "B/DAY", "R²", "LATEST B", "FILL BY"
+                    );
+                    println!("{}", "-".repeat(132));
+                    for r in &rows {
+                        let path = if r.path.len() > 70 {
+                            format!("...{}", &r.path[r.path.len() - 67..])
+                        } else {
+                            r.path.clone()
+                        };
+                        println!(
+                            "{:<70} {:>14} {:>6.2} {:>14} {:>24}",
+                            path,
+                            r.slope_bytes_per_day,
+                            r.r2,
+                            r.latest_bytes,
+                            r.projected_fill_date.as_deref().unwrap_or("—")
+                        );
+                    }
+                }
+                return Ok(());
+            }
             // --over wins over --since. Pick oldest snapshot whose age >= window.
             let resolved_since = if let Some(ref dur) = over {
                 let secs = disky::duration::parse_seconds(dur).map_err(|e| {

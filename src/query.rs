@@ -364,6 +364,176 @@ pub fn growth(snap_a: &str, snap_b: &str, limit: usize) -> Result<Vec<GrowthRow>
     Ok(rows.flatten().collect())
 }
 
+/// N-snapshot growth per directory — fits ordinary-least-squares against
+/// each path's (snapshot_ts, dir_size) series. Returns slope (bytes/day),
+/// R² (goodness-of-fit, 0..1), and optionally a projected fill-by date.
+///
+/// `snapshots` is a slice of `(db_path, started_at_unix_secs)`, ordered
+/// oldest → newest. Caller is responsible for picking the N most recent
+/// snapshots and parsing their timestamps from `scan_meta` or filename.
+///
+/// `fill_target` is the volume's currently-free byte budget. When set
+/// and slope is positive, `projected_fill_date` is RFC 3339 UTC for the
+/// moment the directory would consume that many bytes beyond its latest
+/// observed size (i.e. naive linear extrapolation: `t_fill = t_last +
+/// fill_target / slope_bytes_per_sec`).
+#[derive(Debug, Clone, Serialize)]
+pub struct GrowthNRow {
+    pub path: String,
+    pub slope_bytes_per_day: i64,
+    pub r2: f64,
+    pub latest_bytes: u64,
+    pub n_snapshots: usize,
+    /// `(unix_secs, bytes)` samples used in the fit, ordered by time. Lets
+    /// agents render sparklines without re-querying.
+    pub sample_paths_ts: Vec<(i64, u64)>,
+    /// RFC 3339 UTC; `None` when slope is non-positive or `fill_target` is None.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub projected_fill_date: Option<String>,
+}
+
+pub fn growth_over_n(
+    snapshots: &[(String, i64)],
+    limit: usize,
+    fill_target: Option<u64>,
+) -> Result<Vec<GrowthNRow>> {
+    use duckdb::Connection;
+    if snapshots.len() < 3 {
+        return Err(anyhow::anyhow!(
+            "growth_over_n: need at least 3 snapshots, got {}",
+            snapshots.len()
+        ));
+    }
+    let conn = Connection::open_in_memory()?;
+    // ATTACH all snapshots as db0, db1, ..., dbN-1. UNION ALL their
+    // per-directory aggregates tagged with the snapshot index.
+    let mut attach_sql = String::new();
+    for (i, (p, _)) in snapshots.iter().enumerate() {
+        attach_sql.push_str(&format!(
+            "ATTACH '{}' AS db{} (READ_ONLY);",
+            p.replace('\'', "''"),
+            i
+        ));
+    }
+    conn.execute_batch(&attach_sql)?;
+
+    let mut union_parts: Vec<String> = Vec::with_capacity(snapshots.len());
+    for (i, _) in snapshots.iter().enumerate() {
+        union_parts.push(format!(
+            "SELECT regexp_replace(path, '/[^/]+$', '') AS d, \
+                    SUM(size) AS s, {i} AS snap_idx \
+             FROM db{i}.files WHERE is_dir = false GROUP BY d"
+        ));
+    }
+    let union_sql = union_parts.join(" UNION ALL ");
+
+    // Only keep dirs that exist in the latest snapshot (newest = last entry).
+    let latest_idx = snapshots.len() - 1;
+    let sql = format!(
+        "WITH agg AS ({union_sql}),
+              latest AS (SELECT d, s AS latest_s FROM agg WHERE snap_idx = {latest_idx})
+         SELECT agg.d AS path, agg.snap_idx, agg.s, latest.latest_s
+         FROM agg JOIN latest USING (d)
+         ORDER BY agg.d, agg.snap_idx"
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    // Collect (path -> Vec<(snap_idx, bytes, latest_bytes)>)
+    use std::collections::HashMap;
+    let mut series: HashMap<String, Vec<(usize, i64)>> = HashMap::new();
+    let mut latest_by_path: HashMap<String, i64> = HashMap::new();
+
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let path: String = row.get(0)?;
+        let idx: i64 = row.get(1)?;
+        let bytes: i64 = row.get(2)?;
+        let latest_s: i64 = row.get(3)?;
+        series
+            .entry(path.clone())
+            .or_default()
+            .push((idx as usize, bytes));
+        latest_by_path.insert(path, latest_s);
+    }
+
+    // Build (ts, bytes) points per path using snapshot timestamps.
+    let ts: Vec<i64> = snapshots.iter().map(|(_, t)| *t).collect();
+    let mut out: Vec<GrowthNRow> = Vec::with_capacity(series.len());
+    for (path, mut idx_samples) in series.into_iter() {
+        idx_samples.sort_by_key(|(i, _)| *i);
+        // Need at least 3 distinct points to compute a meaningful R².
+        if idx_samples.len() < 3 {
+            continue;
+        }
+        let points: Vec<(f64, f64)> = idx_samples
+            .iter()
+            .map(|(i, b)| (ts[*i] as f64, (*b).max(0) as f64))
+            .collect();
+        let (slope_per_sec, r2) = linfit_slope_r2(&points);
+        let slope_per_day = slope_per_sec * 86400.0;
+        let latest_bytes = latest_by_path.get(&path).copied().unwrap_or(0).max(0) as u64;
+        let latest_ts = *ts.last().unwrap();
+        let projected_fill_date = match (slope_per_sec > 0.0, fill_target) {
+            (true, Some(target)) => {
+                let secs = (target as f64) / slope_per_sec;
+                let fill_ts = latest_ts as f64 + secs;
+                DateTime::<Utc>::from_timestamp(fill_ts as i64, 0)
+                    .map(|d| d.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+            }
+            _ => None,
+        };
+        let sample_paths_ts: Vec<(i64, u64)> = idx_samples
+            .iter()
+            .map(|(i, b)| (ts[*i], (*b).max(0) as u64))
+            .collect();
+        out.push(GrowthNRow {
+            path,
+            slope_bytes_per_day: slope_per_day as i64,
+            r2,
+            latest_bytes,
+            n_snapshots: idx_samples.len(),
+            sample_paths_ts,
+            projected_fill_date,
+        });
+    }
+    // Sort by slope desc (biggest growers first).
+    out.sort_by_key(|b| std::cmp::Reverse(b.slope_bytes_per_day));
+    out.truncate(limit);
+    Ok(out)
+}
+
+/// Ordinary least squares — returns (slope, r²). Mirrors `predict::linfit`
+/// but lives here so query.rs has no cross-module dependency.
+fn linfit_slope_r2(points: &[(f64, f64)]) -> (f64, f64) {
+    let n = points.len() as f64;
+    if n < 2.0 {
+        return (0.0, 0.0);
+    }
+    let mean_x: f64 = points.iter().map(|p| p.0).sum::<f64>() / n;
+    let mean_y: f64 = points.iter().map(|p| p.1).sum::<f64>() / n;
+    let mut num = 0.0;
+    let mut den_x = 0.0;
+    let mut den_y = 0.0;
+    for (x, y) in points {
+        let dx = x - mean_x;
+        let dy = y - mean_y;
+        num += dx * dy;
+        den_x += dx * dx;
+        den_y += dy * dy;
+    }
+    let slope = if den_x == 0.0 { 0.0 } else { num / den_x };
+    let r2 = if den_x == 0.0 || den_y == 0.0 {
+        if points.len() == 2 {
+            1.0
+        } else {
+            0.0
+        }
+    } else {
+        (num * num) / (den_x * den_y)
+    };
+    (slope, r2)
+}
+
 pub fn find_files(conn: &Connection, pattern: &str, limit: usize) -> Result<Vec<FileRow>> {
     let sql_pattern = pattern.replace('*', "%").replace('?', "_");
     let mut stmt = conn.prepare(
@@ -615,6 +785,44 @@ mod tests {
         let s = rfc3339(Some(1_700_000_000)).unwrap();
         assert!(s.starts_with("2023-"));
         assert!(s.ends_with("Z"));
+    }
+
+    #[test]
+    fn linfit_slope_r2_perfect_line() {
+        // y = 2x + 3 over 5 points → slope = 2, r² = 1.
+        let pts: Vec<(f64, f64)> = (0..5).map(|i| (i as f64, 2.0 * i as f64 + 3.0)).collect();
+        let (slope, r2) = linfit_slope_r2(&pts);
+        assert!((slope - 2.0).abs() < 1e-9, "slope = {slope}");
+        assert!((r2 - 1.0).abs() < 1e-9, "r2 = {r2}");
+    }
+
+    #[test]
+    fn linfit_slope_r2_flat_is_zero() {
+        let pts = vec![(0.0, 10.0), (1.0, 10.0), (2.0, 10.0), (3.0, 10.0)];
+        let (slope, _r2) = linfit_slope_r2(&pts);
+        assert_eq!(slope, 0.0);
+    }
+
+    #[test]
+    fn linfit_slope_r2_noisy_line_high_r2() {
+        // Mostly linear with 1-byte jitter — r² should be very close to 1.
+        let pts: Vec<(f64, f64)> = (0..6)
+            .map(|i| (i as f64, 10.0 * i as f64 + if i % 2 == 0 { 0.5 } else { -0.5 }))
+            .collect();
+        let (slope, r2) = linfit_slope_r2(&pts);
+        assert!((slope - 10.0).abs() < 1.0);
+        assert!(r2 > 0.99, "r2 = {r2}");
+    }
+
+    #[test]
+    fn growth_over_n_rejects_fewer_than_three() {
+        // 2 snapshots — must error out, not silently degrade.
+        let snaps: Vec<(String, i64)> = vec![
+            ("/tmp/does-not-matter-a.db".into(), 1000),
+            ("/tmp/does-not-matter-b.db".into(), 2000),
+        ];
+        let err = growth_over_n(&snaps, 10, None).unwrap_err();
+        assert!(format!("{err}").contains("at least 3"));
     }
 }
 

@@ -211,6 +211,16 @@ pub enum Command {
         /// --since. Format: `7d`, `2w`, `6mo`, `1y` (see duration.rs).
         #[arg(long, value_name = "DURATION")]
         over: Option<String>,
+        /// N-snapshot OLS fit. When set (>= 3), runs ordinary-least-squares
+        /// against the N most-recent snapshots instead of a 2-snapshot diff.
+        /// Emits `kind="growth_n"` envelope with slope/R²/projected fill date.
+        #[arg(long, value_name = "N")]
+        over_n: Option<usize>,
+        /// Free-byte budget the projection extrapolates against. Only used
+        /// with `--over-n`. Default: free bytes on the volume that holds
+        /// `$HOME` (best-effort; may be 0 if `statvfs` fails).
+        #[arg(long, value_name = "BYTES")]
+        fill_target: Option<u64>,
         #[arg(short, long, default_value_t = 50)]
         limit: usize,
     },

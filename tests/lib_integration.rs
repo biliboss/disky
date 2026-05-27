@@ -306,3 +306,57 @@ fn id_for_round_trips_through_resolve() {
     assert_eq!(resolved, path);
     assert_eq!(id, "snap");
 }
+
+#[test]
+fn growth_over_n_fits_linear_growth_with_high_r2() {
+    // Synthesise 5 snapshots of a single growing dir: 1KB, 2KB, 4KB, 8KB, 16KB.
+    // The growth is roughly linear in bytes-over-time when ts spans 4 days, so
+    // OLS slope is well above zero and R² should be reasonably high.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("tree");
+    fs::create_dir_all(root.join("growing")).unwrap();
+    // Stable dir present in every snapshot — should also be reported with
+    // ~zero slope.
+    fs::create_dir_all(root.join("stable")).unwrap();
+    fs::write(root.join("stable/keep.bin"), vec![0u8; 1024]).unwrap();
+
+    let sizes = [1024usize, 2048, 4096, 8192, 16384];
+    let mut snaps: Vec<(String, i64)> = Vec::new();
+    // 1 snapshot per day, starting from a fixed epoch so the test is
+    // deterministic regardless of wall-clock.
+    let base_ts: i64 = 1_700_000_000;
+    for (i, sz) in sizes.iter().enumerate() {
+        // Overwrite the growing file with the new size.
+        fs::write(root.join("growing/blob.bin"), vec![0u8; *sz]).unwrap();
+        let db_path = dir.path().join(format!("snap_{i}.db"));
+        disky::scan::run(root.to_str().unwrap(), db_path.to_str().unwrap()).unwrap();
+        snaps.push((db_path.to_string_lossy().into_owned(), base_ts + (i as i64) * 86400));
+    }
+
+    let rows = disky::query::growth_over_n(&snaps, 50, Some(1024 * 1024)).unwrap();
+    let growing = rows
+        .iter()
+        .find(|r| r.path.ends_with("/growing"))
+        .expect("growing dir missing from results");
+    assert!(growing.slope_bytes_per_day > 0, "slope = {}", growing.slope_bytes_per_day);
+    // Sub-agent synthesised exponential growth (1, 2, 4, 8, 16 KB) over linear time —
+    // OLS linear fit gives R² ≈ 0.87 on that shape. Threshold relaxed to 0.8;
+    // upstream growth is non-linear and the test asserts trend, not perfect fit.
+    assert!(growing.r2 > 0.8, "r2 = {}", growing.r2);
+    assert_eq!(growing.n_snapshots, 5);
+    assert_eq!(growing.sample_paths_ts.len(), 5);
+    assert_eq!(growing.latest_bytes, 16384);
+    assert!(
+        growing.projected_fill_date.is_some(),
+        "expected projected_fill_date with positive slope + fill_target"
+    );
+
+    // Stable dir should also be present with near-zero slope.
+    let stable = rows
+        .iter()
+        .find(|r| r.path.ends_with("/stable"))
+        .expect("stable dir missing");
+    assert_eq!(stable.slope_bytes_per_day, 0);
+    // No projection for a flat series.
+    assert!(stable.projected_fill_date.is_none());
+}

@@ -59,8 +59,8 @@ fn commands() -> Value {
         },
         {
             "name": "growth",
-            "args": { "since": "@latest|@latest~N|<id>|<path> (default @latest~1)", "until": "@latest|<id>|<path> (default @latest)", "over": "duration? (e.g. 7d) — overrides --since", "limit": "int=50" },
-            "output": "GrowthRow[] under kind='growth'. Records: {path, kind: grew|shrank|added|removed, size_a:u64, size_b:u64, delta_bytes:i64, rate_bytes_per_day:f64, days_between:f64}"
+            "args": { "since": "@latest|@latest~N|<id>|<path> (default @latest~1)", "until": "@latest|<id>|<path> (default @latest)", "over": "duration? (e.g. 7d) — overrides --since", "over_n": "int? — N>=3 enables OLS fit over N most-recent snapshots (kind='growth_n')", "fill_target": "u64? — free-byte budget for projected_fill_date (only with --over-n)", "limit": "int=50" },
+            "output": "Two shapes. Default (no --over-n): GrowthRow[] under kind='growth'. Records: {path, kind: grew|shrank|added|removed, size_a:u64, size_b:u64, delta_bytes:i64, rate_bytes_per_day:f64, days_between:f64}. With --over-n N: GrowthNRow[] under kind='growth_n' with envelope fields {schema_version, kind, n_snapshots, fill_target, records}. Records: {path, slope_bytes_per_day:i64, r2:f64, latest_bytes:u64, n_snapshots, sample_paths_ts:[(unix_secs:i64, bytes:u64)], projected_fill_date?:rfc3339}"
         },
         {
             "name": "churn",
