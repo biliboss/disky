@@ -1,6 +1,6 @@
 [package]
 name = "disky"
-version = "0.10.0"
+version = "0.10.1"
 edition = "2021"
 description = "Fast macOS disk analyzer — scan, explore, clean up"
 license = "MIT OR Apache-2.0"

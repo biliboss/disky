@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   # delete the `mcpServers.disky` entry.
   ```
 
-## [Unreleased]
+## [0.10.1] — 2026-05-27
 
 ### Added
 - `CONTRIBUTING.md` "Build footprint" section — receita rust-vs-giants:
@@ -45,11 +45,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Cuts the 1-2 GB `target/` per-project tax by sharing compiled artifacts
   across all Rust repos. Verification commands + cache-size tuning
   included. Followup from v0.10.0 grill (2026-05-27).
+- `claude-skill/disky/SKILL.md` v2 — rewrites the `/disky` skill as a
+  guided 4-stage wizard (triage → propose → confirm → apply), all driven
+  by `AskUserQuestion`. Replaces the prior one-shot HTML report. Defaults
+  every destructive op to `--reversible` (Trash). HTML report becomes
+  optional decoration at the end.
+
+### Changed
+- `metrics/baseline.json` reseeded against commit `6a33586` (post-v0.10.0).
+  Captures the single-bin tree (43 MB release binary, 4999 LOC src, 561
+  LOC tests, 79 fast-tier tests). Caveat: nextest_fast_tier 60s and
+  build_release_inc 13s are above advisory budgets — pre-existing drift
+  that the prior baseline (commit `1e441d3`) was masking. Tightening is
+  a follow-up phase.
+- `scripts/collect-metrics.sh` no longer measures `target/release/disky-mcp`
+  (binary removed in v0.10.0). `binary_size_bytes` envelope is now
+  `{"disky": N}` only.
 
 ### Fixed
 - `CONTRIBUTING.md` performance/metrics rule no longer references the
   removed `disky-mcp` binary; rule §5 now mentions only the single
-  `disky` bin (BREAKING note from v0.10.0 cleanup).
+  `disky` bin.
+
+## [Unreleased]
 
 
 ### Added
