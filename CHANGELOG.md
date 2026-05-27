@@ -5,6 +5,38 @@ All notable changes to disky will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] — 2026-05-27
+
+### Removed (BREAKING)
+- `disky-mcp` binary deleted. 925 LOC, single-file `src/bin/disky-mcp.rs`. CLI
+  is now the only surface. Rationale: only real consumer (Claude Code) shells
+  out, and every MCP tool just wrapped the matching CLI subcommand with the
+  same JSON envelope — pure duplication for zero new users. Validated by
+  4-round grill on 2026-05-27. Hosts that cannot shell out (Claude Desktop /
+  Cursor / Zed) are unsupported until earn-back: see AGENTS.md "Single
+  surface" section. Resurrection: `git log --all --diff-filter=D -- src/bin/disky-mcp.rs`.
+- `[[bin]] disky-mcp` removed from `Cargo.toml`. `cargo install --path .`
+  now installs only the `disky` binary.
+- Removed punch-list items pre-empted by this decision: MCP `resources/list`,
+  MCP `resources/read`, MCP `prompts/list`, MCP progress notifications on
+  scan/cleanup, `disky web` FastHTML server, `disky install-mcp` subcommand,
+  `tests/mcp_protocol.rs` integration suite. None of them shipped — the plan
+  was scoped out before implementation.
+
+### Changed
+- `Cargo.toml` version bumped 0.6.0 → 0.10.0 (was previously out of sync with
+  git tags; v0.9.0 was the last tagged release).
+- `AGENTS.md` "MCP scope" + "Three surfaces" sections rewritten to "Single
+  surface — CLI only". Earn-back criteria preserved.
+
+### Notes
+- Local profile installs (`disky-mcp` symlinks in `~/.claude-pessoal/` and
+  `~/.claude-mukutu/`) should be removed manually:
+  ```
+  # Edit `~/.claude-pessoal/.claude.json` + `~/.claude-mukutu/.claude.json`,
+  # delete the `mcpServers.disky` entry.
+  ```
+
 ## [Unreleased]
 
 ### Added
