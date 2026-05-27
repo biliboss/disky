@@ -34,7 +34,69 @@ disky cleanup --target node_modules,target --apply            # rm -rf
 disky cleanup --target node_modules,target --apply --reversible  # → ~/.Trash
 ```
 
-JSON output: `{kind:"cleanup", applied:bool, removed:[paths], records:[CleanupHit]}`.
+JSON output: `{kind:"cleanup", applied:bool, removed:[paths], records:[CleanupHit], summary:[CategorySummary], total_bytes:N}`.
+
+**Performance (v0.11.0):** Single grouped range-join with a TEMP table
+of target dirs. DuckDB plans zone-maps + IEJoin in one pass.
+**79 s → < 1 s on a 1.77 M-row snapshot.** Integration test
+`cleanup_is_fast_on_large_snapshot` in `tests/lib_integration.rs`.
+Prior algos (per-target loop, LEFT JOIN with LIKE) preserved in
+`src/cleanup.rs` history comment.
+
+## `.diskyignore` loader (v0.11.0)
+
+Module `src/ignore.rs` (170 LOC, std-only) provides:
+
+- `default_skip_substrings()` — built-in baseline (node_modules, target, …).
+- `load_diskyignore_chain(scan_root)` — walks ancestor dirs up to `$HOME`
+  (or `/`), parses gitignore-subset format (one substring per line,
+  `#` comments, blank lines skipped, no globs in v1).
+- `should_skip(basename, patterns)` — substring match.
+
+Module ships standalone in v0.11.0. Wiring into the live `src/scan.rs`
+skip-list is a v0.11.1 deliverable (~10-line edit). 5 unit tests cover
+empty dir, single file, comments, ancestor chain, malformed lines.
+
+## N-snapshot growth — OLS (v0.11.0)
+
+```
+disky growth --over-n N [--fill-target <bytes>]   # default N=5, min 3
+```
+
+Fits an ordinary-least-squares line through `(snapshot_ts, size)` for
+each directory present in the latest snapshot across the N most-recent
+snapshots. Envelope `kind="growth_n"`:
+
+```
+{path, slope_bytes_per_day, r2, projected_fill_date, latest_bytes,
+ n_snapshots, sample_paths_ts[[ts,bytes]…]}
+```
+
+Sorted by `slope_bytes_per_day DESC`. Pure f64, no stats crate. Math in
+`src/query.rs::linfit_slope_r2`. The 2-snapshot `disky growth` path is
+untouched — `--over-n` is additive.
+
+## Pattern classifier (v0.11.0)
+
+Module `src/pattern.rs` (325 LOC, std-only) classifies a directory's
+size-over-time series into:
+
+| Pattern | Meaning |
+|---|---|
+| `log_shaped` | Big initial growth that levels off (caches warming) |
+| `burst` | Sudden late jump (download dump, import) |
+| `stable` | Roughly flat across the series |
+| `declining` | Trending down (cleanup landed, log rotation) |
+| `unknown` | Mixed / unclear / < 3 samples |
+
+Decision tree thresholds in `src/pattern.rs`:
+- `SPIKE_RATIO = 4.0` (max-stride / median-stride for log_shaped/burst)
+- `STABLE_RATIO = 3.0` (raised from sub-agent default 1.5 post-merge)
+- `DECLINING_SLOPE_FRAC = -0.01`, `DECLINING_R2_MIN = 0.5`
+
+10 unit tests cover each branch + edges. CLI flag `disky churn
+--classify` wiring is a v0.11.1 deliverable; the module is callable
+in-process today.
 
 ## Schema introspection
 
@@ -52,8 +114,7 @@ All query subcommands accept `--snapshot <ref>` where `<ref>` is:
 | Snapshot ID | `2026-05-15_11-56` | `<data dir>/<id>.db` |
 | Filesystem path | `/tmp/scan.db` | itself, untouched |
 
-`disky list` prints the ID, size, and full path. The same syntax works in the
-`disky-mcp` tools via the `snapshot` argument.
+`disky list` prints the ID, size, and full path.
 
 ## Raw SQL
 
@@ -146,7 +207,7 @@ body       'Manrope'
 mono/code  'JetBrains Mono'
 ```
 
-**Tailwind config snippet (copy into any FastHTML or HTML target):**
+**Tailwind config snippet (copy into any HTML target):**
 ```js
 colors: { paper:'#F5F1E8', ink:'#14110F', rust:'#B23A1F', olive:'#5C6831',
           dim:'#6B655E', line:'#D9D2C2', card:'#FBF8F0',
@@ -155,7 +216,7 @@ fontFamily: { display:['Fraunces','serif'], sans:['Manrope','sans-serif'],
               mono:['JetBrains Mono','monospace'] }
 ```
 
-When the FastHTML + Monster UI surface lands (see `claude-skill/disky/`), these tokens become the only legal colors. Any one-off hex outside this set is a bug.
+Any HTML rendered by the `/disky` skill or release-report tooling MUST use these tokens. Any one-off hex outside this set is a bug.
 
 ## Surface scope (decision, v0.10.0 · 2026-05-27)
 
@@ -175,30 +236,36 @@ When the FastHTML + Monster UI surface lands (see `claude-skill/disky/`), these 
 
 Until either trigger, **CLI is canonical**. JSON envelopes + RFC 9457 errors + `disky schema` are the agent contract.
 
-## Claude Code skill — `/disky`
+## Claude Code skill — `/disky` (v2 wizard)
 
-Ships at `claude-skill/disky/` alongside the binary. Once installed (copy or symlink to `~/.claude*/skills/disky/`), invoking `/disky` produces an interactive HTML report identical-in-spirit to `~/disky-dogfood-report.html` but generated programmatically.
+Ships at `claude-skill/disky/`. Symlink to `~/.claude-pessoal/skills/disky/`
+(and `~/.claude-mukutu/` if you want it in both profiles). Invoking
+`/disky` runs a 4-stage **AskUserQuestion-driven cleanup wizard** — no
+web server, no FastHTML, no MCP. Just CLI + the wizard.
 
-Mechanics:
+Flow:
 
-1. `/disky` triggers `claude-skill/disky/SKILL.md`.
-2. The skill runs `disky scan` against `$HOME` (or `--path` override) into a temp DuckDB.
-3. The skill runs the standard query bundle (top, dirs, ext, churn, growth, cleanup, empty, old).
-4. A single `claude-skill/disky/render.py` (FastHTML + Monster UI) reads the JSON envelopes, renders a styled HTML page, and `open`s it in the default browser.
-5. Render also embeds **action buttons** that emit copy-pastable `disky cleanup --apply --target ...` commands — clicking opens a tooltip with the exact safe command for the agent or user to run.
+1. **Triage** — one AskUser classifies intent: free space / what grew / diagnose slowness.
+2. **Scan + propose** — runs `disky scan`, `disky stats --physical`, `disky top --physical`, `disky cleanup --dry-run`. Builds a propose-3 table ranked by recovery bytes per category.
+3. **Confirm each target** — one AskUser per proposed target with the exact command in the option description. Defaults to `--reversible` (Trash).
+4. **Apply** — runs only confirmed targets. Reports JSON envelope back to chat. Accumulates `total_bytes` across the wizard.
 
-The Python file is intentionally single-file. FastHTML lets us define routes + components inline; Monster UI gives Tailwind-styled primitives (Card, Hero, Button, Table) we wrap once with the disky palette. No build step. `uv run render.py` is the entrypoint.
+**Always use `--physical`** for stats/top/dirs/ext queries. Logical
+`size` includes sparse files (OrbStack `data.img.raw` reports 8 TB
+logical, ~13 GB physical) and will look like the disk is 87% full when
+it isn't. Use `df -h` as ground truth for device free space.
 
-**Skill UX promises (the four MUSTs):**
+Optional final step: `uv run claude-skill/disky/render.py <db>` generates
+an HTML report with the disky brut palette — click-to-copy code blocks
+for any commands surfaced (no server, no POST). Reports go in
+`docs/reports/` per the convention in `docs/README.md`.
 
-| MUST | Realised by |
-|------|-------------|
-| **Motion** | CSS transitions on cards (hover lift, expand). Progress bar during scan. Numbers count up via small `animateNumber` IIFE. |
-| **Fun** | Tone in copy ("eating our own dog food", "the lying sparse file"). Surprising-but-correct insights like "this dir is a log generator". |
-| **Safe** | Every destructive button needs an explicit toggle. <code>--apply</code> commands always pair with <code>--reversible</code> by default. Every command shown verbatim *before* the user is asked to copy it. |
-| **Useful** | Action-oriented sections: "free 30 GB" first, "explain disk contents" second. Each insight ends with a *next move*. |
+Anti-patterns the skill rejects:
 
-Layout follows the dogfood report (sections 00–06): metrics block, story, churn, reclaimable, product findings, agent flow, next steps. Skill enforces the standard report rule by construction.
+- `cleanup --apply` without explicit AskUser confirmation.
+- Proposing targets that didn't surface in `cleanup --dry-run`.
+- Inventing GB numbers ("liberará ~5 GB") when the envelope says exactly N bytes.
+- Using `disky web` or `disky-mcp` (both removed in v0.10.0).
 
 ## Composability — `disky filter --json-input`
 
@@ -247,7 +314,7 @@ SELECT path, size, physical_size FROM files
 WHERE is_dir = false ORDER BY physical_size DESC LIMIT 10
 ```
 
-`disky top --physical` / `dirs --physical` / `stats --physical` flags land next.
+`disky top --physical` / `dirs --physical` / `stats --physical` / `ext --physical` flags shipped in v0.9.0. **Always pass `--physical` in agent flows** — the default logical sum is dominated by sparse files (OrbStack inflates it 100×) and misleads cleanup decisions.
 
 ## Snapshot retention (`disky forget`)
 
@@ -339,6 +406,12 @@ Auto-saved to `~/Library/Application Support/disky/YYYY-MM-DD_HH-MM.db` via `dir
 `cargo fmt --check` + `cargo clippy -- -D warnings` + `cargo build --release` on `macos-latest`.
 Run `cargo fmt` before committing — rustfmt has opinions on inline if-else.
 
+**Build footprint (v0.10.1+):** apply the `sccache` + `$CARGO_HOME`
+global cache recipe in `CONTRIBUTING.md#build-footprint` before any
+multi-project Rust work — kills the per-project 1-2 GB `target/` tax
+by sharing compiled artifacts across every repo that touches
+`duckdb-sys`, `ratatui`, etc.
+
 ## Clippy gotchas
 
 - `sort_by(|a,b| b.x.cmp(&a.x))` → use `sort_by_key(|b| Reverse(b.x))`
@@ -350,7 +423,7 @@ Run `cargo fmt` before committing — rustfmt has opinions on inline if-else.
 Matrix: `aarch64-apple-darwin` + `x86_64-apple-darwin`. Tag `vX.Y.Z` triggers workflow.
 CHANGELOG.md uses Keep a Changelog format — awk extracts entry per tag.
 
-## Cleanup
+## Dev-side cleanup (build artifacts)
 
 | What | Command | Size |
 |------|---------|------|
