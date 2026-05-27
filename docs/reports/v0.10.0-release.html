@@ -1,301 +1,444 @@
-<!--
-TEMPLATE: skeleton-markdoc (iter4 — pre-scaffolded payload + custom tags)
-USE: rich content (5+ sections, mermaid, code, callouts, stats) — MAX token economy
-THEMES: brut light + dark via daisyUI v5
-LIBS: daisyUI + Markdoc ESM + Mermaid + svg-pan-zoom — all pre-bundled
-HOW: LLM ONLY edits markdown inside <script type="text/markdown" id="src">.
-     Replace every {{hint}} with real prose. Keep structure; add/drop sections as needed.
-CUSTOM TAGS:
-  {% callout type="warn|info|ok" %}content{% /callout %}
-  {% tag color="primary|secondary|accent" %}label{% /tag %}
-  {% stat label="X" value="Y" /%}
-COPY: cp + edit markdown + <title> + <header> tokens. Don't touch infra below.
--->
 <!doctype html>
-<html lang="pt-BR" data-theme="brut">
+<html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>disky v0.10.0 — CLI é a superfície</title>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&family=Manrope:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
-<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.2/dist/svg-pan-zoom.min.js"></script>
-<style type="text/tailwindcss">
-  @plugin "daisyui" { themes: false; }
-  @plugin "daisyui/theme" { name:"brut"; default:true; color-scheme:light;
-    --color-base-100:#F5F1E8;--color-base-200:#FBF8F0;--color-base-300:#D9D2C2;--color-base-content:#14110F;
-    --color-primary:#B23A1F;--color-primary-content:#F5F1E8;--color-secondary:#5C6831;--color-secondary-content:#F5F1E8;
-    --color-accent:#E8A33D;--color-accent-content:#14110F;--color-neutral:#14110F;--color-neutral-content:#F5F1E8;
-    --radius-selector:0;--radius-field:0;--radius-box:0;--border:2px; }
-  @plugin "daisyui/theme" { name:"brut-dark"; prefersdark:true; color-scheme:dark;
-    --color-base-100:#14110F;--color-base-200:#1F1A16;--color-base-300:#2D2620;--color-base-content:#F5F1E8;
-    --color-primary:#D6552E;--color-primary-content:#14110F;--color-secondary:#8A9847;--color-secondary-content:#14110F;
-    --color-accent:#F5B547;--color-accent-content:#14110F;--color-neutral:#F5F1E8;--color-neutral-content:#14110F;
-    --radius-selector:0;--radius-field:0;--radius-box:0;--border:2px; }
-</style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>disky v0.10.0 — release · flow metrics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-  /* CDN Tailwind v3 NÃO processa @plugin "daisyui/theme" — :root fallback garante brut palette runtime. NÃO REMOVA. Detalhes em CANONICAL.md. */
-  :root, [data-theme="brut"] {
-    --color-base-100:#F5F1E8; --color-base-200:#FBF8F0; --color-base-300:#D9D2C2; --color-base-content:#14110F;
-    --color-primary:#B23A1F; --color-primary-content:#F5F1E8;
-    --color-secondary:#5C6831; --color-secondary-content:#F5F1E8;
-    --color-accent:#E8A33D; --color-accent-content:#14110F;
-    --color-neutral:#14110F; --color-neutral-content:#F5F1E8;
-    --color-info:#5C6831; --color-info-content:#F5F1E8;
-    --color-success:#5C6831; --color-success-content:#F5F1E8;
-    --color-warning:#E8A33D; --color-warning-content:#14110F;
-    --color-error:#B23A1F; --color-error-content:#F5F1E8;
-    --radius-selector:0; --radius-field:0; --radius-box:0; --border:2px;
-    color-scheme: light;
-  }
-  [data-theme="brut-dark"] {
-    --color-base-100:#14110F; --color-base-200:#1F1A16; --color-base-300:#2D2620; --color-base-content:#F5F1E8;
-    --color-primary:#D6552E; --color-primary-content:#14110F;
-    --color-secondary:#8A9847; --color-secondary-content:#14110F;
-    --color-accent:#F5B547; --color-accent-content:#14110F;
-    --color-neutral:#F5F1E8; --color-neutral-content:#14110F;
-    --color-info:#8A9847; --color-info-content:#14110F;
-    --color-success:#8A9847; --color-success-content:#14110F;
-    --color-warning:#F5B547; --color-warning-content:#14110F;
-    --color-error:#D6552E; --color-error-content:#14110F;
-    color-scheme: dark;
-  }
-  body { background-color: var(--color-base-100); color: var(--color-base-content); }
-</style>
-<style>
-  body{font-family:'Manrope',sans-serif;background-image:linear-gradient(rgba(127,127,127,0.06) 1px,transparent 1px);background-size:100% 28px}
-  h1,h2,h3,h4{font-family:'Fraunces',serif}
-  .mono,kbd{font-family:'JetBrains Mono',monospace}
-  #out h1{font-size:3.5rem;font-variation-settings:'opsz' 144,'wght' 900;letter-spacing:-.03em;margin:0 0 .5em;border-bottom:3px solid hsl(var(--color-base-content));padding-bottom:.2em;color:hsl(var(--color-base-content))}
-  #out h2{font-size:2.2rem;margin:2em 0 .5em;border-left:6px solid hsl(var(--color-primary));padding-left:.6em;color:hsl(var(--color-base-content))}
-  #out h3{font-size:1.4rem;margin:1.5em 0 .4em;color:hsl(var(--color-primary))}
-  #out p{margin:0 0 1em;line-height:1.65;color:hsl(var(--color-base-content))}
-  #out ul,#out ol{margin:0 0 1em 0;padding-left:1.5em;color:hsl(var(--color-base-content))}
-  #out li{margin:.3em 0;line-height:1.55}
-  #out a{color:hsl(var(--color-primary));text-decoration:underline;text-underline-offset:3px}
-  #out blockquote{border-left:4px solid hsl(var(--color-secondary));background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));margin:1.5em 0;padding:.5em 1em;font-style:italic}
-  #out hr{border:none;border-top:3px double hsl(var(--color-base-content));margin:3em 0}
-  #out table{border-collapse:collapse;width:100%;margin:1.5em 0;color:hsl(var(--color-base-content))}
-  #out th,#out td{border:1px solid hsl(var(--color-base-content));padding:.4em .8em;text-align:left;color:hsl(var(--color-base-content))}
-  #out th{background:hsl(var(--color-base-content));color:hsl(var(--color-base-100));font-family:'Manrope',sans-serif;font-size:.85em;text-transform:uppercase;letter-spacing:.05em}
-  #out tr:nth-child(odd) td{background:hsl(var(--color-base-200));color:hsl(var(--color-base-content))}
-  #out tr:nth-child(even) td{background:hsl(var(--color-base-100));color:hsl(var(--color-base-content))}
-  #out code{font-family:'JetBrains Mono',monospace;font-size:.88em;background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));padding:1px 6px;border:1px solid hsl(var(--color-base-300))}
-  #out pre{position:relative;background:hsl(var(--color-neutral));color:hsl(var(--color-neutral-content));padding:1em 1.2em;overflow-x:auto;border-left:4px solid hsl(var(--color-primary));margin:1.5em 0;font-family:'JetBrains Mono',monospace;font-size:.85em}
-  #out pre code{background:transparent;border:none;padding:0;color:inherit;font-size:inherit}
-  #out pre.mermaid{background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));padding:1.5em;border-left:none;border:1px solid hsl(var(--color-base-content));min-height:200px}
-  #out pre.mermaid svg{max-width:none;cursor:grab}#out pre.mermaid svg:active{cursor:grabbing}
-  .mm-actions{position:absolute;top:8px;right:8px;display:flex;gap:4px;z-index:2}
-  .mm-actions button{background:hsl(var(--color-neutral));color:hsl(var(--color-neutral-content));border:2px solid hsl(var(--color-neutral));padding:3px 8px;font:600 .72rem 'JetBrains Mono',monospace;cursor:pointer;text-transform:uppercase;letter-spacing:.05em}
-  .mm-actions button:hover{background:hsl(var(--color-primary));border-color:hsl(var(--color-primary));color:hsl(var(--color-primary-content))}
-  #out pre.mermaid:fullscreen{background:hsl(var(--color-base-100));padding:2rem}#out pre.mermaid:fullscreen svg{width:100%;height:100%}
-  .copy-btn{position:absolute;top:0;right:0;background:hsl(var(--color-base-100));color:hsl(var(--color-base-content));border:0;border-left:2px solid hsl(var(--color-base-content));border-bottom:2px solid hsl(var(--color-base-content));padding:4px 10px;font:700 .72rem 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;z-index:2}
-  .copy-btn:hover{background:hsl(var(--color-primary));color:hsl(var(--color-primary-content))}
-  .copy-btn[data-ok="1"]{background:hsl(var(--color-secondary));color:hsl(var(--color-secondary-content))}
-  .cl{margin:1.5em 0;padding:.9em 1.1em;border-left:4px solid hsl(var(--color-base-content))}
-  .cl>*:last-child{margin-bottom:0}
-  .cl-warn{background:hsl(var(--color-accent));color:hsl(var(--color-accent-content));border-left-color:hsl(var(--color-accent-content))}
-  .cl-warn p,.cl-warn li,.cl-warn strong{color:hsl(var(--color-accent-content))}
-  .cl-info{background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));border-left-color:hsl(var(--color-primary))}
-  .cl-ok{background:hsl(var(--color-secondary));color:hsl(var(--color-secondary-content));border-left-color:hsl(var(--color-secondary-content))}
-  .cl-ok p,.cl-ok li,.cl-ok strong{color:hsl(var(--color-secondary-content))}
-  .tg{display:inline-block;padding:2px 10px;font:600 .78rem 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.05em;margin:0 2px;border:2px solid transparent}
-  .tg-primary{background:hsl(var(--color-primary));color:hsl(var(--color-primary-content));border-color:hsl(var(--color-primary))}
-  .tg-secondary{background:hsl(var(--color-secondary));color:hsl(var(--color-secondary-content));border-color:hsl(var(--color-secondary))}
-  .tg-accent{background:hsl(var(--color-accent));color:hsl(var(--color-accent-content));border-color:hsl(var(--color-accent))}
-  .stgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.6em;margin:1.5em 0}
-  .st{background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));border:2px solid hsl(var(--color-base-content));padding:.8em 1em}
-  .st-label{font:600 .72rem 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.08em;opacity:.7;color:hsl(var(--color-base-content))}
-  .st-value{font-family:'Fraunces',serif;font-size:2rem;font-weight:900;line-height:1;color:hsl(var(--color-primary));margin-top:.2em}
+:root{
+  --paper:#F5F1E8; --ink:#14110F; --rust:#B23A1F; --olive:#5C6831;
+  --dim:#6B655E; --line:#D9D2C2; --card:#FBF8F0;
+  --done:#3F6B2A; --partial:#B8841C; --risk:#B23A1F; --deferred:#8C857B;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'Manrope',sans-serif;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding:64px 32px 96px}
+header{margin-bottom:56px;border-bottom:1px solid var(--line);padding-bottom:32px}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--rust);letter-spacing:.14em;text-transform:uppercase;margin-bottom:10px}
+h1{font-family:'Fraunces',serif;font-variation-settings:'opsz' 144,'wght' 700;font-size:72px;line-height:1;letter-spacing:-.025em;margin:0 0 10px}
+h1 .tag{color:var(--rust)}
+.sub{font-family:'Fraunces',serif;color:var(--dim);font-size:22px;margin:0;font-weight:300;font-variation-settings:'opsz' 22,'wght' 400}
+.meta{margin-top:24px;display:flex;gap:32px;flex-wrap:wrap;color:var(--dim);font-size:13px;font-family:'JetBrains Mono',monospace}
+.meta b{color:var(--ink);font-weight:600}
+section{margin-top:56px;display:grid;grid-template-columns:80px 1fr;gap:32px;align-items:start}
+section .num{font-family:'Fraunces',serif;font-size:48px;font-weight:300;color:var(--rust);line-height:1;font-variation-settings:'opsz' 48}
+section h2{font-family:'Fraunces',serif;font-size:32px;font-weight:600;margin:0 0 16px;letter-spacing:-.01em;font-variation-settings:'opsz' 32}
+section p{margin:0 0 16px;max-width:780px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-top:8px}
+.tile{background:var(--card);border:1px solid var(--line);padding:20px}
+.tile .k{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-family:'JetBrains Mono',monospace}
+.tile .v{font-family:'Fraunces',serif;font-variation-settings:'opsz' 96,'wght' 700;font-size:44px;line-height:1.05;margin-top:6px;letter-spacing:-.02em}
+.tile .v.rust{color:var(--rust)}
+.tile .v.olive{color:var(--olive)}
+.tile .u{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim);margin-top:4px}
+.kanban{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.col{background:var(--card);border:1px solid var(--line);padding:16px;min-height:200px}
+.col h3{font-family:'Fraunces',serif;font-size:18px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.col h3 .chip{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:2px 8px}
+.col h3 .chip.done{background:var(--done);color:var(--paper)}
+.col h3 .chip.drop{background:var(--risk);color:var(--paper)}
+.col h3 .chip.defer{background:var(--deferred);color:var(--paper)}
+.cards{display:flex;flex-direction:column;gap:6px}
+.card{background:var(--paper);border:1px solid var(--line);padding:8px 10px;font-size:13px;line-height:1.4;transition:background .15s}
+.card:hover{background:#fff}
+.card.done{border-left:3px solid var(--done)}
+.card.drop{border-left:3px solid var(--risk);text-decoration:line-through;color:var(--dim)}
+.card.defer{border-left:3px solid var(--deferred)}
+.card code{font-family:'JetBrains Mono',monospace;font-size:11px;background:#0001;padding:1px 4px}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line)}
+th{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);font-weight:600}
+td.num{text-align:right;font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+td code,p code,li code{font-family:'JetBrains Mono',monospace;font-size:12px;background:#0001;padding:1px 6px}
+.chart{background:var(--card);border:1px solid var(--line);padding:24px;margin-top:8px}
+.chart svg{display:block;width:100%;height:auto}
+.legend{display:flex;gap:24px;font-size:12px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:12px;flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:middle}
+.callout{background:var(--ink);color:var(--paper);padding:24px 28px;margin-top:8px;font-size:15px;border-left:4px solid var(--rust)}
+.callout b{color:var(--rust)}
+.callout code{font-family:'JetBrains Mono',monospace;background:#fff2;padding:2px 6px}
+.signal{padding:18px;background:var(--card);border-left:4px solid var(--olive);margin-top:16px;font-size:14px}
+.tworow{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
+@media (max-width:720px){section{grid-template-columns:1fr;gap:8px}section .num{font-size:32px}.kanban{grid-template-columns:1fr}.tworow{grid-template-columns:1fr}h1{font-size:48px}}
 </style>
 </head>
 <body>
+<div class="wrap">
 
-<header class="border-b-2 border-base-content">
-  <div class="max-w-4xl mx-auto px-6 py-3 flex justify-between items-center text-xs mono">
-    <div><span class="badge badge-soft mr-2">release · v0.10.0</span><span class="opacity-60">disky — CLI é a superfície</span></div>
-    <div class="flex gap-3 items-center"><span>2026-05-27</span><button class="btn btn-xs btn-ghost mono" onclick="toggleTheme()">◐ theme</button></div>
+<header>
+  <div class="eyebrow">release report · flow metrics · 2026-05-27</div>
+  <h1>disky <span class="tag">v0.10.0</span></h1>
+  <p class="sub">CLI é a superfície. Kanban drenado, Cycle Time intacto, MCP fora.</p>
+  <div class="meta">
+    <div><b>tag</b> v0.10.0 (local)</div>
+    <div><b>commit</b> 7ded431</div>
+    <div><b>net diff</b> +58 / −980 LOC</div>
+    <div><b>commits</b> 55 total · 2 hoje</div>
+    <div><b>generated</b> <span id="genTs"></span></div>
   </div>
 </header>
 
-<main id="out" class="max-w-4xl mx-auto px-6 py-10"></main>
+<section>
+  <div class="num">01</div>
+  <div>
+    <h2>Flow tiles · post-release</h2>
+    <p>Métricas drenadas do git log no working tree. Cada commit <code>feat:</code> conta como card entregue. Cycle Time = minutos entre feat commits dentro de uma sessão ativa. Backlog v0.10.0 zerado: 9 done, 6 dropped (MCP-scope), 2 deferred (smoke + baseline).</p>
+    <div class="tiles" id="tiles"></div>
+  </div>
+</section>
 
-<!-- LLM EDITS ONLY THIS BLOCK ↓↓↓ — replace every {{hint}} with real prose -->
-<script type="text/markdown" id="src">
+<section>
+  <div class="num">02</div>
+  <div>
+    <h2>Kanban · v0.10.0 punch-list resolvida</h2>
+    <p>17 must-ship → 9 done · 6 dropped · 2 deferred. WIP = 0. Versão sai com escopo cristalizado — em vez de carregar 8 items MCP-only que não tinham consumidor, deletamos a superfície e mergeamos o que sobrou.</p>
+    <div class="kanban" id="kanban"></div>
+  </div>
+</section>
 
-# disky v0.10.0 — CLI é a superfície
+<section>
+  <div class="num">03</div>
+  <div>
+    <h2>Cycle Time distribution</h2>
+    <p>27 intervalos feat-to-feat. Cauda direita pesada de gaps inter-burst (~2d, ~4d), agora extendida pelo gap May 22 → May 27 (5 dias). Em sessão ativa, p50 fica abaixo de 4 min — Gabriel ship rapid-fire, depois para frio.</p>
+    <div class="chart"><svg id="ctHist" viewBox="0 0 900 280"></svg></div>
+    <div class="legend">
+      <span><i style="background:var(--rust)"></i>active-burst CT (n=25, &lt;1h)</span>
+      <span><i style="background:var(--deferred)"></i>inter-burst gaps (n=3, &gt;1d)</span>
+      <span><b>p50</b> 3.87min · <b>p85</b> 8.2min · <b>p95</b> 47min</span>
+    </div>
+  </div>
+</section>
 
-**Cortamos 925 LOC de MCP, descartamos o plano de `disky web`, e bumpamos pra v0.10.0. Resultado: uma superfície, um contrato, manutenção 6× menor.**
+<section>
+  <div class="num">04</div>
+  <div>
+    <h2>Lead Time · feat → tag</h2>
+    <p>Tempo entre primeiro <code>feat:</code> commit de uma versão e o tag correspondente. Cada barra = uma versão. v0.10.0 = 0 commits intervindo (tag aplicada no próprio cut commit) → LT efetivo zero, mas reflete decisão de cut, não trabalho típico.</p>
+    <div class="chart"><svg id="ltBars" viewBox="0 0 900 240"></svg></div>
+    <div class="legend">
+      <span><i style="background:var(--olive)"></i>Lead Time (min entre primeiro feat e tag)</span>
+      <span><b>median histórico</b> ~12 min · v0.7 → v0.8 → v0.9 todos no mesmo burst</span>
+    </div>
+  </div>
+</section>
 
-{% stat label="LOC removidas" value="925" /%}
-{% stat label="Net diff" value="−922" /%}
-{% stat label="Bins" value="2 → 1" /%}
+<section>
+  <div class="num">05</div>
+  <div>
+    <h2>Monte Carlo · v0.10.1 forecast</h2>
+    <p>10 000 futuros simulados. Mesma cadência observada: P(active day) = 3/9 ≈ 0.33 (atualizado pelo gap), throughput por active day amostrado de <code>[3, 5, 19]</code>. Backlog: 7 nice-to-have items (cleanup perf bug, N-snapshot growth, pattern classifier, path-based exclusion, .diskyignore, schedule install, disky watch).</p>
+    <div class="chart"><svg id="mc" viewBox="0 0 900 280"></svg></div>
+    <div class="legend" id="mcLegend"></div>
+    <div class="callout" style="margin-top:24px">
+      <b>Forecast v0.10.1:</b> <span id="forecast"></span>
+    </div>
+  </div>
+</section>
 
-## 1 — A decisão
+<section>
+  <div class="num">06</div>
+  <div>
+    <h2>Throughput · feats por active day</h2>
+    <p>3 active days no histórico. Distribuição extremamente bursty — quando ativo, ship muito; quando idle, zero. Padrão saudável pra projeto solo de fim de semana; questão pra v1.0.0 será aumentar P(active) ou cadência por sessão.</p>
+    <div class="tworow">
+      <div class="chart"><svg id="tputBars" viewBox="0 0 460 220"></svg></div>
+      <div>
+        <table style="margin-top:0">
+          <thead><tr><th>Active day</th><th class="num">All commits</th><th class="num">Feats</th></tr></thead>
+          <tbody>
+            <tr><td>2026-05-15 (v0.1.0)</td><td class="num">6</td><td class="num">3</td></tr>
+            <tr><td>2026-05-17 (v0.6→v0.7)</td><td class="num">12</td><td class="num">5</td></tr>
+            <tr><td>2026-05-22 (v0.7→v0.9)</td><td class="num">35</td><td class="num">19</td></tr>
+            <tr><td>2026-05-27 (v0.10.0)</td><td class="num">2</td><td class="num">1*</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:12px;color:var(--dim);margin-top:8px">*v0.10.0 commit conta como feat (BREAKING — remoção de surface). Outro commit = docs.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
-`disky` nasceu como CLI rápido pra agentes. Em maio adicionei `disky-mcp` (13 tools) e planejei `disky web` (FastHTML server) pensando em cobrir hosts que não fazem shell out. Funcionou — mas **única consumidora real** sempre foi Claude Code, que executa CLI direto via `Bash`. Cada tool MCP só duplicava o envelope JSON da CLI.
+<section>
+  <div class="num">07</div>
+  <div>
+    <h2>Recommended order · v0.10.1 + além</h2>
+    <p>Sequência S→M→L, value-first. Grupo A = receita rust-vs-giants (build size). Grupo B = skill v2 (UX agentic). Grupo C = nice-to-have da punch-list. Receitas externas (não-rust) vêm antes — ROI grande, custo baixo.</p>
+    <table>
+      <thead><tr><th>#</th><th>Item</th><th>Grupo</th><th class="num">Est feats</th><th class="num">Est days*</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Receita rust-vs-giants — <code>sccache</code> + <code>CARGO_HOME</code> global no <code>CONTRIBUTING.md</code></td><td>build</td><td class="num">1</td><td class="num">0.2</td></tr>
+        <tr><td>2</td><td>Skill <code>/disky</code> v2 — fluxo triage → propose → confirm → apply via <code>AskUserQuestion</code></td><td>skill</td><td class="num">2</td><td class="num">0.8</td></tr>
+        <tr><td>3</td><td>metrics/baseline.json reseed em máquina limpa</td><td>infra</td><td class="num">1</td><td class="num">0.2</td></tr>
+        <tr><td>4</td><td>Cleanup perf bug (79–250s → &lt;1s) — materialized view ou column-store hint</td><td>perf</td><td class="num">1</td><td class="num">0.6</td></tr>
+        <tr><td>5</td><td><code>.diskyignore</code> loader — extends ALWAYS_SKIP_SUBSTRINGS runtime</td><td>quality</td><td class="num">1</td><td class="num">0.3</td></tr>
+        <tr><td>6</td><td>N-snapshot growth — OLS sobre N snapshots, não só 2</td><td>query</td><td class="num">1</td><td class="num">0.5</td></tr>
+        <tr><td>7</td><td>Pattern classifier (log-shaped / burst / stable / declining)</td><td>query</td><td class="num">1</td><td class="num">0.5</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px;font-size:12px;color:var(--dim)"><i>* one active day per unit. Calendar days multiply by ~3 dado P(active)=0.33.</i></p>
+  </div>
+</section>
 
-- `disky-mcp` = 925 LOC num arquivo único, zero deps a mais
-- `disky web` = não-construído, 3 items na punch list
-- 8 dos 17 must-ship da v0.10.0 eram MCP-only — zero entregavam valor pro user
+<section>
+  <div class="num">08</div>
+  <div>
+    <h2>Bonus · NotebookLM rate-test</h2>
+    <p>Durante o grill paralelizamos <code>notebooklm source add</code> pra ver se valia ingerir 204 URLs do spec MCP. Achado vira patch pro bili <code>knowledge new</code>.</p>
+    <table>
+      <thead><tr><th>Conc</th><th class="num">n</th><th class="num">Wall</th><th class="num">Rate</th><th class="num">Falhas</th><th>Speedup</th></tr></thead>
+      <tbody>
+        <tr><td>1 (seq)</td><td class="num">—</td><td class="num">~3-4s/url</td><td class="num">0.28/s</td><td class="num">0</td><td>1.0×</td></tr>
+        <tr><td>5</td><td class="num">10</td><td class="num">14.6s</td><td class="num">0.69/s</td><td class="num">0</td><td>2.5×</td></tr>
+        <tr><td>10</td><td class="num">20</td><td class="num">17.2s</td><td class="num">1.16/s</td><td class="num">0</td><td>4.1×</td></tr>
+        <tr><td>20</td><td class="num">40</td><td class="num">23.1s</td><td class="num">1.73/s</td><td class="num">0</td><td>6.2×</td></tr>
+      </tbody>
+    </table>
+    <div class="signal"><b>Acionável bili:</b> trocar loop sequencial por <code>asyncio.Semaphore(10)</code> no <code>bili knowledge new</code>. 204 URLs vai de ~13min → ~3min. Zero rate-limit até P=20. Sweet spot P=10.</div>
+    <p style="margin-top:16px"><b>Notebook MCP criado:</b> <code>0e703189-34a8-42f6-88fe-acb2bada1852</code> · 236 sources ready · não usado nesta cut (defer earn-back).</p>
+  </div>
+</section>
 
-{% callout type="info" %}
-**Validado por grill** — 4 perguntas em sessão `dc2884dc` (2026-05-27) cobriram destino do código MCP, modelo de botões sem web, shape do fluxo skill, versionamento. Default recomendado bateu confidence ≥65% em todas.
-{% /callout %}
+<section>
+  <div class="num">09</div>
+  <div>
+    <h2>Próximos passos</h2>
+    <ul>
+      <li><code>git push origin main v0.10.0</code> — sua decisão (não autônomo, afeta GitHub)</li>
+      <li>Editar <code>~/.claude-pessoal/.claude.json</code> + <code>~/.claude-mukutu/.claude.json</code> — remover entry <code>mcpServers.disky</code></li>
+      <li><code>cargo install --path . --force</code> — reinstala binário sem <code>disky-mcp</code> morto</li>
+      <li>Implementar skill v2 (item #2 da tabela acima)</li>
+      <li>Aplicar receita rust-vs-giants pra reduzir 1-2 GB <code>target/</code> por projeto</li>
+    </ul>
+  </div>
+</section>
 
-## 2 — O que mudou
+</div>
 
-Cortamos uma superfície inteira, não um feature isolado. Mudança vem em três camadas: **código** (delete + Cargo), **doc** (AGENTS.md + CHANGELOG), **escopo** (8 items da punch-list pré-emptados).
-
-1. `git rm src/bin/disky-mcp.rs` — 925 linhas, history preserva
-2. `Cargo.toml` — bump `0.6.0 → 0.10.0`, remoção de `[[bin]] disky-mcp`
-3. `AGENTS.md` — rewrite das seções "MCP scope" + "Three surfaces" pra "Single surface — CLI only"
-4. `CHANGELOG.md` — entrada v0.10.0 com resurrection path explícito
-
-{% callout type="warn" %}
-**BREAKING** — `disky-mcp` bin sumiu. Profiles `.claude-pessoal` e `.claude-mukutu` ainda têm a entry `mcpServers.disky` apontando pro caminho antigo. Limpe manualmente — bili não vai conseguir invocar uma tool que não existe.
-{% /callout %}
-
-## 3 — Arquitetura · antes vs depois
-
-```mermaid
-graph LR
-  subgraph "ANTES (v0.9.0)"
-    A1[Claude Code] -->|Bash| B1[disky CLI]
-    A2[Claude Code] -->|MCP stdio| C1[disky-mcp]
-    A3[Claude Desktop?] -.->|MCP stdio| C1
-    C1 -->|same DuckDB| D1[(snapshots)]
-    B1 -->|same DuckDB| D1
-  end
-  subgraph "DEPOIS (v0.10.0)"
-    A4[Qualquer agent] -->|Bash| B2[disky CLI]
-    A5[Claude Code] -->|/disky skill| S[AskUser wizard]
-    S -->|Bash| B2
-    B2 --> D2[(snapshots)]
-  end
-```
-
-Antes: 2 caminhos vivos pro mesmo DuckDB, ambos com superfície de JSON envelope. Depois: 1 caminho, CLI, com a skill `/disky` como camada de UX ON TOP (não substitui — embrulha). O ponto de decisão que sumiu foi "qual surface o agent escolhe?" — agora não tem escolha, e isso é o ganho.
-
-## 4 — Punch-list resolvida
-
-17 must-ship → **9 done · 6 dropped · 2 deferred**. A versão sai com escopo cristalizado em vez de inchada.
-
-| Item | Status | Motivo |
-|---|---|---|
-| 6 MCP tools (growth/churn/predict/empty/old/filter) | {% tag color="secondary" %}SHIP v0.9.0{% /tag %} | mergeados antes do cut |
-| disky-mcp install em pessoal+mukutu | {% tag color="secondary" %}SHIP v0.9.0{% /tag %} | manual JSON patch |
-| MCP resources/list + read | {% tag color="primary" %}DROP{% /tag %} | zero user em host non-shell |
-| MCP prompts/list (3 canned flows) | {% tag color="primary" %}DROP{% /tag %} | skill `/disky` substitui |
-| MCP progress notifications | {% tag color="primary" %}DROP{% /tag %} | NDJSON em stderr cobre |
-| `disky web` FastHTML | {% tag color="primary" %}DROP{% /tag %} | botão = copy-paste, agent roda |
-| `disky install-mcp` subcmd | {% tag color="primary" %}DROP{% /tag %} | sem MCP, desnecessário |
-| `tests/mcp_protocol.rs` | {% tag color="primary" %}DROP{% /tag %} | sem MCP, desnecessário |
-| AGENTS.md + CHANGELOG updates | {% tag color="secondary" %}SHIP{% /tag %} | reescritos neste cut |
-| metrics/baseline.json reseed | {% tag color="accent" %}DEFER{% /tag %} | v0.10.1, scan limpo |
-| Smoke tests E2E | {% tag color="accent" %}DEFER{% /tag %} | skill `/disky` próxima sessão |
-
-{% callout type="warn" %}
-**O que sobrou pendente** — reseed do baseline + smoke E2E não bloqueiam release. Vão pra v0.10.1 quando rodar `disky scan ~` em máquina limpa + invocar a skill ponta-a-ponta.
-{% /callout %}
-
-## 5 — Bonus · NotebookLM rate-test
-
-Durante o grill paralelizamos `notebooklm source add` pra ver se valia ingerir os 204 URLs do spec MCP. Achado vira patch pro bili `knowledge new`.
-
-| Concorrência | n | Wall | Rate | Falhas | Speedup |
-|---|---|---|---|---|---|
-| 1 (seq) | — | ~3-4s/url | 0.28/s | 0 | {% tag color="primary" %}1.0×{% /tag %} |
-| 5 | 10 | 14.6s | 0.69/s | 0 | {% tag color="secondary" %}2.5×{% /tag %} |
-| 10 | 20 | 17.2s | 1.16/s | 0 | {% tag color="secondary" %}4.1×{% /tag %} |
-| 20 | 40 | 23.1s | 1.73/s | 0 | {% tag color="accent" %}6.2×{% /tag %} |
-
-{% callout type="ok" %}
-**Acionável bili** — trocar loop sequencial 3-4s/URL por `asyncio.Semaphore(10)` no `bili knowledge new`. 204 URLs vão de ~13min → ~3min. Zero rate-limit até P=20.
-{% /callout %}
-
-Notebook MCP foi criado mesmo assim (`0e703189-34a8-42f6-88fe-acb2bada1852`, 236 sources ready) — fica no esperando earn-back, não bloqueia release.
-
-## 6 — Take-aways
-
-Esse é um release que **encolhe**. Em geral software cresce — adicionar features é mais fácil que apagar. Mas quando a única consumidora real está num caminho específico, a coisa certa é seguir o caminho, não a opcionalidade. Resurrection é barato (1 active day de `git log`); manutenção contínua de surface morta é cara.
-
-> A melhor superfície é a única que tem usuário.
-
-```bash
-# Próximo passo manual (não pushei, decisão sua):
-git push origin main v0.10.0
-
-# Depois, limpe profiles:
-# editar ~/.claude-pessoal/.claude.json + ~/.claude-mukutu/.claude.json,
-# remover entry mcpServers.disky
-
-# Reinstala binário sem o bin morto:
-cargo install --path . --force
-```
-
-{% callout type="ok" %}
-**Next step** — `git push origin main v0.10.0` quando você autorizar. Depois implementar skill `/disky` v2 com fluxo `triage → propose → confirm → apply` via AskUserQuestion.
-{% /callout %}
-
----
-
-*gerado 2026-05-27 · sessão `dc2884dc` · commit `7ded431` · tag local `v0.10.0` (não-pushed) · template skeleton-markdoc (brut palette + daisyUI v5 + Markdoc + Mermaid)*
-
-</script>
-<!-- LLM EDITS ONLY THIS BLOCK ↑↑↑ -->
-
-<script type="module">
-import Markdoc from 'https://esm.sh/@markdoc/markdoc@0.5.2';
-import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-const T=(name,cls,children)=>({$$mdtype:'Tag',name,attributes:{class:cls},children});
-const tags={
-  callout:{render:'div',attributes:{type:{type:String,default:'info'}},
-    transform(n,c){const a=n.transformAttributes(c);return T('div',`cl cl-${a.type||'info'}`,n.transformChildren(c));}},
-  tag:{render:'span',attributes:{color:{type:String,default:'primary'}},
-    transform(n,c){const a=n.transformAttributes(c);return T('span',`tg tg-${a.color||'primary'}`,n.transformChildren(c));}},
-  stat:{render:'div',selfClosing:true,attributes:{label:{type:String},value:{type:String}},
-    transform(n,c){const a=n.transformAttributes(c);return T('div','st',[T('div','st-label',[a.label||'']),T('div','st-value',[a.value||''])]);}}
-};
-function wrapStats(html){return html.replace(/(?:<div class="st">[\s\S]*?<\/div>\s*<\/div>\s*){2,}/g,m=>`<div class="stgrid">${m}</div>`);}
-function renderAll(){
-  const src=document.getElementById('src').textContent;
-  let html=Markdoc.renderers.html(Markdoc.transform(Markdoc.parse(src),{tags}));
-  html=html.replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g,(_,c)=>{
-    const t=c.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
-    return `<pre class="mermaid">${t}</pre>`;
-  });
-  html=wrapStats(html);
-  document.getElementById('out').innerHTML=html;
-  const v=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-  mermaid.initialize({startOnLoad:false,theme:'base',
-    themeVariables:{primaryColor:v('--color-base-200'),primaryTextColor:v('--color-base-content'),
-      primaryBorderColor:v('--color-base-content'),lineColor:v('--color-secondary'),fontFamily:'Manrope'}});
-  mermaid.run({querySelector:'pre.mermaid'}).then(()=>{
-    document.querySelectorAll('pre.mermaid svg').forEach(svg=>{
-      svg.setAttribute('width','100%');svg.setAttribute('height','420');
-      const pre=svg.closest('pre');
-      const pz=svgPanZoom(svg,{fit:true,center:true,minZoom:0.3,maxZoom:10});
-      const a=document.createElement('div');a.className='mm-actions';
-      a.innerHTML='<button data-act="in">+</button><button data-act="out">−</button><button data-act="fit">FIT</button><button data-act="full">⛶</button>';
-      pre.appendChild(a);
-      a.onclick=e=>{const k=e.target.dataset.act;if(k==='in')pz.zoomIn();else if(k==='out')pz.zoomOut();else if(k==='fit'){pz.resize();pz.fit();pz.center();}else if(k==='full')pre.requestFullscreen?.();};
-      pre.addEventListener('dblclick',e=>{if(e.target.tagName!=='BUTTON')pre.requestFullscreen?.();});
-    });
-    document.querySelectorAll('#out pre').forEach(pre=>{
-      if(pre.classList.contains('mermaid'))return;
-      const b=document.createElement('button');b.className='copy-btn';b.textContent='COPY';
-      b.onclick=async()=>{await navigator.clipboard.writeText(pre.querySelector('code')?.innerText||pre.innerText);b.textContent='COPIED';b.dataset.ok='1';setTimeout(()=>{b.textContent='COPY';b.dataset.ok='0'},1200);};
-      pre.appendChild(b);
-    });
-  });
-}
-window.__rerenderMarkdoc=renderAll;renderAll();
-</script>
 <script>
-  function toggleTheme(){const c=document.documentElement.getAttribute('data-theme');const n=c==='brut-dark'?'brut':'brut-dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('brut-theme',n);window.__rerenderMarkdoc?.()}
-  (()=>{const s=localStorage.getItem('brut-theme');if(s)document.documentElement.setAttribute('data-theme',s)})();
+const FEATS_DONE = 28;
+const ACTIVE_DAYS_HIST = [
+  {date:'2026-05-15', commits:6, feats:3},
+  {date:'2026-05-17', commits:12, feats:5},
+  {date:'2026-05-22', commits:35, feats:19},
+  {date:'2026-05-27', commits:2, feats:1},
+];
+const CT_SAMPLES = [0.58,0.75,1.37,1.52,1.75,1.85,2.4,2.52,2.58,2.85,3.23,3.83,3.87,4.33,4.97,6.03,6.12,6.35,6.55,7.12,7.72,8.2,9.18,20.13,47.33,3283.57,6089.05];
+const ACTIVE_FEAT_THROUGHPUT = [3,5,19];
+const BACKLOG_V11 = 7;
+const CAL_DAYS_OBSERVED = 13;       // May15 → May27
+const ACTIVE_DAYS_COUNT = 4;
+const P_ACTIVE = ACTIVE_DAYS_COUNT / CAL_DAYS_OBSERVED;  // ~0.31
+const TODAY = new Date('2026-05-27');
+
+document.getElementById('genTs').textContent = new Date().toISOString().slice(0,19).replace('T',' ');
+
+// --- tiles ---
+const burstCT = CT_SAMPLES.filter(x=>x<60).sort((a,b)=>a-b);
+const ctP50 = burstCT[Math.floor(burstCT.length*0.5)];
+const ctP85 = burstCT[Math.floor(burstCT.length*0.85)];
+const tpMean = ACTIVE_FEAT_THROUGHPUT.reduce((a,b)=>a+b,0)/ACTIVE_FEAT_THROUGHPUT.length;
+const tiles = [
+  {k:'Cycle Time p50',v:ctP50.toFixed(1),u:'min · in-burst'},
+  {k:'Cycle Time p85',v:ctP85.toFixed(1),u:'min · in-burst'},
+  {k:'Lead Time p50',v:'~4',u:'min · flat branch model'},
+  {k:'Throughput',v:tpMean.toFixed(1),u:'feats/active day'},
+  {k:'WIP',v:'0',u:'no open branch',cls:'olive'},
+  {k:'Backlog v0.10.0',v:'0',u:'all resolved',cls:'olive'},
+  {k:'Done v0.10.0',v:'9/17',u:'merged · 6 dropped · 2 defer'},
+  {k:'Backlog v0.10.1',v:BACKLOG_V11,u:'nice-to-have',cls:'rust'},
+];
+document.getElementById('tiles').innerHTML = tiles.map(t =>
+  `<div class="tile"><div class="k">${t.k}</div><div class="v ${t.cls||''}">${t.v}</div><div class="u">${t.u}</div></div>`
+).join('');
+
+// --- kanban (post-release) ---
+const items = {
+  done:[
+    'disky_growth/churn/predict MCP (annotated)',
+    'disky_empty/old/filter MCP',
+    'disky-mcp installed em pessoal + mukutu',
+    'BREAKING: disky-mcp bin removido (v0.10.0)',
+    'AGENTS.md rewrite — Single surface',
+    'CHANGELOG.md v0.10.0 entry',
+    'Cargo.toml bump 0.6 → 0.10.0',
+    'docs/ structure + reports + research',
+    'Local tag v0.10.0 cravada',
+  ],
+  drop:[
+    'MCP resources/list',
+    'MCP resources/read',
+    'MCP prompts/list (3 canned flows)',
+    'MCP progress notifications scan',
+    'MCP progress notifications cleanup',
+    'disky web (FastHTML server)',
+    'disky web button → cleanup SSE',
+    'disky install-mcp subcmd',
+    'tests/mcp_protocol.rs',
+  ],
+  defer:[
+    'metrics/baseline.json reseed',
+    'Smoke E2E: button click cleanup',
+    'Smoke E2E: chat invoke disky_growth',
+  ],
+};
+const col = (title,chip,chipcls,cls,arr) => `
+  <div class="col">
+    <h3>${title} <span class="chip ${chipcls}">${chip} · ${arr.length}</span></h3>
+    <div class="cards">
+      ${arr.map(t=>`<div class="card ${cls}">${t}</div>`).join('')}
+    </div>
+  </div>`;
+document.getElementById('kanban').innerHTML =
+  col('Done','SHIPPED','done','done',items.done) +
+  col('Dropped','SCOPE-CUT','drop','drop',items.drop) +
+  col('Deferred','v0.10.1','defer','defer',items.defer);
+
+// --- CT histogram ---
+(() => {
+  const svg = document.getElementById('ctHist');
+  const W=900,H=280,padL=50,padR=20,padT=20,padB=44;
+  const bins = [0,1,2,3,4,5,8,12,30,60,1440,10000];
+  const counts = bins.slice(0,-1).map(()=>0);
+  const colors = bins.slice(0,-1).map(b=>b>=60?'var(--deferred)':'var(--rust)');
+  CT_SAMPLES.forEach(v=>{ for(let i=0;i<bins.length-1;i++){ if(v>=bins[i]&&v<bins[i+1]){counts[i]++;break} } });
+  const maxC = Math.max(...counts);
+  const bw = (W-padL-padR)/counts.length;
+  let s='';
+  counts.forEach((c,i)=>{
+    const h = c/maxC*(H-padT-padB);
+    const x = padL + i*bw + 3;
+    const y = H-padB-h;
+    s += `<rect x="${x}" y="${y}" width="${bw-6}" height="${h}" fill="${colors[i]}"/>`;
+    if(c>0) s += `<text x="${x+bw/2-3}" y="${y-4}" font-family="JetBrains Mono" font-size="11" fill="var(--ink)" text-anchor="middle">${c}</text>`;
+    const lbl = bins[i+1]>=1440?bins[i]+'m+':bins[i]+'–'+bins[i+1];
+    s += `<text x="${x+bw/2-3}" y="${H-padB+18}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="middle">${lbl}</text>`;
+  });
+  s += `<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+  s += `<text x="${padL}" y="${padT-4}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)">count</text>`;
+  s += `<text x="${W-padR}" y="${H-padB+36}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)" text-anchor="end">minutes between feat commits</text>`;
+  svg.innerHTML = s;
+})();
+
+// --- Lead Time bars (per tag) ---
+(() => {
+  const svg = document.getElementById('ltBars');
+  const W=900,H=240,padL=80,padR=20,padT=20,padB=44;
+  // Compute LT: minutes between first feat of a version cycle and the tag
+  const versions = [
+    {tag:'v0.1.0', lt_min: 0},                  // init release
+    {tag:'v0.7.0', lt_min: 30.7},               // May17 first feat 19:55 → 20:29 then jumped session, picked May22 03:46 first feat → 04:26 tag = 40min
+    {tag:'v0.8.0', lt_min: 27.9},               // 04:26 → 04:54
+    {tag:'v0.9.0', lt_min: 71.5},               // 04:54 → 06:06
+    {tag:'v0.10.0', lt_min: 0.0},               // single-commit cut
+  ];
+  const maxLT = Math.max(...versions.map(v=>v.lt_min), 60);
+  const bw = (W-padL-padR)/versions.length;
+  let s='';
+  versions.forEach((v,i)=>{
+    const h = v.lt_min/maxLT*(H-padT-padB);
+    const x = padL + i*bw + 8;
+    const y = H-padB-h;
+    s += `<rect x="${x}" y="${y}" width="${bw-16}" height="${Math.max(h,2)}" fill="var(--olive)"/>`;
+    s += `<text x="${x+bw/2-8}" y="${y-4}" font-family="JetBrains Mono" font-size="11" fill="var(--ink)" text-anchor="middle">${v.lt_min.toFixed(0)}m</text>`;
+    s += `<text x="${x+bw/2-8}" y="${H-padB+18}" font-family="Fraunces" font-size="14" fill="var(--rust)" text-anchor="middle" font-weight="600">${v.tag}</text>`;
+  });
+  s += `<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+  s += `<text x="${padL-8}" y="${padT+8}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)" text-anchor="end">min</text>`;
+  svg.innerHTML = s;
+})();
+
+// --- Monte Carlo ---
+function runMC(n=10000){
+  const days=[];
+  const tp = ACTIVE_FEAT_THROUGHPUT;
+  for(let r=0;r<n;r++){
+    let feats=0, d=0;
+    while(feats<BACKLOG_V11 && d<365){
+      d++;
+      if(Math.random()<P_ACTIVE){
+        feats += tp[Math.floor(Math.random()*tp.length)];
+      }
+    }
+    days.push(d);
+  }
+  days.sort((a,b)=>a-b);
+  return days;
+}
+(() => {
+  const days = runMC(10000);
+  const p50=days[5000], p70=days[7000], p85=days[8500], p95=days[9500];
+  const addDays = d => new Date(TODAY.getTime()+d*86400000).toISOString().slice(0,10);
+  document.getElementById('forecast').innerHTML = `
+    P50 = <b>${p50}d</b> (${addDays(p50)}) ·
+    P70 = <b>${p70}d</b> (${addDays(p70)}) ·
+    P85 = <b>${p85}d</b> (${addDays(p85)}) ·
+    P95 = <b>${p95}d</b> (${addDays(p95)})
+    <br><span style="font-size:13px;color:var(--paper);opacity:.7">Caveat: status-quo cadence. 1 sessão focada (estilo May 22: 19 feats) colapsa pra &lt; 1 active day.</span>`;
+
+  const svg = document.getElementById('mc');
+  const W=900,H=280,padL=50,padR=30,padT=20,padB=44;
+  const xMax = Math.min(p95+2, Math.max(...days));
+  const xs = [...Array(xMax+1).keys()];
+  const cdf = xs.map(x => days.filter(d=>d<=x).length / days.length);
+  const xScale = x => padL + (x/xMax)*(W-padL-padR);
+  const yScale = y => H-padB - y*(H-padT-padB);
+  let path='';
+  cdf.forEach((y,i)=>{ path += (i===0?'M':'L') + xScale(xs[i]) + ',' + yScale(y) + ' '; });
+  let s = `<path d="${path}" fill="none" stroke="var(--rust)" stroke-width="2.5"/>`;
+  s += `<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+  s += `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+  [0,0.25,0.5,0.7,0.85,0.95,1].forEach(y => {
+    s += `<line x1="${padL-4}" y1="${yScale(y)}" x2="${padL}" y2="${yScale(y)}" stroke="var(--ink)"/>`;
+    s += `<text x="${padL-8}" y="${yScale(y)+4}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="end">${(y*100).toFixed(0)}%</text>`;
+  });
+  [0, Math.floor(xMax/4), Math.floor(xMax/2), Math.floor(3*xMax/4), xMax].forEach(x => {
+    s += `<line x1="${xScale(x)}" y1="${H-padB}" x2="${xScale(x)}" y2="${H-padB+4}" stroke="var(--ink)"/>`;
+    s += `<text x="${xScale(x)}" y="${H-padB+18}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="middle">${x}d</text>`;
+  });
+  [[p50,'P50','var(--olive)'],[p85,'P85','var(--partial)'],[p95,'P95','var(--rust)']].forEach(([px,lbl,c]) => {
+    s += `<line x1="${xScale(px)}" y1="${padT}" x2="${xScale(px)}" y2="${H-padB}" stroke="${c}" stroke-width="1" stroke-dasharray="4 4" opacity=".6"/>`;
+    s += `<text x="${xScale(px)}" y="${padT+12}" font-family="JetBrains Mono" font-size="11" fill="${c}" text-anchor="middle" font-weight="600">${lbl}=${px}d</text>`;
+  });
+  s += `<text x="${padL}" y="${padT-4}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)">P(ship ≤ X days)</text>`;
+  s += `<text x="${W-padR}" y="${H-padB+36}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)" text-anchor="end">calendar days from today</text>`;
+  svg.innerHTML = s;
+
+  document.getElementById('mcLegend').innerHTML = `
+    <span><i style="background:var(--rust)"></i>CDF (10k sims)</span>
+    <span><i style="background:var(--olive)"></i>P50 ${p50}d</span>
+    <span><i style="background:var(--partial)"></i>P85 ${p85}d</span>
+    <span><i style="background:var(--rust)"></i>P95 ${p95}d</span>
+    <span><b>backlog</b> ${BACKLOG_V11} nice-to-have feats</span>
+    <span><b>P(active)</b> ${(P_ACTIVE*100).toFixed(0)}%</span>`;
+})();
+
+// --- Throughput bars ---
+(() => {
+  const svg = document.getElementById('tputBars');
+  const W=460,H=220,padL=44,padR=12,padT=16,padB=44;
+  const max = Math.max(...ACTIVE_DAYS_HIST.map(d=>d.commits));
+  const bw = (W-padL-padR)/ACTIVE_DAYS_HIST.length;
+  let s='';
+  ACTIVE_DAYS_HIST.forEach((d,i)=>{
+    const xa = padL + i*bw + 4;
+    const hc = d.commits/max*(H-padT-padB);
+    const hf = d.feats/max*(H-padT-padB);
+    s += `<rect x="${xa}" y="${H-padB-hc}" width="${(bw-12)/2}" height="${hc}" fill="var(--deferred)"/>`;
+    s += `<rect x="${xa+(bw-12)/2+2}" y="${H-padB-hf}" width="${(bw-12)/2}" height="${hf}" fill="var(--rust)"/>`;
+    s += `<text x="${xa+(bw-8)/2}" y="${H-padB+14}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="middle">${d.date.slice(5)}</text>`;
+    s += `<text x="${xa+(bw-8)/2}" y="${H-padB+28}" font-family="JetBrains Mono" font-size="9" fill="var(--ink)" text-anchor="middle">${d.commits}/${d.feats}</text>`;
+  });
+  s += `<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+  s += `<text x="${padL-6}" y="${padT+6}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="end">count</text>`;
+  // legend inline
+  s += `<rect x="${padL}" y="2" width="10" height="10" fill="var(--deferred)"/><text x="${padL+14}" y="11" font-family="JetBrains Mono" font-size="10" fill="var(--dim)">all commits</text>`;
+  s += `<rect x="${padL+90}" y="2" width="10" height="10" fill="var(--rust)"/><text x="${padL+104}" y="11" font-family="JetBrains Mono" font-size="10" fill="var(--dim)">feats only</text>`;
+  svg.innerHTML = s;
+})();
 </script>
 </body>
 </html>

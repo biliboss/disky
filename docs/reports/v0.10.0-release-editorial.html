@@ -1,0 +1,301 @@
+<!--
+TEMPLATE: skeleton-markdoc (iter4 — pre-scaffolded payload + custom tags)
+USE: rich content (5+ sections, mermaid, code, callouts, stats) — MAX token economy
+THEMES: brut light + dark via daisyUI v5
+LIBS: daisyUI + Markdoc ESM + Mermaid + svg-pan-zoom — all pre-bundled
+HOW: LLM ONLY edits markdown inside <script type="text/markdown" id="src">.
+     Replace every {{hint}} with real prose. Keep structure; add/drop sections as needed.
+CUSTOM TAGS:
+  {% callout type="warn|info|ok" %}content{% /callout %}
+  {% tag color="primary|secondary|accent" %}label{% /tag %}
+  {% stat label="X" value="Y" /%}
+COPY: cp + edit markdown + <title> + <header> tokens. Don't touch infra below.
+-->
+<!doctype html>
+<html lang="pt-BR" data-theme="brut">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>disky v0.10.0 — CLI é a superfície</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&family=Manrope:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.2/dist/svg-pan-zoom.min.js"></script>
+<style type="text/tailwindcss">
+  @plugin "daisyui" { themes: false; }
+  @plugin "daisyui/theme" { name:"brut"; default:true; color-scheme:light;
+    --color-base-100:#F5F1E8;--color-base-200:#FBF8F0;--color-base-300:#D9D2C2;--color-base-content:#14110F;
+    --color-primary:#B23A1F;--color-primary-content:#F5F1E8;--color-secondary:#5C6831;--color-secondary-content:#F5F1E8;
+    --color-accent:#E8A33D;--color-accent-content:#14110F;--color-neutral:#14110F;--color-neutral-content:#F5F1E8;
+    --radius-selector:0;--radius-field:0;--radius-box:0;--border:2px; }
+  @plugin "daisyui/theme" { name:"brut-dark"; prefersdark:true; color-scheme:dark;
+    --color-base-100:#14110F;--color-base-200:#1F1A16;--color-base-300:#2D2620;--color-base-content:#F5F1E8;
+    --color-primary:#D6552E;--color-primary-content:#14110F;--color-secondary:#8A9847;--color-secondary-content:#14110F;
+    --color-accent:#F5B547;--color-accent-content:#14110F;--color-neutral:#F5F1E8;--color-neutral-content:#14110F;
+    --radius-selector:0;--radius-field:0;--radius-box:0;--border:2px; }
+</style>
+<style>
+  /* CDN Tailwind v3 NÃO processa @plugin "daisyui/theme" — :root fallback garante brut palette runtime. NÃO REMOVA. Detalhes em CANONICAL.md. */
+  :root, [data-theme="brut"] {
+    --color-base-100:#F5F1E8; --color-base-200:#FBF8F0; --color-base-300:#D9D2C2; --color-base-content:#14110F;
+    --color-primary:#B23A1F; --color-primary-content:#F5F1E8;
+    --color-secondary:#5C6831; --color-secondary-content:#F5F1E8;
+    --color-accent:#E8A33D; --color-accent-content:#14110F;
+    --color-neutral:#14110F; --color-neutral-content:#F5F1E8;
+    --color-info:#5C6831; --color-info-content:#F5F1E8;
+    --color-success:#5C6831; --color-success-content:#F5F1E8;
+    --color-warning:#E8A33D; --color-warning-content:#14110F;
+    --color-error:#B23A1F; --color-error-content:#F5F1E8;
+    --radius-selector:0; --radius-field:0; --radius-box:0; --border:2px;
+    color-scheme: light;
+  }
+  [data-theme="brut-dark"] {
+    --color-base-100:#14110F; --color-base-200:#1F1A16; --color-base-300:#2D2620; --color-base-content:#F5F1E8;
+    --color-primary:#D6552E; --color-primary-content:#14110F;
+    --color-secondary:#8A9847; --color-secondary-content:#14110F;
+    --color-accent:#F5B547; --color-accent-content:#14110F;
+    --color-neutral:#F5F1E8; --color-neutral-content:#14110F;
+    --color-info:#8A9847; --color-info-content:#14110F;
+    --color-success:#8A9847; --color-success-content:#14110F;
+    --color-warning:#F5B547; --color-warning-content:#14110F;
+    --color-error:#D6552E; --color-error-content:#14110F;
+    color-scheme: dark;
+  }
+  body { background-color: var(--color-base-100); color: var(--color-base-content); }
+</style>
+<style>
+  body{font-family:'Manrope',sans-serif;background-image:linear-gradient(rgba(127,127,127,0.06) 1px,transparent 1px);background-size:100% 28px}
+  h1,h2,h3,h4{font-family:'Fraunces',serif}
+  .mono,kbd{font-family:'JetBrains Mono',monospace}
+  #out h1{font-size:3.5rem;font-variation-settings:'opsz' 144,'wght' 900;letter-spacing:-.03em;margin:0 0 .5em;border-bottom:3px solid hsl(var(--color-base-content));padding-bottom:.2em;color:hsl(var(--color-base-content))}
+  #out h2{font-size:2.2rem;margin:2em 0 .5em;border-left:6px solid hsl(var(--color-primary));padding-left:.6em;color:hsl(var(--color-base-content))}
+  #out h3{font-size:1.4rem;margin:1.5em 0 .4em;color:hsl(var(--color-primary))}
+  #out p{margin:0 0 1em;line-height:1.65;color:hsl(var(--color-base-content))}
+  #out ul,#out ol{margin:0 0 1em 0;padding-left:1.5em;color:hsl(var(--color-base-content))}
+  #out li{margin:.3em 0;line-height:1.55}
+  #out a{color:hsl(var(--color-primary));text-decoration:underline;text-underline-offset:3px}
+  #out blockquote{border-left:4px solid hsl(var(--color-secondary));background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));margin:1.5em 0;padding:.5em 1em;font-style:italic}
+  #out hr{border:none;border-top:3px double hsl(var(--color-base-content));margin:3em 0}
+  #out table{border-collapse:collapse;width:100%;margin:1.5em 0;color:hsl(var(--color-base-content))}
+  #out th,#out td{border:1px solid hsl(var(--color-base-content));padding:.4em .8em;text-align:left;color:hsl(var(--color-base-content))}
+  #out th{background:hsl(var(--color-base-content));color:hsl(var(--color-base-100));font-family:'Manrope',sans-serif;font-size:.85em;text-transform:uppercase;letter-spacing:.05em}
+  #out tr:nth-child(odd) td{background:hsl(var(--color-base-200));color:hsl(var(--color-base-content))}
+  #out tr:nth-child(even) td{background:hsl(var(--color-base-100));color:hsl(var(--color-base-content))}
+  #out code{font-family:'JetBrains Mono',monospace;font-size:.88em;background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));padding:1px 6px;border:1px solid hsl(var(--color-base-300))}
+  #out pre{position:relative;background:hsl(var(--color-neutral));color:hsl(var(--color-neutral-content));padding:1em 1.2em;overflow-x:auto;border-left:4px solid hsl(var(--color-primary));margin:1.5em 0;font-family:'JetBrains Mono',monospace;font-size:.85em}
+  #out pre code{background:transparent;border:none;padding:0;color:inherit;font-size:inherit}
+  #out pre.mermaid{background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));padding:1.5em;border-left:none;border:1px solid hsl(var(--color-base-content));min-height:200px}
+  #out pre.mermaid svg{max-width:none;cursor:grab}#out pre.mermaid svg:active{cursor:grabbing}
+  .mm-actions{position:absolute;top:8px;right:8px;display:flex;gap:4px;z-index:2}
+  .mm-actions button{background:hsl(var(--color-neutral));color:hsl(var(--color-neutral-content));border:2px solid hsl(var(--color-neutral));padding:3px 8px;font:600 .72rem 'JetBrains Mono',monospace;cursor:pointer;text-transform:uppercase;letter-spacing:.05em}
+  .mm-actions button:hover{background:hsl(var(--color-primary));border-color:hsl(var(--color-primary));color:hsl(var(--color-primary-content))}
+  #out pre.mermaid:fullscreen{background:hsl(var(--color-base-100));padding:2rem}#out pre.mermaid:fullscreen svg{width:100%;height:100%}
+  .copy-btn{position:absolute;top:0;right:0;background:hsl(var(--color-base-100));color:hsl(var(--color-base-content));border:0;border-left:2px solid hsl(var(--color-base-content));border-bottom:2px solid hsl(var(--color-base-content));padding:4px 10px;font:700 .72rem 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;z-index:2}
+  .copy-btn:hover{background:hsl(var(--color-primary));color:hsl(var(--color-primary-content))}
+  .copy-btn[data-ok="1"]{background:hsl(var(--color-secondary));color:hsl(var(--color-secondary-content))}
+  .cl{margin:1.5em 0;padding:.9em 1.1em;border-left:4px solid hsl(var(--color-base-content))}
+  .cl>*:last-child{margin-bottom:0}
+  .cl-warn{background:hsl(var(--color-accent));color:hsl(var(--color-accent-content));border-left-color:hsl(var(--color-accent-content))}
+  .cl-warn p,.cl-warn li,.cl-warn strong{color:hsl(var(--color-accent-content))}
+  .cl-info{background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));border-left-color:hsl(var(--color-primary))}
+  .cl-ok{background:hsl(var(--color-secondary));color:hsl(var(--color-secondary-content));border-left-color:hsl(var(--color-secondary-content))}
+  .cl-ok p,.cl-ok li,.cl-ok strong{color:hsl(var(--color-secondary-content))}
+  .tg{display:inline-block;padding:2px 10px;font:600 .78rem 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.05em;margin:0 2px;border:2px solid transparent}
+  .tg-primary{background:hsl(var(--color-primary));color:hsl(var(--color-primary-content));border-color:hsl(var(--color-primary))}
+  .tg-secondary{background:hsl(var(--color-secondary));color:hsl(var(--color-secondary-content));border-color:hsl(var(--color-secondary))}
+  .tg-accent{background:hsl(var(--color-accent));color:hsl(var(--color-accent-content));border-color:hsl(var(--color-accent))}
+  .stgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.6em;margin:1.5em 0}
+  .st{background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));border:2px solid hsl(var(--color-base-content));padding:.8em 1em}
+  .st-label{font:600 .72rem 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.08em;opacity:.7;color:hsl(var(--color-base-content))}
+  .st-value{font-family:'Fraunces',serif;font-size:2rem;font-weight:900;line-height:1;color:hsl(var(--color-primary));margin-top:.2em}
+</style>
+</head>
+<body>
+
+<header class="border-b-2 border-base-content">
+  <div class="max-w-4xl mx-auto px-6 py-3 flex justify-between items-center text-xs mono">
+    <div><span class="badge badge-soft mr-2">release · v0.10.0</span><span class="opacity-60">disky — CLI é a superfície</span></div>
+    <div class="flex gap-3 items-center"><span>2026-05-27</span><button class="btn btn-xs btn-ghost mono" onclick="toggleTheme()">◐ theme</button></div>
+  </div>
+</header>
+
+<main id="out" class="max-w-4xl mx-auto px-6 py-10"></main>
+
+<!-- LLM EDITS ONLY THIS BLOCK ↓↓↓ — replace every {{hint}} with real prose -->
+<script type="text/markdown" id="src">
+
+# disky v0.10.0 — CLI é a superfície
+
+**Cortamos 925 LOC de MCP, descartamos o plano de `disky web`, e bumpamos pra v0.10.0. Resultado: uma superfície, um contrato, manutenção 6× menor.**
+
+{% stat label="LOC removidas" value="925" /%}
+{% stat label="Net diff" value="−922" /%}
+{% stat label="Bins" value="2 → 1" /%}
+
+## 1 — A decisão
+
+`disky` nasceu como CLI rápido pra agentes. Em maio adicionei `disky-mcp` (13 tools) e planejei `disky web` (FastHTML server) pensando em cobrir hosts que não fazem shell out. Funcionou — mas **única consumidora real** sempre foi Claude Code, que executa CLI direto via `Bash`. Cada tool MCP só duplicava o envelope JSON da CLI.
+
+- `disky-mcp` = 925 LOC num arquivo único, zero deps a mais
+- `disky web` = não-construído, 3 items na punch list
+- 8 dos 17 must-ship da v0.10.0 eram MCP-only — zero entregavam valor pro user
+
+{% callout type="info" %}
+**Validado por grill** — 4 perguntas em sessão `dc2884dc` (2026-05-27) cobriram destino do código MCP, modelo de botões sem web, shape do fluxo skill, versionamento. Default recomendado bateu confidence ≥65% em todas.
+{% /callout %}
+
+## 2 — O que mudou
+
+Cortamos uma superfície inteira, não um feature isolado. Mudança vem em três camadas: **código** (delete + Cargo), **doc** (AGENTS.md + CHANGELOG), **escopo** (8 items da punch-list pré-emptados).
+
+1. `git rm src/bin/disky-mcp.rs` — 925 linhas, history preserva
+2. `Cargo.toml` — bump `0.6.0 → 0.10.0`, remoção de `[[bin]] disky-mcp`
+3. `AGENTS.md` — rewrite das seções "MCP scope" + "Three surfaces" pra "Single surface — CLI only"
+4. `CHANGELOG.md` — entrada v0.10.0 com resurrection path explícito
+
+{% callout type="warn" %}
+**BREAKING** — `disky-mcp` bin sumiu. Profiles `.claude-pessoal` e `.claude-mukutu` ainda têm a entry `mcpServers.disky` apontando pro caminho antigo. Limpe manualmente — bili não vai conseguir invocar uma tool que não existe.
+{% /callout %}
+
+## 3 — Arquitetura · antes vs depois
+
+```mermaid
+graph LR
+  subgraph "ANTES (v0.9.0)"
+    A1[Claude Code] -->|Bash| B1[disky CLI]
+    A2[Claude Code] -->|MCP stdio| C1[disky-mcp]
+    A3[Claude Desktop?] -.->|MCP stdio| C1
+    C1 -->|same DuckDB| D1[(snapshots)]
+    B1 -->|same DuckDB| D1
+  end
+  subgraph "DEPOIS (v0.10.0)"
+    A4[Qualquer agent] -->|Bash| B2[disky CLI]
+    A5[Claude Code] -->|/disky skill| S[AskUser wizard]
+    S -->|Bash| B2
+    B2 --> D2[(snapshots)]
+  end
+```
+
+Antes: 2 caminhos vivos pro mesmo DuckDB, ambos com superfície de JSON envelope. Depois: 1 caminho, CLI, com a skill `/disky` como camada de UX ON TOP (não substitui — embrulha). O ponto de decisão que sumiu foi "qual surface o agent escolhe?" — agora não tem escolha, e isso é o ganho.
+
+## 4 — Punch-list resolvida
+
+17 must-ship → **9 done · 6 dropped · 2 deferred**. A versão sai com escopo cristalizado em vez de inchada.
+
+| Item | Status | Motivo |
+|---|---|---|
+| 6 MCP tools (growth/churn/predict/empty/old/filter) | {% tag color="secondary" %}SHIP v0.9.0{% /tag %} | mergeados antes do cut |
+| disky-mcp install em pessoal+mukutu | {% tag color="secondary" %}SHIP v0.9.0{% /tag %} | manual JSON patch |
+| MCP resources/list + read | {% tag color="primary" %}DROP{% /tag %} | zero user em host non-shell |
+| MCP prompts/list (3 canned flows) | {% tag color="primary" %}DROP{% /tag %} | skill `/disky` substitui |
+| MCP progress notifications | {% tag color="primary" %}DROP{% /tag %} | NDJSON em stderr cobre |
+| `disky web` FastHTML | {% tag color="primary" %}DROP{% /tag %} | botão = copy-paste, agent roda |
+| `disky install-mcp` subcmd | {% tag color="primary" %}DROP{% /tag %} | sem MCP, desnecessário |
+| `tests/mcp_protocol.rs` | {% tag color="primary" %}DROP{% /tag %} | sem MCP, desnecessário |
+| AGENTS.md + CHANGELOG updates | {% tag color="secondary" %}SHIP{% /tag %} | reescritos neste cut |
+| metrics/baseline.json reseed | {% tag color="accent" %}DEFER{% /tag %} | v0.10.1, scan limpo |
+| Smoke tests E2E | {% tag color="accent" %}DEFER{% /tag %} | skill `/disky` próxima sessão |
+
+{% callout type="warn" %}
+**O que sobrou pendente** — reseed do baseline + smoke E2E não bloqueiam release. Vão pra v0.10.1 quando rodar `disky scan ~` em máquina limpa + invocar a skill ponta-a-ponta.
+{% /callout %}
+
+## 5 — Bonus · NotebookLM rate-test
+
+Durante o grill paralelizamos `notebooklm source add` pra ver se valia ingerir os 204 URLs do spec MCP. Achado vira patch pro bili `knowledge new`.
+
+| Concorrência | n | Wall | Rate | Falhas | Speedup |
+|---|---|---|---|---|---|
+| 1 (seq) | — | ~3-4s/url | 0.28/s | 0 | {% tag color="primary" %}1.0×{% /tag %} |
+| 5 | 10 | 14.6s | 0.69/s | 0 | {% tag color="secondary" %}2.5×{% /tag %} |
+| 10 | 20 | 17.2s | 1.16/s | 0 | {% tag color="secondary" %}4.1×{% /tag %} |
+| 20 | 40 | 23.1s | 1.73/s | 0 | {% tag color="accent" %}6.2×{% /tag %} |
+
+{% callout type="ok" %}
+**Acionável bili** — trocar loop sequencial 3-4s/URL por `asyncio.Semaphore(10)` no `bili knowledge new`. 204 URLs vão de ~13min → ~3min. Zero rate-limit até P=20.
+{% /callout %}
+
+Notebook MCP foi criado mesmo assim (`0e703189-34a8-42f6-88fe-acb2bada1852`, 236 sources ready) — fica no esperando earn-back, não bloqueia release.
+
+## 6 — Take-aways
+
+Esse é um release que **encolhe**. Em geral software cresce — adicionar features é mais fácil que apagar. Mas quando a única consumidora real está num caminho específico, a coisa certa é seguir o caminho, não a opcionalidade. Resurrection é barato (1 active day de `git log`); manutenção contínua de surface morta é cara.
+
+> A melhor superfície é a única que tem usuário.
+
+```bash
+# Próximo passo manual (não pushei, decisão sua):
+git push origin main v0.10.0
+
+# Depois, limpe profiles:
+# editar ~/.claude-pessoal/.claude.json + ~/.claude-mukutu/.claude.json,
+# remover entry mcpServers.disky
+
+# Reinstala binário sem o bin morto:
+cargo install --path . --force
+```
+
+{% callout type="ok" %}
+**Next step** — `git push origin main v0.10.0` quando você autorizar. Depois implementar skill `/disky` v2 com fluxo `triage → propose → confirm → apply` via AskUserQuestion.
+{% /callout %}
+
+---
+
+*gerado 2026-05-27 · sessão `dc2884dc` · commit `7ded431` · tag local `v0.10.0` (não-pushed) · template skeleton-markdoc (brut palette + daisyUI v5 + Markdoc + Mermaid)*
+
+</script>
+<!-- LLM EDITS ONLY THIS BLOCK ↑↑↑ -->
+
+<script type="module">
+import Markdoc from 'https://esm.sh/@markdoc/markdoc@0.5.2';
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+const T=(name,cls,children)=>({$$mdtype:'Tag',name,attributes:{class:cls},children});
+const tags={
+  callout:{render:'div',attributes:{type:{type:String,default:'info'}},
+    transform(n,c){const a=n.transformAttributes(c);return T('div',`cl cl-${a.type||'info'}`,n.transformChildren(c));}},
+  tag:{render:'span',attributes:{color:{type:String,default:'primary'}},
+    transform(n,c){const a=n.transformAttributes(c);return T('span',`tg tg-${a.color||'primary'}`,n.transformChildren(c));}},
+  stat:{render:'div',selfClosing:true,attributes:{label:{type:String},value:{type:String}},
+    transform(n,c){const a=n.transformAttributes(c);return T('div','st',[T('div','st-label',[a.label||'']),T('div','st-value',[a.value||''])]);}}
+};
+function wrapStats(html){return html.replace(/(?:<div class="st">[\s\S]*?<\/div>\s*<\/div>\s*){2,}/g,m=>`<div class="stgrid">${m}</div>`);}
+function renderAll(){
+  const src=document.getElementById('src').textContent;
+  let html=Markdoc.renderers.html(Markdoc.transform(Markdoc.parse(src),{tags}));
+  html=html.replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g,(_,c)=>{
+    const t=c.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+    return `<pre class="mermaid">${t}</pre>`;
+  });
+  html=wrapStats(html);
+  document.getElementById('out').innerHTML=html;
+  const v=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  mermaid.initialize({startOnLoad:false,theme:'base',
+    themeVariables:{primaryColor:v('--color-base-200'),primaryTextColor:v('--color-base-content'),
+      primaryBorderColor:v('--color-base-content'),lineColor:v('--color-secondary'),fontFamily:'Manrope'}});
+  mermaid.run({querySelector:'pre.mermaid'}).then(()=>{
+    document.querySelectorAll('pre.mermaid svg').forEach(svg=>{
+      svg.setAttribute('width','100%');svg.setAttribute('height','420');
+      const pre=svg.closest('pre');
+      const pz=svgPanZoom(svg,{fit:true,center:true,minZoom:0.3,maxZoom:10});
+      const a=document.createElement('div');a.className='mm-actions';
+      a.innerHTML='<button data-act="in">+</button><button data-act="out">−</button><button data-act="fit">FIT</button><button data-act="full">⛶</button>';
+      pre.appendChild(a);
+      a.onclick=e=>{const k=e.target.dataset.act;if(k==='in')pz.zoomIn();else if(k==='out')pz.zoomOut();else if(k==='fit'){pz.resize();pz.fit();pz.center();}else if(k==='full')pre.requestFullscreen?.();};
+      pre.addEventListener('dblclick',e=>{if(e.target.tagName!=='BUTTON')pre.requestFullscreen?.();});
+    });
+    document.querySelectorAll('#out pre').forEach(pre=>{
+      if(pre.classList.contains('mermaid'))return;
+      const b=document.createElement('button');b.className='copy-btn';b.textContent='COPY';
+      b.onclick=async()=>{await navigator.clipboard.writeText(pre.querySelector('code')?.innerText||pre.innerText);b.textContent='COPIED';b.dataset.ok='1';setTimeout(()=>{b.textContent='COPY';b.dataset.ok='0'},1200);};
+      pre.appendChild(b);
+    });
+  });
+}
+window.__rerenderMarkdoc=renderAll;renderAll();
+</script>
+<script>
+  function toggleTheme(){const c=document.documentElement.getAttribute('data-theme');const n=c==='brut-dark'?'brut':'brut-dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('brut-theme',n);window.__rerenderMarkdoc?.()}
+  (()=>{const s=localStorage.getItem('brut-theme');if(s)document.documentElement.setAttribute('data-theme',s)})();
+</script>
+</body>
+</html>
