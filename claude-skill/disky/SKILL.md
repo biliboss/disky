@@ -37,9 +37,17 @@ User answer routes to the matching stage 2 flow. **Persist the choice** via a me
 ```bash
 DB=/tmp/disky-skill-$(date +%s).db
 disky scan ${1:-$HOME} --db $DB --format json    # stream NDJSON progress to user
+disky stats --snapshot $DB --physical --format json   # ALWAYS --physical — logical lies via sparse files
 disky top --snapshot $DB --limit 20 --physical --format json > /tmp/disky-top.json
 disky cleanup --snapshot $DB --format json > /tmp/disky-cleanup.json
 ```
+
+**ALWAYS use `--physical` for stats/top/dirs/ext.** Logical `size` includes
+sparse files like OrbStack's `data.img.raw` which reports 8 TB logical but
+only ~13 GB physical. Logical sum at `$HOME` typically shows 8+ TB on a
+machine with OrbStack and looks like "87% disk full" when in reality
+$HOME is using ~80 GB physical. Use `df -h` as ground truth for the
+device-level free space.
 
 Then build a **propose-3 table** from `disky cleanup` output. Rank by `total_bytes` per category. Show in chat:
 
