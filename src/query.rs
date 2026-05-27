@@ -807,7 +807,12 @@ mod tests {
     fn linfit_slope_r2_noisy_line_high_r2() {
         // Mostly linear with 1-byte jitter — r² should be very close to 1.
         let pts: Vec<(f64, f64)> = (0..6)
-            .map(|i| (i as f64, 10.0 * i as f64 + if i % 2 == 0 { 0.5 } else { -0.5 }))
+            .map(|i| {
+                (
+                    i as f64,
+                    10.0 * i as f64 + if i % 2 == 0 { 0.5 } else { -0.5 },
+                )
+            })
             .collect();
         let (slope, r2) = linfit_slope_r2(&pts);
         assert!((slope - 10.0).abs() < 1.0);

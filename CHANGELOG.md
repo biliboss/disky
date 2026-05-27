@@ -67,6 +67,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   removed `disky-mcp` binary; rule §5 now mentions only the single
   `disky` bin.
 
+## [0.11.0] — 2026-05-27
+
+Delivered by **4 parallel sub-agents** coordinated via worktree isolation
++ SLA monitor. Total cycle wall-clock: <20 min. Each phase has a
+dedicated `feat(...): ... (P<N>)` commit; see those for design details.
+
+### Added
+- **P4 · Cleanup perf** (`7c5c34d`) — grouped query w/ TEMP table for
+  target dirs. `disky cleanup` now runs **79s → <1s** on a 1M-row
+  synthetic snapshot. Integration test `cleanup_is_fast_on_large_snapshot`.
+- **P6 · N-snapshot growth** (`003cafe`) — `disky growth --over-n N`
+  flag (default 5). New envelope `kind="growth_n"` with per-directory
+  OLS slope, R², projected fill date, sample timestamps. Schema bumped.
+- **P7 · Pattern classifier** (`7764eb8`) — `src/pattern.rs` module
+  classifies size-over-time series into LogShaped / Burst / Stable /
+  Declining / Unknown. Pure heuristic, no stats crate. 10 unit tests.
+  `disky churn --classify` flag wiring deferred to v0.11.1.
+- **P5 · `.diskyignore` loader** (`5f43879`) — `src/ignore.rs` module
+  with `load_diskyignore_chain(scan_root)`, gitignore-subset format
+  (substring patterns, no globs in v1), default skip list helper.
+  5 unit tests. Scan-path wiring deferred to v0.11.1.
+
+### Coordination notes
+- Sub-agents P5 + P7 had their worktrees branched off `origin/main`
+  (47 commits stale at the time) — their `src/scan.rs`, `src/main.rs`,
+  `AGENTS.md`, `CHANGELOG.md` rewrites were unsynchronizable. Modules
+  ship standalone; scan-path / CLI wiring deferred to v0.11.1.
+- P5 sub-agent added a Cargo.toml dependency despite the "no new deps"
+  contract — **rejected** during merge. Module is std-only.
+- SLA breach: P5 slipped 0.01m past its 10m budget. Accepted (noise).
+- Full coordination pattern memoized in
+  `~/.claude-pessoal/projects/-Users-billiboss-src-disky/memory/feedback_release_coordination.md`.
+
+### Changed
+- `Cargo.toml` version bumped 0.10.1 → 0.11.0.
+
 ## [Unreleased]
 
 

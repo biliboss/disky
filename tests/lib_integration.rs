@@ -206,13 +206,14 @@ fn synth_big_snapshot(num_projects: usize, files_per_proj: usize) -> (TempDir, P
     db::create_schema(&conn).unwrap();
 
     let mut batch: Vec<db::FileRecord> = Vec::with_capacity(50_000);
-    let mut push = |batch: &mut Vec<db::FileRecord>, rec: db::FileRecord, conn: &duckdb::Connection| {
-        batch.push(rec);
-        if batch.len() >= 50_000 {
-            db::append_batch(conn, batch).unwrap();
-            batch.clear();
-        }
-    };
+    let push =
+        |batch: &mut Vec<db::FileRecord>, rec: db::FileRecord, conn: &duckdb::Connection| {
+            batch.push(rec);
+            if batch.len() >= 50_000 {
+                db::append_batch(conn, batch).unwrap();
+                batch.clear();
+            }
+        };
 
     // half the projects host `node_modules`, half host `target` — both
     // are in the default cleanup target set.
@@ -255,8 +256,16 @@ fn synth_big_snapshot(num_projects: usize, files_per_proj: usize) -> (TempDir, P
     if !batch.is_empty() {
         db::append_batch(&conn, &batch).unwrap();
     }
-    db::write_scan_meta(&conn, "/tmp/synth", 1_700_000_000, Some(1_700_000_100), true, 0, 0)
-        .unwrap();
+    db::write_scan_meta(
+        &conn,
+        "/tmp/synth",
+        1_700_000_000,
+        Some(1_700_000_100),
+        true,
+        0,
+        0,
+    )
+    .unwrap();
     db::build_indexes(&conn).unwrap();
     drop(conn);
     (dir, db_path)
@@ -278,7 +287,12 @@ fn cleanup_is_fast_on_large_snapshot() {
     let hits = cleanup::scan(&conn, &targets, 10_000).unwrap();
     let elapsed = start.elapsed();
 
-    assert_eq!(hits.len(), 2_000, "expected one hit per project, got {}", hits.len());
+    assert_eq!(
+        hits.len(),
+        2_000,
+        "expected one hit per project, got {}",
+        hits.len()
+    );
     // Each project has 500 × 1024 bytes = 512_000.
     let total_bytes: u64 = hits.iter().map(|h| h.bytes).sum();
     assert_eq!(total_bytes, 2_000 * 500 * 1024);
@@ -330,7 +344,10 @@ fn growth_over_n_fits_linear_growth_with_high_r2() {
         fs::write(root.join("growing/blob.bin"), vec![0u8; *sz]).unwrap();
         let db_path = dir.path().join(format!("snap_{i}.db"));
         disky::scan::run(root.to_str().unwrap(), db_path.to_str().unwrap()).unwrap();
-        snaps.push((db_path.to_string_lossy().into_owned(), base_ts + (i as i64) * 86400));
+        snaps.push((
+            db_path.to_string_lossy().into_owned(),
+            base_ts + (i as i64) * 86400,
+        ));
     }
 
     let rows = disky::query::growth_over_n(&snaps, 50, Some(1024 * 1024)).unwrap();
@@ -338,7 +355,11 @@ fn growth_over_n_fits_linear_growth_with_high_r2() {
         .iter()
         .find(|r| r.path.ends_with("/growing"))
         .expect("growing dir missing from results");
-    assert!(growing.slope_bytes_per_day > 0, "slope = {}", growing.slope_bytes_per_day);
+    assert!(
+        growing.slope_bytes_per_day > 0,
+        "slope = {}",
+        growing.slope_bytes_per_day
+    );
     // Sub-agent synthesised exponential growth (1, 2, 4, 8, 16 KB) over linear time —
     // OLS linear fit gives R² ≈ 0.87 on that shape. Threshold relaxed to 0.8;
     // upstream growth is non-linear and the test asserts trend, not perfect fit.
