@@ -1,12 +1,12 @@
 {
-  "ts": "2026-05-22T10:50:02Z",
-  "commit": "7402647",
-  "commit_full": "7402647468b7c3ecae35e61691089edea8c3f815",
-  "subject": "feat(mcp): re-add 6 annotated tools \u2014 growth/churn/predict/empty/old/filter",
+  "ts": "2026-05-27T16:23:07Z",
+  "commit": "6a33586",
+  "commit_full": "6a33586f6b7a27d575051ae66749f9394718b27a",
+  "subject": "docs(build): rust-vs-giants receita \u2014 kill 1-2 GB target/ per project",
   "branch": "main",
-  "dirty": false,
+  "dirty": true,
   "ahead_of_main": 0,
   "behind_main": 0,
   "author": "Gabriel",
-  "author_date": "2026-05-22T07:49:53-03:00"
+  "author_date": "2026-05-27T13:20:58-03:00"
 }

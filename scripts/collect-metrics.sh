@@ -79,7 +79,6 @@ if [ -f "target/release/disky" ]; then
     T=$(now_ms); cargo build --release --bins >/dev/null 2>&1
     T_BUILD_RELEASE_INC=$(elapsed_s "$T")
     SIZE_DISKY=$(stat -f%z target/release/disky 2>/dev/null || stat -c%s target/release/disky 2>/dev/null || echo null)
-    SIZE_DISKY_MCP=$(stat -f%z target/release/disky-mcp 2>/dev/null || stat -c%s target/release/disky-mcp 2>/dev/null || echo null)
 fi
 
 # ── LOC ──────────────────────────────────────────────────────────────────
@@ -132,7 +131,7 @@ entry = {
         "build_release_inc": n("$T_BUILD_RELEASE_INC"),
         "build_release_cold": n("$T_BUILD_RELEASE_COLD")
     },
-    "binary_size_bytes": {"disky": n("$SIZE_DISKY"), "disky_mcp": n("$SIZE_DISKY_MCP")},
+    "binary_size_bytes": {"disky": n("$SIZE_DISKY")},
     "tests": {"fast_tier_total": n("$TEST_COUNT")},
     "loc": {"src": $LOC_SRC, "tests": $LOC_TESTS, "benches": $LOC_BENCHES},
     "cold": $COLD_PY
