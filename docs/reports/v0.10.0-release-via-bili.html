@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title id="docTitle">release report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F5F1E8; --ink:#14110F; --rust:#B23A1F; --olive:#5C6831;
+  --dim:#6B655E; --line:#D9D2C2; --card:#FBF8F0;
+  --done:#3F6B2A; --partial:#B8841C; --risk:#B23A1F; --deferred:#8C857B;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'Manrope',sans-serif;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding:64px 32px 96px}
+header{margin-bottom:56px;border-bottom:1px solid var(--line);padding-bottom:32px}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--rust);letter-spacing:.14em;text-transform:uppercase;margin-bottom:10px}
+h1{font-family:'Fraunces',serif;font-variation-settings:'opsz' 144,'wght' 700;font-size:72px;line-height:1;letter-spacing:-.025em;margin:0 0 10px}
+h1 .tag{color:var(--rust)}
+.sub{font-family:'Fraunces',serif;color:var(--dim);font-size:22px;margin:0;font-weight:300;font-variation-settings:'opsz' 22,'wght' 400}
+.meta{margin-top:24px;display:flex;gap:32px;flex-wrap:wrap;color:var(--dim);font-size:13px;font-family:'JetBrains Mono',monospace}
+.meta b{color:var(--ink);font-weight:600}
+section{margin-top:56px;display:grid;grid-template-columns:80px 1fr;gap:32px;align-items:start}
+section .num{font-family:'Fraunces',serif;font-size:48px;font-weight:300;color:var(--rust);line-height:1;font-variation-settings:'opsz' 48}
+section h2{font-family:'Fraunces',serif;font-size:32px;font-weight:600;margin:0 0 16px;letter-spacing:-.01em;font-variation-settings:'opsz' 32}
+section p{margin:0 0 16px;max-width:780px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-top:8px}
+.tile{background:var(--card);border:1px solid var(--line);padding:20px}
+.tile .k{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-family:'JetBrains Mono',monospace}
+.tile .v{font-family:'Fraunces',serif;font-variation-settings:'opsz' 96,'wght' 700;font-size:44px;line-height:1.05;margin-top:6px;letter-spacing:-.02em}
+.tile .v.rust{color:var(--rust)}
+.tile .v.olive{color:var(--olive)}
+.tile .u{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim);margin-top:4px}
+.kanban{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.col{background:var(--card);border:1px solid var(--line);padding:16px;min-height:200px}
+.col h3{font-family:'Fraunces',serif;font-size:18px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.col h3 .chip{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:2px 8px}
+.col h3 .chip.done{background:var(--done);color:var(--paper)}
+.col h3 .chip.drop{background:var(--risk);color:var(--paper)}
+.col h3 .chip.defer{background:var(--deferred);color:var(--paper)}
+.cards{display:flex;flex-direction:column;gap:6px}
+.card{background:var(--paper);border:1px solid var(--line);padding:8px 10px;font-size:13px;line-height:1.4;transition:background .15s}
+.card:hover{background:#fff}
+.card.done{border-left:3px solid var(--done)}
+.card.drop{border-left:3px solid var(--risk);text-decoration:line-through;color:var(--dim)}
+.card.defer{border-left:3px solid var(--deferred)}
+.card code{font-family:'JetBrains Mono',monospace;font-size:11px;background:#0001;padding:1px 4px}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line)}
+th{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);font-weight:600}
+td.num{text-align:right;font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+td code,p code,li code{font-family:'JetBrains Mono',monospace;font-size:12px;background:#0001;padding:1px 6px}
+.chart{background:var(--card);border:1px solid var(--line);padding:24px;margin-top:8px}
+.chart svg{display:block;width:100%;height:auto}
+.legend{display:flex;gap:24px;font-size:12px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:12px;flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:middle}
+.callout{background:var(--ink);color:var(--paper);padding:24px 28px;margin-top:8px;font-size:15px;border-left:4px solid var(--rust)}
+.callout b{color:var(--rust)}
+.callout code{font-family:'JetBrains Mono',monospace;background:#fff2;padding:2px 6px}
+.signal{padding:18px;background:var(--card);border-left:4px solid var(--olive);margin-top:16px;font-size:14px}
+.tworow{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
+@media (max-width:720px){section{grid-template-columns:1fr;gap:8px}section .num{font-size:32px}.kanban{grid-template-columns:1fr}.tworow{grid-template-columns:1fr}h1{font-size:48px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow" id="eyebrow"></div>
+  <h1 id="title"></h1>
+  <p class="sub" id="sub"></p>
+  <div class="meta" id="meta"></div>
+</header>
+
+<section>
+  <div class="num">01</div>
+  <div>
+    <h2>Flow tiles · post-release</h2>
+    <p id="s01p"></p>
+    <div class="tiles" id="tiles"></div>
+  </div>
+</section>
+
+<section>
+  <div class="num">02</div>
+  <div>
+    <h2 id="s02h">Kanban · punch-list resolvida</h2>
+    <p id="s02p"></p>
+    <div class="kanban" id="kanban"></div>
+  </div>
+</section>
+
+<section>
+  <div class="num">03</div>
+  <div>
+    <h2>Cycle Time distribution</h2>
+    <p id="s03p"></p>
+    <div class="chart"><svg id="ctHist" viewBox="0 0 900 280"></svg></div>
+    <div class="legend" id="s03leg"></div>
+  </div>
+</section>
+
+<section>
+  <div class="num">04</div>
+  <div>
+    <h2>Lead Time · feat → tag</h2>
+    <p id="s04p"></p>
+    <div class="chart"><svg id="ltBars" viewBox="0 0 900 240"></svg></div>
+    <div class="legend" id="s04leg"></div>
+  </div>
+</section>
+
+<section>
+  <div class="num">05</div>
+  <div>
+    <h2 id="s05h">Monte Carlo · next-version forecast</h2>
+    <p id="s05p"></p>
+    <div class="chart"><svg id="mc" viewBox="0 0 900 280"></svg></div>
+    <div class="legend" id="mcLegend"></div>
+    <div class="callout" style="margin-top:24px">
+      <b>Forecast:</b> <span id="forecast"></span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="num">06</div>
+  <div>
+    <h2>Throughput · feats por active day</h2>
+    <p id="s06p"></p>
+    <div class="tworow">
+      <div class="chart"><svg id="tputBars" viewBox="0 0 460 220"></svg></div>
+      <div>
+        <table style="margin-top:0">
+          <thead><tr><th>Active day</th><th class="num">All commits</th><th class="num">Feats</th></tr></thead>
+          <tbody id="tputTbody"></tbody>
+        </table>
+        <p id="s06note" style="font-size:12px;color:var(--dim);margin-top:8px"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="num">07</div>
+  <div>
+    <h2>Recommended order · próximas iterações</h2>
+    <p id="s07p"></p>
+    <table>
+      <thead><tr><th>#</th><th>Item</th><th>Grupo</th><th class="num">Est feats</th><th class="num">Est days*</th></tr></thead>
+      <tbody id="recoTbody"></tbody>
+    </table>
+    <p id="s07note" style="margin-top:12px;font-size:12px;color:var(--dim)"></p>
+  </div>
+</section>
+
+<section id="s08sec">
+  <div class="num">08</div>
+  <div>
+    <h2 id="s08h">Bonus</h2>
+    <div id="s08body"></div>
+  </div>
+</section>
+
+<section>
+  <div class="num" id="s09num">09</div>
+  <div>
+    <h2>Próximos passos</h2>
+    <ul id="nextSteps"></ul>
+  </div>
+</section>
+
+</div>
+
+<script>
+window.BILI_REPORT = {"title": "disky v0.10.0 — release · flow metrics", "eyebrow": "release report · flow metrics · 2026-05-27", "h1_html": "disky <span class=\"tag\">v0.10.0</span>", "sub": "CLI é a superfície. Kanban drenado, Cycle Time intacto, MCP fora.", "generated_at": "2026-05-27", "meta": [{"k": "tag", "v": "v0.10.0 (local)"}, {"k": "commit", "v": "7ded431"}, {"k": "net diff", "v": "+58 / −980 LOC"}, {"k": "commits", "v": "55 total · 2 hoje"}], "tiles": [{"k": "Cycle Time p50", "v": "3.87", "u": "min · in-burst"}, {"k": "Cycle Time p85", "v": "8.2", "u": "min · in-burst"}, {"k": "Lead Time p50", "v": "~4", "u": "min · flat branch model"}, {"k": "Throughput", "v": "9.0", "u": "feats/active day"}, {"k": "WIP", "v": "0", "u": "no open branch", "cls": "olive"}, {"k": "Backlog v0.10.0", "v": "0", "u": "all resolved", "cls": "olive"}, {"k": "Done v0.10.0", "v": "9/17", "u": "merged · 6 dropped · 2 defer"}, {"k": "Backlog v0.10.1", "v": "7", "u": "nice-to-have", "cls": "rust"}], "kanban": {"done": ["disky_growth/churn/predict MCP (annotated)", "disky_empty/old/filter MCP", "disky-mcp installed em pessoal + mukutu", "BREAKING: disky-mcp bin removido (v0.10.0)", "AGENTS.md rewrite — Single surface", "CHANGELOG.md v0.10.0 entry", "Cargo.toml bump 0.6 → 0.10.0", "docs/ structure + reports + research", "Local tag v0.10.0 cravada"], "drop": ["MCP resources/list", "MCP resources/read", "MCP prompts/list (3 canned flows)", "MCP progress notifications scan", "MCP progress notifications cleanup", "disky web (FastHTML server)", "disky web button → cleanup SSE", "disky install-mcp subcmd", "tests/mcp_protocol.rs"], "defer": ["metrics/baseline.json reseed", "Smoke E2E: button click cleanup", "Smoke E2E: chat invoke disky_growth"], "labels": {"done": "Done", "drop": "Dropped", "defer": "Deferred"}}, "recommended": [{"item": "Receita rust-vs-giants — <code>sccache</code> + <code>CARGO_HOME</code> global no <code>CONTRIBUTING.md</code>", "group": "build", "feats": 1, "days": 0.2}, {"item": "Skill <code>/disky</code> v2 — fluxo triage → propose → confirm → apply via <code>AskUserQuestion</code>", "group": "skill", "feats": 2, "days": 0.8}, {"item": "metrics/baseline.json reseed em máquina limpa", "group": "infra", "feats": 1, "days": 0.2}, {"item": "Cleanup perf bug (79–250s → &lt;1s) — materialized view ou column-store hint", "group": "perf", "feats": 1, "days": 0.6}, {"item": "<code>.diskyignore</code> loader — extends ALWAYS_SKIP_SUBSTRINGS runtime", "group": "quality", "feats": 1, "days": 0.3}, {"item": "N-snapshot growth — OLS sobre N snapshots, não só 2", "group": "query", "feats": 1, "days": 0.5}, {"item": "Pattern classifier (log-shaped / burst / stable / declining)", "group": "query", "feats": 1, "days": 0.5}], "next_steps": ["<code>git push origin main v0.10.0</code> — sua decisão (não autônomo, afeta GitHub)", "Editar <code>~/.claude-pessoal/.claude.json</code> + <code>~/.claude-mukutu/.claude.json</code> — remover entry <code>mcpServers.disky</code>", "<code>cargo install --path . --force</code> — reinstala binário sem <code>disky-mcp</code> morto", "Implementar skill v2 (item #2 da tabela acima)", "Aplicar receita rust-vs-giants pra reduzir 1-2 GB <code>target/</code> por projeto"], "prose": {"s01": "Métricas drenadas do git log no working tree. Cada commit feat: conta como card entregue. Cycle Time = minutos entre feat commits dentro de uma sessão ativa. Backlog v0.10.0 zerado: 9 done, 6 dropped (MCP-scope), 2 deferred (smoke + baseline).", "s02": "17 must-ship → 9 done · 6 dropped · 2 deferred. WIP = 0. Versão sai com escopo cristalizado — em vez de carregar 8 items MCP-only que não tinham consumidor, deletamos a superfície e mergeamos o que sobrou.", "s02h": "Kanban · v0.10.0 punch-list resolvida", "s03": "27 intervalos feat-to-feat. Cauda direita pesada de gaps inter-burst (~2d, ~4d), agora estendida pelo gap May 22 → May 27 (5 dias). Em sessão ativa, p50 fica abaixo de 4 min — Gabriel ship rapid-fire, depois para frio.", "s04": "Tempo entre primeiro feat: commit de uma versão e o tag correspondente. Cada barra = uma versão. v0.10.0 = 0 commits intervindo (tag aplicada no próprio cut commit) → LT efetivo zero, mas reflete decisão de cut, não trabalho típico.", "s05": "10 000 futuros simulados. P(active day) = 3/9 ≈ 0.33 (atualizado pelo gap), throughput por active day amostrado de [3, 5, 19]. Backlog: 7 nice-to-have items (cleanup perf bug, N-snapshot growth, pattern classifier, path-based exclusion, .diskyignore, schedule install, disky watch).", "s05h": "Monte Carlo · v0.10.1 forecast", "s06": "3 active days no histórico. Distribuição extremamente bursty — quando ativo, ship muito; quando idle, zero. Padrão saudável pra projeto solo; questão pra v1.0.0 será aumentar P(active) ou cadência por sessão.", "s06note": "*v0.10.0 commit conta como feat (BREAKING — remoção de surface). Outro commit = docs.", "s07": "Sequência S→L, value-first. Grupo build = receita rust-vs-giants. Grupo skill = UX agentic. Grupo perf/quality/query = nice-to-have da punch-list.", "s07note": "* one active day per unit. Calendar days multiply by ~3 dado P(active)=0.33.", "s08h": "Bonus · NotebookLM rate-test", "s08_html": "<p>Durante o grill paralelizamos <code>notebooklm source add</code> pra ver se valia ingerir 204 URLs do spec MCP. Achado vira patch pro bili <code>knowledge new</code>.</p><table><thead><tr><th>Conc</th><th class=\"num\">n</th><th class=\"num\">Wall</th><th class=\"num\">Rate</th><th class=\"num\">Falhas</th><th>Speedup</th></tr></thead><tbody><tr><td>1 (seq)</td><td class=\"num\">—</td><td class=\"num\">~3-4s/url</td><td class=\"num\">0.28/s</td><td class=\"num\">0</td><td>1.0×</td></tr><tr><td>5</td><td class=\"num\">10</td><td class=\"num\">14.6s</td><td class=\"num\">0.69/s</td><td class=\"num\">0</td><td>2.5×</td></tr><tr><td>10</td><td class=\"num\">20</td><td class=\"num\">17.2s</td><td class=\"num\">1.16/s</td><td class=\"num\">0</td><td>4.1×</td></tr><tr><td>20</td><td class=\"num\">40</td><td class=\"num\">23.1s</td><td class=\"num\">1.73/s</td><td class=\"num\">0</td><td>6.2×</td></tr></tbody></table><div class=\"signal\"><b>Acionável bili:</b> trocar loop sequencial por <code>asyncio.Semaphore(10)</code> no <code>bili knowledge new</code>. 204 URLs vai de ~13min → ~3min. Zero rate-limit até P=20. Sweet spot P=10.</div>"}, "cycle_time": {"samples": [3349.92, 4.33, 6.12, 3.87, 3.83, 5.07, 2.52, 2.4, 3.23, 1.52, 1.85, 6089.05, 102.05, 0.75, 2.85, 1.75, 0.58, 47.45, 8.63, 11.18, 8.1, 47.85, 9.45, 1.37, 5.28, 80.95, 22.73, 7510.32], "p50": 3.87, "p85": 11.18, "p95": 47.45}, "lead_time": {"tags": [{"tag": "v0.1.0", "lt_min": 0}, {"tag": "v0.7.0", "lt_min": 30.7}, {"tag": "v0.8.0", "lt_min": 27.9}, {"tag": "v0.9.0", "lt_min": 71.5}, {"tag": "v0.10.0", "lt_min": 0}], "note": "median histórico ~12 min · v0.7→v0.8→v0.9 todos no mesmo burst"}, "monte_carlo": {"backlog": 7, "throughput": [3, 5, 19], "p_active": 0.33, "caveat": "status-quo cadence. 1 sessão focada (estilo May 22: 19 feats) colapsa pra < 1 active day."}, "throughput": {"history": [{"label": "2026-05-15", "short": "05-15", "commits": 6, "feats": 1}, {"label": "2026-05-17", "short": "05-17", "commits": 12, "feats": 11}, {"label": "2026-05-22", "short": "05-22", "commits": 35, "feats": 16}, {"label": "2026-05-27", "short": "05-27", "commits": 3, "feats": 1}]}};
+
+(function render(){
+  const D = window.BILI_REPORT;
+  const $ = id => document.getElementById(id);
+  const html = (id, h) => { const e=$(id); if(e) e.innerHTML = h; };
+  const text = (id, t) => { const e=$(id); if(e) e.textContent = t; };
+
+  // Header
+  text('docTitle', D.title);
+  text('eyebrow', D.eyebrow);
+  html('title', D.h1_html);
+  text('sub', D.sub);
+  html('meta', D.meta.map(m=>`<div><b>${m.k}</b> ${m.v}</div>`).join('')
+    + `<div><b>generated</b> <span>${new Date().toISOString().slice(0,19).replace('T',' ')}</span></div>`);
+
+  // Section paragraphs
+  text('s01p', D.prose.s01);
+  if(D.prose.s02h) text('s02h', D.prose.s02h);
+  text('s02p', D.prose.s02);
+  text('s03p', D.prose.s03);
+  text('s04p', D.prose.s04);
+  if(D.prose.s05h) text('s05h', D.prose.s05h);
+  text('s05p', D.prose.s05);
+  text('s06p', D.prose.s06);
+  text('s06note', D.prose.s06note || '');
+  text('s07p', D.prose.s07);
+  text('s07note', D.prose.s07note || '');
+  if(D.prose.s08h) text('s08h', D.prose.s08h);
+  html('s08body', D.prose.s08_html || '');
+
+  // Tiles
+  html('tiles', D.tiles.map(t =>
+    `<div class="tile"><div class="k">${t.k}</div><div class="v ${t.cls||''}">${t.v}</div><div class="u">${t.u}</div></div>`
+  ).join(''));
+
+  // Kanban
+  const col = (title,chip,chipcls,cls,arr) => `
+    <div class="col">
+      <h3>${title} <span class="chip ${chipcls}">${chip} · ${arr.length}</span></h3>
+      <div class="cards">${arr.map(t=>`<div class="card ${cls}">${t}</div>`).join('') || '<div class="card" style="border:none;color:var(--dim);font-style:italic">— empty —</div>'}</div>
+    </div>`;
+  html('kanban',
+    col(D.kanban.labels.done, 'SHIPPED','done','done', D.kanban.done) +
+    col(D.kanban.labels.drop, 'SCOPE-CUT','drop','drop', D.kanban.drop) +
+    col(D.kanban.labels.defer, D.kanban.labels.defer_chip || 'NEXT','defer','defer', D.kanban.defer));
+
+  // Recommended order
+  html('recoTbody', D.recommended.map((r,i)=>
+    `<tr><td>${i+1}</td><td>${r.item}</td><td>${r.group}</td><td class="num">${r.feats}</td><td class="num">${r.days}</td></tr>`
+  ).join(''));
+
+  // Throughput table
+  html('tputTbody', D.throughput.history.map(h =>
+    `<tr><td>${h.label}</td><td class="num">${h.commits}</td><td class="num">${h.feats}</td></tr>`
+  ).join(''));
+
+  // Next steps
+  html('nextSteps', D.next_steps.map(s=>`<li>${s}</li>`).join(''));
+
+  // S03 legend
+  const burstN = D.cycle_time.samples.filter(x=>x<60).length;
+  const gapN = D.cycle_time.samples.length - burstN;
+  html('s03leg', `
+    <span><i style="background:var(--rust)"></i>active-burst CT (n=${burstN}, &lt;1h)</span>
+    <span><i style="background:var(--deferred)"></i>inter-burst gaps (n=${gapN}, &gt;1d)</span>
+    <span><b>p50</b> ${D.cycle_time.p50}min · <b>p85</b> ${D.cycle_time.p85}min · <b>p95</b> ${D.cycle_time.p95}min</span>`);
+  html('s04leg', `<span><i style="background:var(--olive)"></i>Lead Time (min entre primeiro feat e tag)</span>` +
+    (D.lead_time.note ? `<span>${D.lead_time.note}</span>` : ''));
+
+  // CT histogram
+  (function(){
+    const svg = $('ctHist');
+    const W=900,H=280,padL=50,padR=20,padT=20,padB=44;
+    const bins = [0,1,2,3,4,5,8,12,30,60,1440,10000];
+    const counts = bins.slice(0,-1).map(()=>0);
+    const colors = bins.slice(0,-1).map(b=>b>=60?'var(--deferred)':'var(--rust)');
+    D.cycle_time.samples.forEach(v=>{ for(let i=0;i<bins.length-1;i++){ if(v>=bins[i]&&v<bins[i+1]){counts[i]++;break} } });
+    const maxC = Math.max(...counts,1);
+    const bw = (W-padL-padR)/counts.length;
+    let s='';
+    counts.forEach((c,i)=>{
+      const h = c/maxC*(H-padT-padB);
+      const x = padL + i*bw + 3;
+      const y = H-padB-h;
+      s += `<rect x="${x}" y="${y}" width="${bw-6}" height="${h}" fill="${colors[i]}"/>`;
+      if(c>0) s += `<text x="${x+bw/2-3}" y="${y-4}" font-family="JetBrains Mono" font-size="11" fill="var(--ink)" text-anchor="middle">${c}</text>`;
+      const lbl = bins[i+1]>=1440?bins[i]+'m+':bins[i]+'–'+bins[i+1];
+      s += `<text x="${x+bw/2-3}" y="${H-padB+18}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="middle">${lbl}</text>`;
+    });
+    s += `<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+    s += `<text x="${padL}" y="${padT-4}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)">count</text>`;
+    s += `<text x="${W-padR}" y="${H-padB+36}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)" text-anchor="end">minutes between feat commits</text>`;
+    svg.innerHTML = s;
+  })();
+
+  // Lead Time bars
+  (function(){
+    const svg = $('ltBars');
+    const W=900,H=240,padL=80,padR=20,padT=20,padB=44;
+    const vs = D.lead_time.tags;
+    const maxLT = Math.max(...vs.map(v=>v.lt_min), 60);
+    const bw = (W-padL-padR)/Math.max(vs.length,1);
+    let s='';
+    vs.forEach((v,i)=>{
+      const h = v.lt_min/maxLT*(H-padT-padB);
+      const x = padL + i*bw + 8;
+      const y = H-padB-h;
+      s += `<rect x="${x}" y="${y}" width="${bw-16}" height="${Math.max(h,2)}" fill="var(--olive)"/>`;
+      s += `<text x="${x+bw/2-8}" y="${y-4}" font-family="JetBrains Mono" font-size="11" fill="var(--ink)" text-anchor="middle">${v.lt_min.toFixed(0)}m</text>`;
+      s += `<text x="${x+bw/2-8}" y="${H-padB+18}" font-family="Fraunces" font-size="14" fill="var(--rust)" text-anchor="middle" font-weight="600">${v.tag}</text>`;
+    });
+    s += `<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+    s += `<text x="${padL-8}" y="${padT+8}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)" text-anchor="end">min</text>`;
+    svg.innerHTML = s;
+  })();
+
+  // Monte Carlo
+  function runMC(n, backlog, tp, pActive){
+    const days=[];
+    for(let r=0;r<n;r++){
+      let feats=0, d=0;
+      while(feats<backlog && d<365){
+        d++;
+        if(Math.random()<pActive) feats += tp[Math.floor(Math.random()*tp.length)];
+      }
+      days.push(d);
+    }
+    days.sort((a,b)=>a-b);
+    return days;
+  }
+  (function(){
+    const mc = D.monte_carlo;
+    if(!mc || !mc.backlog){ html('forecast','—'); return; }
+    const days = runMC(10000, mc.backlog, mc.throughput, mc.p_active);
+    const p50=days[5000], p70=days[7000], p85=days[8500], p95=days[9500];
+    const today = new Date(D.generated_at || Date.now());
+    const addD = d => new Date(today.getTime()+d*86400000).toISOString().slice(0,10);
+    html('forecast',
+      `P50 = <b>${p50}d</b> (${addD(p50)}) · P70 = <b>${p70}d</b> (${addD(p70)}) · P85 = <b>${p85}d</b> (${addD(p85)}) · P95 = <b>${p95}d</b> (${addD(p95)})`
+      + (mc.caveat ? `<br><span style="font-size:13px;color:var(--paper);opacity:.7">${mc.caveat}</span>` : ''));
+
+    const svg = $('mc');
+    const W=900,H=280,padL=50,padR=30,padT=20,padB=44;
+    const xMax = Math.min(p95+2, Math.max(...days));
+    const xs = [...Array(xMax+1).keys()];
+    const cdf = xs.map(x => days.filter(d=>d<=x).length / days.length);
+    const xS = x => padL + (x/xMax)*(W-padL-padR);
+    const yS = y => H-padB - y*(H-padT-padB);
+    let path='';
+    cdf.forEach((y,i)=>{ path += (i===0?'M':'L') + xS(xs[i]) + ',' + yS(y) + ' '; });
+    let s = `<path d="${path}" fill="none" stroke="var(--rust)" stroke-width="2.5"/>`;
+    s += `<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+    s += `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+    [0,0.25,0.5,0.7,0.85,0.95,1].forEach(y => {
+      s += `<line x1="${padL-4}" y1="${yS(y)}" x2="${padL}" y2="${yS(y)}" stroke="var(--ink)"/>`;
+      s += `<text x="${padL-8}" y="${yS(y)+4}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="end">${(y*100).toFixed(0)}%</text>`;
+    });
+    [0, Math.floor(xMax/4), Math.floor(xMax/2), Math.floor(3*xMax/4), xMax].forEach(x => {
+      s += `<line x1="${xS(x)}" y1="${H-padB}" x2="${xS(x)}" y2="${H-padB+4}" stroke="var(--ink)"/>`;
+      s += `<text x="${xS(x)}" y="${H-padB+18}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="middle">${x}d</text>`;
+    });
+    [[p50,'P50','var(--olive)'],[p85,'P85','var(--partial)'],[p95,'P95','var(--rust)']].forEach(([px,lbl,c]) => {
+      s += `<line x1="${xS(px)}" y1="${padT}" x2="${xS(px)}" y2="${H-padB}" stroke="${c}" stroke-width="1" stroke-dasharray="4 4" opacity=".6"/>`;
+      s += `<text x="${xS(px)}" y="${padT+12}" font-family="JetBrains Mono" font-size="11" fill="${c}" text-anchor="middle" font-weight="600">${lbl}=${px}d</text>`;
+    });
+    s += `<text x="${padL}" y="${padT-4}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)">P(ship ≤ X days)</text>`;
+    s += `<text x="${W-padR}" y="${H-padB+36}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)" text-anchor="end">calendar days from today</text>`;
+    svg.innerHTML = s;
+
+    html('mcLegend',
+      `<span><i style="background:var(--rust)"></i>CDF (10k sims)</span>` +
+      `<span><i style="background:var(--olive)"></i>P50 ${p50}d</span>` +
+      `<span><i style="background:var(--partial)"></i>P85 ${p85}d</span>` +
+      `<span><i style="background:var(--rust)"></i>P95 ${p95}d</span>` +
+      `<span><b>backlog</b> ${mc.backlog} feats</span>` +
+      `<span><b>P(active)</b> ${(mc.p_active*100).toFixed(0)}%</span>`);
+  })();
+
+  // Throughput bars
+  (function(){
+    const svg = $('tputBars');
+    const W=460,H=220,padL=44,padR=12,padT=16,padB=44;
+    const hist = D.throughput.history;
+    const max = Math.max(...hist.map(d=>d.commits), 1);
+    const bw = (W-padL-padR)/Math.max(hist.length,1);
+    let s='';
+    hist.forEach((d,i)=>{
+      const xa = padL + i*bw + 4;
+      const hc = d.commits/max*(H-padT-padB);
+      const hf = d.feats/max*(H-padT-padB);
+      s += `<rect x="${xa}" y="${H-padB-hc}" width="${(bw-12)/2}" height="${hc}" fill="var(--deferred)"/>`;
+      s += `<rect x="${xa+(bw-12)/2+2}" y="${H-padB-hf}" width="${(bw-12)/2}" height="${hf}" fill="var(--rust)"/>`;
+      s += `<text x="${xa+(bw-8)/2}" y="${H-padB+14}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="middle">${d.short || d.label}</text>`;
+      s += `<text x="${xa+(bw-8)/2}" y="${H-padB+28}" font-family="JetBrains Mono" font-size="9" fill="var(--ink)" text-anchor="middle">${d.commits}/${d.feats}</text>`;
+    });
+    s += `<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+    s += `<text x="${padL-6}" y="${padT+6}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="end">count</text>`;
+    s += `<rect x="${padL}" y="2" width="10" height="10" fill="var(--deferred)"/><text x="${padL+14}" y="11" font-family="JetBrains Mono" font-size="10" fill="var(--dim)">all commits</text>`;
+    s += `<rect x="${padL+90}" y="2" width="10" height="10" fill="var(--rust)"/><text x="${padL+104}" y="11" font-family="JetBrains Mono" font-size="10" fill="var(--dim)">feats only</text>`;
+    svg.innerHTML = s;
+  })();
+})();
+</script>
+</body>
+</html>
