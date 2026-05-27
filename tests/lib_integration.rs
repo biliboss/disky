@@ -5,7 +5,7 @@
 //! once, then read by every test. Cost: ~100 ms for the scan vs ~500 ms per
 //! shell-out in `tests/agentic.rs`.
 
-use disky::{db, query, snapshots};
+use disky::{cleanup, db, query, snapshots};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -192,6 +192,108 @@ fn churn_detects_recently_modified_files() {
 
     // `cold` should NOT appear (no recent files).
     assert!(rows.iter().all(|r| !r.path.ends_with("/cold")));
+}
+
+/// Synthesize a snapshot DB directly via DuckDB appenders (skips the
+/// filesystem-walk path of `disky::scan::run`) so we can stress cleanup
+/// against ~1 M rows without writing 1 M actual files. The shape matches
+/// what scan would produce: each "project" gets a `node_modules` (or
+/// `target`) dir plus N file rows whose paths sit underneath it.
+fn synth_big_snapshot(num_projects: usize, files_per_proj: usize) -> (TempDir, PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = dir.path().join("big.db");
+    let conn = db::open(db_path.to_str().unwrap()).unwrap();
+    db::create_schema(&conn).unwrap();
+
+    let mut batch: Vec<db::FileRecord> = Vec::with_capacity(50_000);
+    let mut push = |batch: &mut Vec<db::FileRecord>, rec: db::FileRecord, conn: &duckdb::Connection| {
+        batch.push(rec);
+        if batch.len() >= 50_000 {
+            db::append_batch(conn, batch).unwrap();
+            batch.clear();
+        }
+    };
+
+    // half the projects host `node_modules`, half host `target` — both
+    // are in the default cleanup target set.
+    for i in 0..num_projects {
+        let project = format!("/tmp/synth/proj-{:06}", i);
+        let cat = if i % 2 == 0 { "node_modules" } else { "target" };
+        let target_dir = format!("{}/{}", project, cat);
+        push(
+            &mut batch,
+            db::FileRecord {
+                path: target_dir.clone(),
+                name: cat.to_string(),
+                ext: None,
+                size: 0,
+                physical_size: None,
+                mtime: Some(1_700_000_000),
+                is_dir: true,
+                depth: 3,
+            },
+            &conn,
+        );
+        for f in 0..files_per_proj {
+            let path = format!("{}/file-{:04}.bin", target_dir, f);
+            push(
+                &mut batch,
+                db::FileRecord {
+                    path,
+                    name: format!("file-{:04}.bin", f),
+                    ext: Some("bin".into()),
+                    size: 1024,
+                    physical_size: Some(1024),
+                    mtime: Some(1_700_000_000),
+                    is_dir: false,
+                    depth: 4,
+                },
+                &conn,
+            );
+        }
+    }
+    if !batch.is_empty() {
+        db::append_batch(&conn, &batch).unwrap();
+    }
+    db::write_scan_meta(&conn, "/tmp/synth", 1_700_000_000, Some(1_700_000_100), true, 0, 0)
+        .unwrap();
+    db::build_indexes(&conn).unwrap();
+    drop(conn);
+    (dir, db_path)
+}
+
+#[test]
+fn cleanup_is_fast_on_large_snapshot() {
+    // 2_000 projects × 500 files/project + 2_000 target-dir rows
+    // ≈ 1.002 M rows total. Roughly the shape of a real macOS home
+    // directory with thousands of node_modules / target dirs.
+    let (_dir, db_path) = synth_big_snapshot(2_000, 500);
+    let conn = db::open(db_path.to_str().unwrap()).unwrap();
+    let targets: Vec<String> = cleanup::default_target_names()
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+    let start = std::time::Instant::now();
+    let hits = cleanup::scan(&conn, &targets, 10_000).unwrap();
+    let elapsed = start.elapsed();
+
+    assert_eq!(hits.len(), 2_000, "expected one hit per project, got {}", hits.len());
+    // Each project has 500 × 1024 bytes = 512_000.
+    let total_bytes: u64 = hits.iter().map(|h| h.bytes).sum();
+    assert_eq!(total_bytes, 2_000 * 500 * 1024);
+    let total_files: u64 = hits.iter().map(|h| h.files).sum();
+    assert_eq!(total_files, 2_000 * 500);
+
+    // Generous threshold for CI variance. The grouped-query fix lands
+    // around ~0.2-0.5 s on an M-series Mac vs ~80 s for the per-target
+    // loop on the same fixture.
+    assert!(
+        elapsed < std::time::Duration::from_secs(5),
+        "cleanup::scan took {:?} on a ~1 M-row snapshot — should be < 5 s",
+        elapsed
+    );
+    eprintln!("cleanup_is_fast_on_large_snapshot: {:?}", elapsed);
 }
 
 #[test]

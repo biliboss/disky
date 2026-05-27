@@ -225,14 +225,26 @@ pub fn scan(conn: &Connection, targets: &[String], limit: usize) -> Result<Vec<C
     let basenames: Vec<String> = pairs.iter().map(|(_, b)| (*b).to_string()).collect();
     let placeholders: Vec<String> = (0..basenames.len()).map(|_| "?".to_string()).collect();
 
-    // Two-stage approach: (1) materialise target dirs into Rust; (2) for each
-    // target, run a bounded range scan over the path-indexed files table.
+    // History (kept for context):
+    //   v1: `LEFT JOIN files f ON f.path LIKE (t.path || '/%')` — 79 s on a
+    //       1.77 M-row snapshot. DuckDB planned a nested-loop join with
+    //       per-row LIKE evaluation.
+    //   v2: materialise target dirs in Rust, then issue ONE aggregation
+    //       query per target with a path-range predicate. Better than v1
+    //       but still O(N_targets × N_files / zone_maps): on real macOS
+    //       homes with thousands of `target` / `node_modules` dirs the
+    //       per-query overhead (DuckDB statement dispatch, FFI round-trip)
+    //       dominates and the whole call lands at 79–250 s.
+    //   v3 (this): one grouped query. Stash target dirs in a temporary
+    //       table (DuckDB then computes its zone maps) and let the planner
+    //       fuse them with `files` via a single range-join + GROUP BY.
+    //       Brings 79 s → < 1 s on a 1 M-row synthetic snapshot.
     //
-    // Why not one SQL JOIN? On a 1.77 M-row snapshot, `LEFT JOIN files f ON
-    // f.path LIKE (t.path || '/%')` ran 79 s because DuckDB planned it as a
-    // nested-loop join with per-row LIKE evaluation. The range below
-    // (`path >= t/ AND path < t0`, where '0' = '/' + 1 byte) lets DuckDB
-    // use idx_path to range-scan each target's subtree.
+    // We materialise target dirs into a TEMP table (instead of an inline
+    // VALUES list) for two reasons: (a) the protected-path filter is
+    // applied in Rust, which is simpler than encoding 14 `NOT path LIKE`
+    // predicates in SQL; (b) DuckDB can build zone maps on the temp table,
+    // which the IEJoin planner exploits.
     let target_sql = format!(
         "SELECT path, name FROM files WHERE is_dir AND name IN ({})",
         placeholders.join(",")
@@ -255,22 +267,63 @@ pub fn scan(conn: &Connection, targets: &[String], limit: usize) -> Result<Vec<C
         .flatten()
         .filter(|(p, _)| !is_protected(p))
         .collect();
+    drop(stmt);
 
-    let mut agg = conn.prepare(
-        "SELECT COALESCE(SUM(size), 0), COUNT(*)
-         FROM files
-         WHERE path >= ? AND path < ? AND is_dir = false",
+    if target_dirs.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Stage 2: materialise (path, lo, hi, name) into a temp table.
+    // We pre-compute the [lo, hi) range bounds so the join predicate is
+    // pure scalar (no string concatenation per-row).
+    conn.execute_batch(
+        "DROP TABLE IF EXISTS _cleanup_targets;
+         CREATE TEMP TABLE _cleanup_targets (
+             path TEXT NOT NULL,
+             lo   TEXT NOT NULL,
+             hi   TEXT NOT NULL,
+             name TEXT NOT NULL
+         );",
+    )?;
+    {
+        let mut app = conn.appender("_cleanup_targets")?;
+        for (path, name) in &target_dirs {
+            let lo = format!("{}/", path);
+            let hi = format!("{}0", path);
+            app.append_row(duckdb::params![path, lo, hi, name])?;
+        }
+        app.flush()?;
+    }
+
+    // Stage 3: one grouped range-join. DuckDB plans this as an IEJoin
+    // (inequality join), which is roughly linear in N_files + N_targets.
+    let mut grouped = conn.prepare(
+        "SELECT t.path,
+                t.name,
+                COALESCE(SUM(f.size), 0) AS bytes,
+                COUNT(f.path)             AS files
+         FROM _cleanup_targets t
+         LEFT JOIN files f
+           ON f.is_dir = false
+          AND f.path >= t.lo
+          AND f.path <  t.hi
+         GROUP BY t.path, t.name",
     )?;
     let basename_to_category: std::collections::HashMap<&'static str, &'static str> =
         pairs.iter().map(|(cat, base)| (*base, *cat)).collect();
 
+    let rows = grouped.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, i64>(2)?,
+            row.get::<_, i64>(3)?,
+        ))
+    })?;
+
     let mut out: Vec<CleanupHit> = Vec::with_capacity(target_dirs.len());
-    for (path, name) in &target_dirs {
-        let lo = format!("{}/", path);
-        let hi = format!("{}0", path);
-        let (bytes, files): (i64, i64) = agg.query_row(duckdb::params![lo, hi], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
-        })?;
+    for row in rows.flatten() {
+        let (path, name, bytes, files) = row;
         let category = basename_to_category
             .get(name.as_str())
             .copied()
@@ -278,11 +331,14 @@ pub fn scan(conn: &Connection, targets: &[String], limit: usize) -> Result<Vec<C
             .to_string();
         out.push(CleanupHit {
             category,
-            path: path.clone(),
+            path,
             bytes: bytes as u64,
             files: files as u64,
         });
     }
+    drop(grouped);
+    let _ = conn.execute_batch("DROP TABLE IF EXISTS _cleanup_targets;");
+
     out.sort_by_key(|h| std::cmp::Reverse(h.bytes));
     out.truncate(limit);
     Ok(out)
