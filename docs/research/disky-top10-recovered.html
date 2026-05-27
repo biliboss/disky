@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>disky · top 10 enhancement ideas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,700;9..144,900&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=typography,forms"></script>
+<script>
+tailwind.config = { theme: { extend: {
+  colors: {
+    paper:'#F5F1E8', ink:'#14110F', rust:'#B23A1F', olive:'#5C6831',
+    dim:'#6B655E', line:'#D9D2C2', card:'#FBF8F0', gold:'#C8A951'
+  },
+  fontFamily: {
+    display:['Fraunces','serif'],
+    sans:['Manrope','sans-serif'],
+    mono:['JetBrains Mono','monospace']
+  }
+}}}
+</script>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad:true, theme:'base',
+    themeVariables:{
+      primaryColor:'#FBF8F0', primaryTextColor:'#14110F',
+      primaryBorderColor:'#14110F', lineColor:'#5C6831',
+      secondaryColor:'#F5F1E8', tertiaryColor:'#F5F1E8',
+      fontFamily:'Manrope, sans-serif'
+    }});
+</script>
+<style>
+  body { background:#F5F1E8; color:#14110F; }
+  .grain::before {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:50;
+    opacity:.06; mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+  .display { font-family:'Fraunces',serif; font-variation-settings:'opsz' 144; letter-spacing:-.02em; }
+  .rulet { border-top:1px solid #14110F; }
+  .ruleb { border-bottom:1px solid #14110F; }
+  .num {
+    font-family:'Fraunces',serif; font-variation-settings:'opsz' 144,'wght' 900;
+    font-size:5rem; line-height:.85; letter-spacing:-.04em;
+  }
+  .chip {
+    display:inline-flex; align-items:center; gap:.35rem;
+    font-family:'JetBrains Mono',monospace; font-size:.7rem;
+    text-transform:uppercase; letter-spacing:.08em;
+    padding:.18rem .5rem; border:1px solid #14110F;
+  }
+  .chip.dot::before { content:''; width:.4rem; height:.4rem; background:currentColor; border-radius:9999px; }
+  .diff-S { background:#E8EBD6; }
+  .diff-M { background:#F0E2C8; }
+  .diff-L { background:#E8C9C0; }
+  .card {
+    background:#FBF8F0; border:1px solid #14110F;
+    padding:1.5rem; position:relative;
+  }
+  .card:hover { box-shadow:8px 8px 0 #14110F; transition:box-shadow .15s ease; }
+  .anchor { scroll-margin-top:5rem; }
+  pre.mermaid { background:#FBF8F0; border:1px solid #14110F; padding:1.25rem; }
+  code.inline {
+    font-family:'JetBrains Mono',monospace; font-size:.85em;
+    background:#F0E2C8; padding:.05em .35em; border:1px solid #14110F33;
+  }
+  .marker { color:#B23A1F; }
+  details summary { cursor:pointer; list-style:none; }
+  details summary::-webkit-details-marker { display:none; }
+  details[open] summary .arr { transform:rotate(90deg); }
+  .arr { transition:transform .15s ease; display:inline-block; }
+</style>
+</head>
+<body class="grain font-sans antialiased">
+
+<!-- HEADER -->
+<header class="sticky top-0 z-40 bg-paper/95 backdrop-blur ruleb">
+  <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between text-sm">
+    <div class="flex items-center gap-3">
+      <span class="font-mono text-xs uppercase tracking-widest">disky · research note</span>
+    </div>
+    <nav class="hidden md:flex items-center gap-5 font-mono text-xs uppercase tracking-widest">
+      <a href="#ideas" class="hover:text-rust">ideas</a>
+      <a href="#matrix" class="hover:text-rust">matrix</a>
+      <a href="#peers" class="hover:text-rust">peers</a>
+    </nav>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="max-w-6xl mx-auto px-6 pt-14 pb-12">
+  <div class="grid md:grid-cols-12 gap-8 items-end">
+    <div class="md:col-span-9">
+      <div class="flex flex-wrap gap-2 mb-6">
+        <span class="chip dot text-olive">cli · for · agents</span>
+        <span class="chip">rust</span>
+        <span class="chip">duckdb</span>
+        <span class="chip">mcp</span>
+      </div>
+      <h1 class="display text-6xl md:text-8xl leading-[.85] mb-6">
+        ten ways to<br>
+        sharpen <span class="marker italic">disky</span><br>
+        for agents.
+      </h1>
+      <p class="text-lg md:text-xl text-ink/80 max-w-2xl">
+        Research note cruzando <span class="font-mono text-sm">dust</span>,
+        <span class="font-mono text-sm">gdu</span>,
+        <span class="font-mono text-sm">ncdu</span>,
+        <span class="font-mono text-sm">diskonaut</span>,
+        <span class="font-mono text-sm">erdtree</span>,
+        <span class="font-mono text-sm">duf</span> e
+        <span class="font-mono text-sm">qdirstat</span> &mdash;
+        com viés agent-first: outputs determinísticos, progressive disclosure,
+        rails contra ações destrutivas e composabilidade.
+      </p>
+    </div>
+    <aside class="md:col-span-3 border border-ink p-5 bg-card text-sm leading-relaxed">
+      <div class="font-mono text-xs uppercase tracking-widest mb-2 text-dim">premissa</div>
+      <p>
+        disky <em>não é</em> um TUI pra humano. É um endpoint estruturado
+        que LLMs chamam via CLI ou MCP. Cada idéia abaixo é avaliada por
+        quanto ela <strong>melhora o loop agente↔disco</strong>, não pelo wow factor visual.
+      </p>
+    </aside>
+  </div>
+</section>
+
+<!-- MATRIX (mermaid) -->
+<section id="matrix" class="max-w-6xl mx-auto px-6 py-12">
+  <div class="ruleb mb-8 pb-3 flex items-baseline justify-between">
+    <h2 class="display text-3xl">Matriz · esforço × ROI agente</h2>
+    <span class="font-mono text-xs uppercase tracking-widest text-dim">quadrant chart</span>
+  </div>
+  <pre class="mermaid">
+quadrantChart
+  title 10 ideas · agent-ROI vs effort
+  x-axis "Low effort" --> "High effort"
+  y-axis "Low agent ROI" --> "High agent ROI"
+  quadrant-1 "Ship now"
+  quadrant-2 "Plan"
+  quadrant-3 "Skip"
+  quadrant-4 "Quick wins"
+  "1 hardlink-aware": [0.55, 0.62]
+  "2 mtime filters": [0.22, 0.85]
+  "3 ignore profiles": [0.50, 0.70]
+  "4 --summarize scalar": [0.12, 0.78]
+  "5 streaming cursor": [0.58, 0.88]
+  "6 saved views": [0.28, 0.74]
+  "7 plan-token apply": [0.55, 0.92]
+  "8 per-volume": [0.55, 0.55]
+  "9 file kind tags": [0.60, 0.72]
+  "10 incremental scan": [0.85, 0.80]
+  </pre>
+</section>
+
+<!-- IDEAS -->
+<section id="ideas" class="max-w-6xl mx-auto px-6 py-12">
+  <div class="ruleb mb-10 pb-3 flex items-baseline justify-between">
+    <h2 class="display text-4xl">Top 10 idéias</h2>
+    <div class="flex items-center gap-2 font-mono text-xs uppercase tracking-widest">
+      <span class="chip diff-S">S · small</span>
+      <span class="chip diff-M">M · medium</span>
+      <span class="chip diff-L">L · large</span>
+    </div>
+  </div>
+
+  <div class="grid gap-6">
+
+    <!-- 1 -->
+    <article id="i1" class="card anchor grid md:grid-cols-12 gap-6">
+      <div class="md:col-span-2 flex flex-col gap-2">
+        <div class="num">01</div>
+        <span class="chip diff-M">M</span>
+      </div>
+      <div class="md:col-span-10">
+        <h3 class="display text-2xl mb-1">Hardlink/clone-aware accounting</h3>
+        <p class="text-sm font-mono uppercase tracking-widest text-rust mb-3">peer · gdu hardlink dedup · erdtree physical vs logical</p>
+        <p class="mb-2"><strong>O quê:</strong> tracking de inode (e APFS clones) durante scan; logical + physical bytes por arquivo, inodes compartilhados contam uma vez no snapshot.</p>
+        <p class="mb-2"><strong>Por que agente:</strong> ações em <code class="inline">top</code>/<code class="inline">dirs</code> hoje contam dobrado em Time Machine local snapshots, APFS clones, pnpm hardlinks. Numero ruim = decisão ruim.</p>
+        <p><strong>Como:</strong> colunas <code class="inline">inode</code>, <code class="inline">nlink</code>, <code class="inline">physical_size</code>. <code class="inline">statx</code>/<code class="inline">fstatat</code> p/ <code class="inline">st_blocks</code> + detecção de clones. Flags <code class="inline">--apparent</code> vs <code class="inline">--physical</code> + <code class="inline">dedup: true</code> em stats.</p>
+      </div>
+    </article>
+
+    <!-- 2 -->
+    <article id="i2" class="card anchor grid md:grid-cols-12 gap-6">
+      <div class="md:col-span-2 flex flex-col gap-2">
+        <div class="num">02</div>
+        <span class="chip diff-S">S</span>
+      </div>
+      <div class="md:col-span-10">
+        <h3 class="display text-2xl mb-1">Filtros de idade · <code class="inline">--older-than</code></h3>
+        <p class="text-sm font-mono uppercase tracking-widest text-rust mb-3">peer · gdu --since/--until · gdu --min-age/--max-age</p>
+        <p class="mb-2"><strong>O quê:</strong> filtros de mtime/atime em todo subcomando: <code class="inline">--older-than 90d</code>, <code class="inline">--newer-than 2025-01-01</code>, <code class="inline">--accessed-before</code>.</p>
+        <p class="mb-2"><strong>Por que agente:</strong> "acha 50 GB que ninguém tocou em 1 ano" é prompt frequente e hoje vira SQL bruto. Flag nativa aparece em <code class="inline">disky schema</code> e MCP — agente descobre sem precisar adivinhar.</p>
+        <p><strong>Como:</strong> parser de duração (<code class="inline">7d</code>, <code class="inline">2h30m</code>, <code class="inline">1y</code>) + RFC3339. Predicado <code class="inline">mtime &lt;= ?</code> no DuckDB. Args <code class="inline">age_older_than</code>/<code class="inline">age_newer_than</code> em MCP tools.</p>
+      </div>
+    </article>
+
+    <!-- 3 -->
+    <article id="i3" class="card anchor grid md:grid-cols-12 gap-6">
+      <div class="md:col-span-2 flex flex-col gap-2">
+        <div class="num">03</div>
+        <span class="chip diff-M">M</span>
+      </div>
+      <div class="md:col-span-10">
+        <h3 class="display text-2xl mb-1">Ignore profiles + <code class="inline">.gitignore</code>/<code class="inline">.diskyignore</code></h3>
+        <p class="text-sm font-mono uppercase tracking-widest text-rust mb-3">peer · erdtree gitignore aware · gdu --ignore-from</p>
+        <p class="mb-2"><strong>O quê:</strong> honra <code class="inline">.gitignore</code>/<code class="inline">.diskyignore</code> no scan; config <code class="inline">~/.config/disky/config.toml</code> com profiles nomeados (<em>work</em>, <em>personal</em>).</p>
+        <p class="mb-2"><strong>Por que agente:</strong> agente não threa lista de ignores em cada chamada. Profiles são reproduzíveis — agente pede <code class="inline">--profile work</code>.</p>
+        <p><strong>Como:</strong> crate <code class="inline">ignore</code> (mesma do ripgrep/fd) dentro do jwalk callback. <code class="inline">scan_meta</code> guarda o set resolvido. <code class="inline">disky config show</code> em JSON.</p>
+      </div>
+    </article>
+
+    <!-- 4 -->
+    <article id="i4" class="card anchor grid md:grid-cols-12 gap-6">
+      <div class="md:col-span-2 flex flex-col gap-2">
+        <div class="num">04</div>
+        <span class="chip diff-S">S</span>
+      </div>
+      <div class="md:col-span-10">
+        <h3 class="display text-2xl mb-1"><code class="inline">--summarize</code> · escalar puro</h3>
+        <p class="text-sm font-mono uppercase tracking-widest text-rust mb-3">peer · gdu -s · dust --skip-total</p>
+        <p class="mb-2"><strong>O quê:</strong> <code class="inline">disky stats --summarize</code> imprime só <code class="inline">{"bytes": N, "files": M}</code> (ou inteiro cru com <code class="inline">--raw</code>).</p>
+        <p class="mb-2"><strong>Por que agente:</strong> quando agente só quer o número pra alimentar próximo passo, o envelope inteiro é overhead. Resposta escalar corta tokens e parsing.</p>
+        <p><strong>Como:</strong> variante <code class="inline">kind: "scalar"</code> no envelope JSON, ou flag <code class="inline">--raw</code> imprimindo inteiro nu. Trivial sobre o schema atual.</p>
+      </div>
+    </article>
+
+    <!-- 5 -->
+    <article id="i5" class="card anchor grid md:grid-cols-12 gap-6">
+      <div class="md:col-span-2 flex flex-col gap-2">
+        <div class="num">05</div>
+        <span class="chip diff-M">M</span>
+      </div>
+      <div class="md:col-span-10">
+        <h3 class="display text-2xl mb-1">Streaming NDJSON com cursor</h3>
+        <p class="text-sm font-mono uppercase tracking-widest text-rust mb-3">peer · gdu --output-file JSON</p>
+        <p class="mb-2"><strong>O quê:</strong> <code class="inline">disky query --stream</code> e <code class="inline">disky top --stream</code> emitem NDJSON linha-a-linha conforme DuckDB rende. <code class="inline">--cursor &lt;id&gt;</code> em vez de <code class="inline">--limit</code> hard.</p>
+        <p class="mb-2"><strong>Por que agente:</strong> <code class="inline">find</code> de 100k linhas explode o contexto. NDJSON com cursor = progressive disclosure no protocolo. Agente puxa N, decide, pede mais.</p>
+        <p><strong>Como:</strong> stream das rows direto via <code class="inline">serde_json</code> pra stdout. Sentinela final <code class="inline">{"cursor":"&lt;row_id&gt;", "done":false}</code>. MCP espelha com arg <code class="inline">cursor</code> e response <code class="inline">next_cursor</code>.</p>
+      </div>
+    </article>
+
+    <!-- 6 -->
+    <article id="i6" class="card anchor grid md:grid-cols-12 gap-6">
+      <div class="md:col-span-2 flex flex-col gap-2">
+        <div class="num">06</div>
+        <span class="chip diff-S">S</span>
+      </div>
+      <div class="md:col-span-10">
+        <h3 class="display text-2xl mb-1">Saved views · query nomeada</h3>
+        <p class="text-sm font-mono uppercase tracking-widest text-rust mb-3">peer · gdu --write-config · duf --output presets</p>
+        <p class="mb-2"><strong>O quê:</strong> <code class="inline">disky view save my-cleanup "&lt;sql&gt;"</code>, <code class="inline">disky view run my-cleanup --snapshot @latest</code>, em TOML.</p>
+        <p class="mb-2"><strong>Por que agente:</strong> agentes convergem nas mesmas queries. Dar nome transforma SQL frágil em API estável — <code class="inline">disky schema</code> enumera, outros agentes descobrem.</p>
+        <p><strong>Como:</strong> views em <code class="inline">~/.config/disky/views.toml</code> com nome, sql template, params. <code class="inline">schema</code> inclui array <code class="inline">views</code>. MCP expõe <code class="inline">disky_view_run(name, args)</code>.</p>
+      </div>
+    </article>
+
+    <!-- 7 -->
+    <article id="i7" class="card anchor grid md:grid-cols-12 gap-6">
+      <div class="md:col-span-2 flex flex-col gap-2">
+        <div class="num">07</div>
+        <span class="chip diff-M">M</span>
+      </div>
+      <div class="md:col-span-10">
+        <h3 class="display text-2xl mb-1">Plan-token apply · <em>commit transactional</em></h3>
+        <p class="text-sm font-mono uppercase tracking-widest text-rust mb-3">peer · gdu --no-delete · ncdu confirm-on-delete</p>
+        <p class="mb-2"><strong>O quê:</strong> <code class="inline">disky cleanup --plan</code> imprime plano JSON com <code class="inline">plan_id</code> (hash de paths+sizes+mtimes). <code class="inline">--apply --plan-id &lt;id&gt;</code> é o único caminho pra deletar. Hash mismatch = recusa.</p>
+        <p class="mb-2"><strong>Por que agente:</strong> entre LLM ver dry-run e aprovar <code class="inline">--apply</code>, FS pode ter mudado. Plan token converte "show then do" em 2-step transacional, difícil de usar errado.</p>
+        <p><strong>Como:</strong> hash de <code class="inline">(path,size,mtime,inode)</code> em digest estável. Persiste em <code class="inline">~/Library/.../disky/plans/&lt;id&gt;.json</code> com TTL. Recusa <code class="inline">--apply</code> se qualquer stat diverge.</p>
+      </div>
+    </article>
+
+    <!-- 8 -->
+    <article id="i8" class="card anchor grid md:grid-cols-12 gap-6">
+      <div class="md:col-span-2 flex flex-col gap-2">
+        <div class="num">08</div>
+        <span class="chip diff-M">M</span>
+      </div>
+      <div class="md:col-span-10">
+        <h3 class="display text-2xl mb-1">Per-volume · envelope tipo <code class="inline">df</code></h3>
+        <p class="text-sm font-mono uppercase tracking-widest text-rust mb-3">peer · duf filesystem table · gdu -d --no-cross</p>
+        <p class="mb-2"><strong>O quê:</strong> <code class="inline">disky volumes</code> (ou <code class="inline">--per-volume</code> em stats) listando cada mount <code class="inline">{mountpoint, fstype, total, used, avail, scanned_bytes}</code>. <code class="inline">--one-filesystem</code> em scan.</p>
+        <p class="mb-2"><strong>Por que agente:</strong> "por que disco cheio?" pede contexto de <code class="inline">df</code> junto. Sem isso agente shella e merga na mão. <code class="inline">--one-filesystem</code> evita agente acidentalmente crawlear <code class="inline">/Volumes/TimeMachine</code>.</p>
+        <p><strong>Como:</strong> <code class="inline">statfs</code>/<code class="inline">getmntinfo</code> no macOS. Cross-ref de path roots c/ mount points; cada row de <code class="inline">files</code> ganha <code class="inline">volume_id</code>. Flag <code class="inline">--one-filesystem</code> tipo erdtree <code class="inline">-x</code>.</p>
+      </div>
+    </article>
+
+    <!-- 9 -->
+    <article id="i9" class="card anchor grid md:grid-cols-12 gap-6">
+      <div class="md:col-span-2 flex flex-col gap-2">
+        <div class="num">09</div>
+        <span class="chip diff-M">M</span>
+      </div>
+      <div class="md:col-span-10">
+        <h3 class="display text-2xl mb-1">Classificação semântica · <em>kind</em> além da extensão</h3>
+        <p class="text-sm font-mono uppercase tracking-widest text-rust mb-3">peer · qdirstat MIME-category tree</p>
+        <p class="mb-2"><strong>O quê:</strong> tag por categoria no scan (<code class="inline">code</code>, <code class="inline">media</code>, <code class="inline">archive</code>, <code class="inline">build-artifact</code>, <code class="inline">cache</code>, <code class="inline">vcs</code>, <code class="inline">container-image</code>, <code class="inline">model-weights</code>).</p>
+        <p class="mb-2"><strong>Por que agente:</strong> extensão sozinha é fraca (sem ext, ou <code class="inline">.bin</code>). Categorias deixam agente perguntar "biggest non-essential" ou "purge caches" com precisão semântica. <code class="inline">cleanup</code> propõe por categoria, não só dir-name hardcoded.</p>
+        <p><strong>Como:</strong> ruleset TOML (globs + ext + magic-bytes pros top 50). Coluna <code class="inline">category</code>. <code class="inline">--category model-weights</code> em qualquer lugar. <code class="inline">cleanup --target caches</code> agrega <code class="inline">.cache</code>, <code class="inline">.npm</code>, <code class="inline">.yarn/cache</code>, HuggingFace, pip cache.</p>
+      </div>
+    </article>
+
+    <!-- 10 -->
+    <article id="i10" class="card anchor grid md:grid-cols-12 gap-6">
+      <div class="md:col-span-2 flex flex-col gap-2">
+        <div class="num">10</div>
+        <span class="chip diff-L">L</span>
+      </div>
+      <div class="md:col-span-10">
+        <h3 class="display text-2xl mb-1">Scan incremental · delta por mtime</h3>
+        <p class="text-sm font-mono uppercase tracking-widest text-rust mb-3">peer · gdu -r read-from-storage · gdu --db</p>
+        <p class="mb-2"><strong>O quê:</strong> <code class="inline">disky scan --incremental --base @latest &lt;path&gt;</code> re-walka mas pula subtrees cujo dir mtime ≤ mtime registrado no snapshot. Merge dos deltas vira snapshot novo.</p>
+        <p class="mb-2"><strong>Por que agente:</strong> rescaneando <code class="inline">/</code> semanal pra loop de monitor é desperdício. Incremental + bundled <code class="inline">--emit-top</code> = agente roda check semanal sub-segundo. <code class="inline">disky diff</code> vira quase-realtime.</p>
+        <p><strong>Como:</strong> persistir dir mtimes junto das rows (parcialmente presente). Walker checa parent mtime antes de descer; subtrees inalterados copiam rows via <code class="inline">INSERT … SELECT</code>. Grava <code class="inline">incremental_base</code> em <code class="inline">scan_meta</code> p/ provenance no diff.</p>
+      </div>
+    </article>
+
+  </div>
+</section>
+
+<!-- COMBINATIONS / FLOW -->
+<section class="max-w-6xl mx-auto px-6 py-12">
+  <div class="ruleb mb-8 pb-3">
+    <h2 class="display text-3xl">Fluxo agente · idéias combinadas</h2>
+    <p class="text-sm text-dim mt-1">Como 2 + 5 + 7 + 10 viram um loop de cleanup seguro e incremental.</p>
+  </div>
+  <pre class="mermaid">
+flowchart LR
+  S["scan --incremental<br/>--base @latest<br/><b>idea 10</b>"] --> D["disky diff<br/>old → new"]
+  D --> Q["top --older-than 180d<br/>--category cache<br/><b>idea 2 + 9</b>"]
+  Q --> P["cleanup --plan<br/>→ plan_id sha256<br/><b>idea 7</b>"]
+  P --> R{"agent reviews<br/>plan JSON"}
+  R -->|approve| A["cleanup --apply<br/>--plan-id sha256<br/>--reversible"]
+  R -->|reject| X["discard"]
+  A --> M["stats --summarize<br/><b>idea 4</b>"]
+  M --> S
+  </pre>
+</section>
+
+<!-- PEERS -->
+<section id="peers" class="max-w-6xl mx-auto px-6 py-12">
+  <div class="ruleb mb-8 pb-3 flex items-baseline justify-between">
+    <h2 class="display text-3xl">Peer scan notes</h2>
+    <span class="font-mono text-xs uppercase tracking-widest text-dim">7 repos · features destacadas</span>
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-4">
+    <details class="card" open>
+      <summary class="flex items-center justify-between mb-3">
+        <span class="font-mono text-sm font-bold">bootandy/dust <span class="text-dim">· Rust</span></span>
+        <span class="arr font-mono">▸</span>
+      </summary>
+      <ul class="text-sm space-y-1 list-disc pl-5">
+        <li>Tree com bars de %</li>
+        <li><code class="inline">--collapse</code> nomeados (folda node_modules)</li>
+        <li><code class="inline">-j</code> JSON output</li>
+        <li>Regex include/exclude (<code class="inline">-e</code>/<code class="inline">-v</code>)</li>
+        <li><code class="inline">-z</code> min-size filter</li>
+        <li>Screen-reader mode</li>
+        <li>Hardlink awareness</li>
+        <li><code class="inline">--files-from</code>/<code class="inline">--files0-from</code> pra paths piped</li>
+      </ul>
+    </details>
+
+    <details class="card" open>
+      <summary class="flex items-center justify-between mb-3">
+        <span class="font-mono text-sm font-bold">dundee/gdu <span class="text-dim">· Go</span></span>
+        <span class="arr font-mono">▸</span>
+      </summary>
+      <ul class="text-sm space-y-1 list-disc pl-5">
+        <li><code class="inline">--db</code> SQLite/Badger + <code class="inline">-r</code> reuse</li>
+        <li><code class="inline">--max-age</code>/<code class="inline">--min-age</code>/<code class="inline">--since</code>/<code class="inline">--until</code></li>
+        <li><code class="inline">-i</code>/<code class="inline">-I</code>/<code class="inline">-X</code> ignore lists</li>
+        <li><code class="inline">-o</code> JSON export + <code class="inline">-f</code> re-import</li>
+        <li><code class="inline">--no-cross</code>, <code class="inline">--no-delete</code> safety toggles</li>
+        <li>YAML config + <code class="inline">--write-config</code></li>
+        <li>Hardlink dedup, archive browsing</li>
+      </ul>
+    </details>
+
+    <details class="card">
+      <summary class="flex items-center justify-between mb-3">
+        <span class="font-mono text-sm font-bold">rofl0r/ncdu <span class="text-dim">· C</span></span>
+        <span class="arr font-mono">▸</span>
+      </summary>
+      <ul class="text-sm space-y-1 list-disc pl-5">
+        <li>Classic curses TUI</li>
+        <li><strong>JSON export/import canonical</strong> — outras ferramentas consomem dumps ncdu</li>
+        <li>Confirm-on-delete</li>
+      </ul>
+    </details>
+
+    <details class="card">
+      <summary class="flex items-center justify-between mb-3">
+        <span class="font-mono text-sm font-bold">imsnif/diskonaut <span class="text-dim">· Rust</span></span>
+        <span class="arr font-mono">▸</span>
+      </summary>
+      <ul class="text-sm space-y-1 list-disc pl-5">
+        <li>Treemap visualization</li>
+        <li>Scan-while-browse (incremental UI)</li>
+        <li>Session freed-bytes tracker</li>
+      </ul>
+    </details>
+
+    <details class="card">
+      <summary class="flex items-center justify-between mb-3">
+        <span class="font-mono text-sm font-bold">solidiquis/erdtree <span class="text-dim">· Rust</span></span>
+        <span class="arr font-mono">▸</span>
+      </summary>
+      <ul class="text-sm space-y-1 list-disc pl-5">
+        <li>Physical vs logical vs blocks vs word/line metrics</li>
+        <li><code class="inline">.gitignore</code> aware default</li>
+        <li>Layouts: regular/inverted/flat</li>
+        <li>Glob+regex c/ file-type restriction</li>
+        <li>Long view com perms/owner/inode/nlink</li>
+        <li>Sort por ctime/atime/mtime</li>
+        <li><code class="inline">-x</code> one-filesystem</li>
+      </ul>
+    </details>
+
+    <details class="card">
+      <summary class="flex items-center justify-between mb-3">
+        <span class="font-mono text-sm font-bold">muesli/duf <span class="text-dim">· Go</span></span>
+        <span class="arr font-mono">▸</span>
+      </summary>
+      <ul class="text-sm space-y-1 list-disc pl-5">
+        <li>FS/mount table com usage/inodes</li>
+        <li><code class="inline">--only</code>/<code class="inline">--hide</code> group filters</li>
+        <li><code class="inline">--output</code> column selection</li>
+        <li>Thresholds configuráveis pra cor</li>
+        <li><code class="inline">--json</code> da tabela inteira</li>
+      </ul>
+    </details>
+
+    <details class="card md:col-span-2">
+      <summary class="flex items-center justify-between mb-3">
+        <span class="font-mono text-sm font-bold">shundhammer/qdirstat <span class="text-dim">· C++/Qt</span></span>
+        <span class="arr font-mono">▸</span>
+      </summary>
+      <ul class="text-sm space-y-1 list-disc pl-5">
+        <li>MIME-category tree ("Pictures", "Videos", "Archives") — base da <strong>idéia 9</strong></li>
+        <li>Cleanup actions configuráveis</li>
+        <li>File-age histogram</li>
+        <li>Treemap</li>
+      </ul>
+    </details>
+  </div>
+</section>
+
+<!-- AGENT-FIRST PRINCIPLES -->
+<section class="max-w-6xl mx-auto px-6 py-12">
+  <div class="ruleb mb-8 pb-3">
+    <h2 class="display text-3xl">Eixos de viés agent-first</h2>
+  </div>
+  <div class="grid md:grid-cols-3 gap-4 text-sm">
+    <div class="border border-ink p-5 bg-card">
+      <div class="font-mono text-xs uppercase tracking-widest mb-2">determinismo</div>
+      <p>Plan-token (7) + incremental base (10) garantem que dois agentes vendo o mesmo snapshot tomam a mesma decisão.</p>
+    </div>
+    <div class="border border-ink p-5 bg-card">
+      <div class="font-mono text-xs uppercase tracking-widest mb-2">progressive disclosure</div>
+      <p>Cursor streaming (5) + scalar summarize (4) deixam agente puxar só o que precisa, sem queimar contexto.</p>
+    </div>
+    <div class="border border-ink p-5 bg-card">
+      <div class="font-mono text-xs uppercase tracking-widest mb-2">descoberta via schema</div>
+      <p>Saved views (6) + ignore profiles (3) + filtros nativos (2,9) aparecem em <code class="inline">disky schema</code>, eliminando prompt-engineering.</p>
+    </div>
+    <div class="border border-ink p-5 bg-card">
+      <div class="font-mono text-xs uppercase tracking-widest mb-2">safety rails</div>
+      <p>Plan-token (7) + reversible trash (já existe) + one-filesystem (8) tornam ação destrutiva difícil de errar.</p>
+    </div>
+    <div class="border border-ink p-5 bg-card">
+      <div class="font-mono text-xs uppercase tracking-widest mb-2">precisão</div>
+      <p>Hardlink/clone-aware (1) + per-volume (8) corrigem contagem dobrada — números bons = decisões boas.</p>
+    </div>
+    <div class="border border-ink p-5 bg-card">
+      <div class="font-mono text-xs uppercase tracking-widest mb-2">composabilidade</div>
+      <p>NDJSON streaming (5) + scalar (4) + saved views (6) compõem em pipes Unix — agente encadeia sem glue code.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="max-w-6xl mx-auto px-6 py-12 rulet mt-8">
+  <div class="flex flex-wrap justify-between items-end gap-6 text-sm font-mono text-dim">
+    <div>
+      <div class="display text-2xl text-ink leading-none">disky · research</div>
+      <div class="mt-1">cli para agents · não para humanos · não para terminais bonitos</div>
+    </div>
+    <div class="text-right">
+      <div>top 10 enhancement ideas</div>
+      <div>peer-grounded · 2026-05-21</div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
+

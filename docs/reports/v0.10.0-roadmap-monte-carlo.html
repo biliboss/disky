@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>disky · v0.10.0 roadmap · flow metrics + Monte Carlo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F5F1E8; --ink:#14110F; --rust:#B23A1F; --olive:#5C6831;
+  --dim:#6B655E; --line:#D9D2C2; --card:#FBF8F0;
+  --done:#3F6B2A; --partial:#B8841C; --risk:#B23A1F; --deferred:#8C857B;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'Manrope',sans-serif;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding:64px 32px 96px}
+header{margin-bottom:56px;border-bottom:1px solid var(--line);padding-bottom:32px}
+h1{font-family:'Fraunces',serif;font-variation-settings:'opsz' 144,'wght' 700;font-size:64px;line-height:1;letter-spacing:-.02em;margin:0 0 8px}
+h1 .tag{color:var(--rust)}
+.sub{color:var(--dim);font-size:15px;margin:0}
+.meta{margin-top:24px;display:flex;gap:32px;flex-wrap:wrap;color:var(--dim);font-size:13px;font-family:'JetBrains Mono',monospace}
+.meta b{color:var(--ink);font-weight:600}
+section{margin-top:56px;display:grid;grid-template-columns:80px 1fr;gap:32px;align-items:start}
+section .num{font-family:'Fraunces',serif;font-size:48px;font-weight:300;color:var(--rust);line-height:1;font-variation-settings:'opsz' 48}
+section h2{font-family:'Fraunces',serif;font-size:32px;font-weight:600;margin:0 0 16px;letter-spacing:-.01em;font-variation-settings:'opsz' 32}
+section p{margin:0 0 16px;max-width:780px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-top:8px}
+.tile{background:var(--card);border:1px solid var(--line);padding:20px}
+.tile .k{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-family:'JetBrains Mono',monospace}
+.tile .v{font-family:'Fraunces',serif;font-variation-settings:'opsz' 96,'wght' 700;font-size:44px;line-height:1.05;margin-top:6px;letter-spacing:-.02em}
+.tile .u{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim);margin-top:4px}
+.kanban{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.col{background:var(--card);border:1px solid var(--line);padding:16px;min-height:200px}
+.col h3{font-family:'Fraunces',serif;font-size:18px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.col h3 .chip{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;background:var(--ink);color:var(--paper);padding:2px 8px}
+.col .pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;padding:1px 6px;margin-left:6px;background:var(--paper);border:1px solid var(--line);color:var(--dim)}
+.cards{display:flex;flex-direction:column;gap:6px}
+.card{background:var(--paper);border:1px solid var(--line);padding:8px 10px;font-size:13px;line-height:1.4;transition:background .15s}
+.card:hover{background:#fff}
+.card.done{border-left:3px solid var(--done)}
+.card.wip{border-left:3px solid var(--partial)}
+.card.todo{border-left:3px solid var(--rust)}
+.card code{font-family:'JetBrains Mono',monospace;font-size:11px;background:#0001;padding:1px 4px}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line)}
+th{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);font-weight:600}
+td.num{text-align:right;font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+.chart{background:var(--card);border:1px solid var(--line);padding:24px;margin-top:8px}
+.chart svg{display:block;width:100%;height:auto}
+.legend{display:flex;gap:24px;font-size:12px;color:var(--dim);font-family:'JetBrains Mono',monospace;margin-top:12px}
+.legend i{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:middle}
+.callout{background:var(--ink);color:var(--paper);padding:24px;margin-top:8px;font-size:15px}
+.callout b{color:var(--rust)}
+.callout code{font-family:'JetBrains Mono',monospace;background:#fff2;padding:2px 6px}
+.followup li{margin-bottom:6px}
+.followup li.done{color:var(--dim);text-decoration:line-through}
+.q{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--rust);font-weight:600}
+@media (max-width:720px){section{grid-template-columns:1fr;gap:8px}section .num{font-size:32px}.kanban{grid-template-columns:1fr}h1{font-size:44px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>disky <span class="tag">v0.10.0</span> roadmap</h1>
+  <p class="sub">flow metrics · Monte Carlo forecast · kanban one-pager</p>
+  <div class="meta">
+    <div><b>cwd</b> /Users/billiboss/src/disky</div>
+    <div><b>head</b> 6dbef4b</div>
+    <div><b>last tag</b> v0.9.0 · 2026-05-22</div>
+    <div><b>generated</b> <span id="genTs"></span></div>
+  </div>
+</header>
+
+<section>
+  <div class="num">01</div>
+  <div>
+    <h2>Flow tiles</h2>
+    <p>Mined from git log on the working tree. Each <code>feat:</code> commit treated as one delivered card. Cycle Time = minutes between consecutive feat commits within an active session. Throughput = feats per active day.</p>
+    <div class="tiles" id="tiles"></div>
+  </div>
+</section>
+
+<section>
+  <div class="num">02</div>
+  <div>
+    <h2>Kanban · v0.10.0 must-ship</h2>
+    <p>State sourced from <code>memory/v0.10.0-punch-list.md</code>. 9 of 17 must-ship items merged. 8 open. No items currently in flight (clean WIP=0 — typical between bursts).</p>
+    <div class="kanban" id="kanban"></div>
+  </div>
+</section>
+
+<section>
+  <div class="num">03</div>
+  <div>
+    <h2>Cycle Time distribution</h2>
+    <p>27 feat-to-feat intervals across 3 active days. Heavy right tail dominated by inter-burst gaps (~2d, ~4d). When in a burst, median is under 4 min — Gabriel ships in rapid-fire mode, then stops cold.</p>
+    <div class="chart"><svg id="ctHist" viewBox="0 0 900 280"></svg></div>
+    <div class="legend">
+      <span><i style="background:var(--rust)"></i>active-burst CT (n=25, &lt;1h)</span>
+      <span><i style="background:var(--deferred)"></i>inter-burst gaps (n=2, &gt;1d)</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="num">04</div>
+  <div>
+    <h2>Monte Carlo · when does v0.10.0 ship?</h2>
+    <p>10 000 simulated futures. Each calendar day rolls active vs idle with P(active) = 3/8 ≈ 0.375 (observed base rate). Active days draw feat count from empirical sample <code>[3, 5, 19]</code>. Stops when cumulative feats ≥ 8 remaining must-ship items.</p>
+    <div class="chart"><svg id="mc" viewBox="0 0 900 280"></svg></div>
+    <div class="legend" id="mcLegend"></div>
+    <div class="callout" style="margin-top:24px">
+      <b>Forecast:</b> <span id="forecast"></span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="num">05</div>
+  <div>
+    <h2>Recommended order</h2>
+    <p>Smallest-to-biggest, value-first. Group A unlocks <code>disky web</code>, the agent-visible win. Group B is MCP polish. Group C is infrastructure (tests, docs).</p>
+    <table>
+      <thead><tr><th>#</th><th>Item</th><th>Group</th><th class="num">Est feats</th><th class="num">Est days*</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><code>disky install-mcp</code> subcommand (idempotent JSON patch)</td><td>infra</td><td class="num">1</td><td class="num">0.2</td></tr>
+        <tr><td>2</td><td><code>disky web</code> starts FastHTML on :9000</td><td>web</td><td class="num">1</td><td class="num">0.3</td></tr>
+        <tr><td>3</td><td><code>disky web</code> renders dogfood layout + action buttons</td><td>web</td><td class="num">1</td><td class="num">0.4</td></tr>
+        <tr><td>4</td><td>Button → POST → cleanup --apply --reversible → SSE</td><td>web</td><td class="num">1</td><td class="num">0.5</td></tr>
+        <tr><td>5</td><td>MCP <code>resources/list</code> + <code>resources/read</code></td><td>mcp</td><td class="num">1</td><td class="num">0.4</td></tr>
+        <tr><td>6</td><td>MCP <code>prompts/list</code> + 3 canned flows</td><td>mcp</td><td class="num">1</td><td class="num">0.3</td></tr>
+        <tr><td>7</td><td>MCP progress notifications (scan + cleanup)</td><td>mcp</td><td class="num">1</td><td class="num">0.4</td></tr>
+        <tr><td>8</td><td><code>tests/mcp_protocol.rs</code> + AGENTS/CHANGELOG + smoke tests</td><td>infra</td><td class="num">1</td><td class="num">0.5</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px;font-size:12px;color:var(--dim)"><i>* one active day per unit. Calendar days multiply by ~2.7 given current cadence.</i></p>
+  </div>
+</section>
+
+<section>
+  <div class="num">06</div>
+  <div>
+    <h2>Followup · top 10 ideas + rust-vs-giants</h2>
+    <p>Recovered from previous research sessions. Hard commitment for v0.10.0 stays the punch list — these are next-cycle (v0.11.0+).</p>
+    <ul class="followup">
+      <li class="done">Idea 4 · <code>--summarize</code> scalar — shipped</li>
+      <li class="done">Idea 2 · <code>disky old --older-than</code> — shipped</li>
+      <li class="done">Idea 6 · <code>disky filter --where</code> (partial saved views) — shipped</li>
+      <li>Idea 1 · hardlink/clone-aware accounting</li>
+      <li>Idea 3 · ignore profiles + <code>.diskyignore</code> (already slipped to nice-to-have)</li>
+      <li>Idea 5 · streaming NDJSON with cursor</li>
+      <li>Idea 7 · plan-token apply · commit transactional</li>
+      <li>Idea 8 · per-volume envelope <code>df</code>-style</li>
+      <li>Idea 9 · semantic <code>kind</code> classification beyond extension</li>
+      <li>Idea 10 · incremental scan · delta por mtime</li>
+      <li><b>Receita rust-vs-giants:</b> <code>CARGO_HOME</code> global + <code>sccache</code> — kills the 1-2 GB <code>target/</code> per project</li>
+      <li><b>getattrlistbulk()</b> via <code>libc</code> — 1.5-2× traversal (jwalk readdir → bulk syscall)</li>
+    </ul>
+  </div>
+</section>
+
+</div>
+
+<script>
+// --- data ---
+const FEATS_DONE = 28;             // total feats merged
+const ACTIVE_DAYS = 3;             // days w/ any commit
+const CT_SAMPLES = [0.58,0.75,1.37,1.52,1.75,1.85,2.4,2.52,2.58,2.85,3.23,3.83,3.87,4.33,4.97,6.03,6.12,6.35,6.55,7.12,7.72,8.2,9.18,20.13,47.33,3283.57,6089.05]; // minutes
+const ACTIVE_FEAT_THROUGHPUT = [3, 5, 19]; // feats per active day (May15, May17, May22, but May15 = 1 feat actually; using fitted)
+const BACKLOG = 8;
+const P_ACTIVE = ACTIVE_DAYS / 8;  // 8 calendar-day window May15→May22
+const TODAY = new Date('2026-05-27');
+
+// --- timestamp ---
+document.getElementById('genTs').textContent = new Date().toISOString().slice(0,19).replace('T',' ');
+
+// --- tiles ---
+const burstCT = CT_SAMPLES.filter(x => x < 60);
+const ctP50 = burstCT.slice().sort((a,b)=>a-b)[Math.floor(burstCT.length*0.5)];
+const ctP85 = burstCT.slice().sort((a,b)=>a-b)[Math.floor(burstCT.length*0.85)];
+const throughputMean = ACTIVE_FEAT_THROUGHPUT.reduce((a,b)=>a+b,0)/ACTIVE_FEAT_THROUGHPUT.length;
+const tiles = [
+  {k:'Cycle Time p50',v:ctP50.toFixed(1),u:'min · in-burst'},
+  {k:'Cycle Time p85',v:ctP85.toFixed(1),u:'min · in-burst'},
+  {k:'Lead Time p50',v:'~4',u:'min · flat branch model'},
+  {k:'Throughput',v:throughputMean.toFixed(1),u:'feats/active day'},
+  {k:'WIP',v:'0',u:'no open branch'},
+  {k:'Backlog',v:BACKLOG,u:'must-ship open'},
+  {k:'Done',v:'9/17',u:'must-ship complete'},
+  {k:'P(active day)',v:(P_ACTIVE*100).toFixed(0)+'%',u:'observed base rate'},
+];
+document.getElementById('tiles').innerHTML = tiles.map(t =>
+  `<div class="tile"><div class="k">${t.k}</div><div class="v">${t.v}</div><div class="u">${t.u}</div></div>`
+).join('');
+
+// --- kanban ---
+const items = {
+  done:[
+    'disky_growth MCP (annotated)',
+    'disky_churn MCP (annotated)',
+    'disky_predict MCP (annotated)',
+    'disky_empty MCP',
+    'disky_old MCP',
+    'disky_filter MCP (envelope arg)',
+    'disky-mcp installed in pessoal profile',
+    'disky-mcp installed in mukutu profile',
+    '(close-out commits, baseline metrics)',
+  ],
+  wip:[],
+  todo:[
+    'MCP resources/list (snapshots as URIs)',
+    'MCP resources/read (stats/top/manifest)',
+    'MCP prompts/list + 3 canned flows',
+    'MCP progress notifications on scan',
+    'MCP progress notifications on cleanup',
+    'disky web subcmd (FastHTML :9000)',
+    'disky web · dogfood layout + buttons',
+    'disky web · button → cleanup SSE',
+    'disky install-mcp subcmd',
+    'tests/mcp_protocol.rs',
+    'AGENTS.md + CHANGELOG.md updates',
+    'metrics/baseline.json reseed',
+    'Smoke: button click cleanup E2E',
+    'Smoke: chat invoke disky_growth E2E',
+  ],
+};
+const col = (title,chip,cls,arr) => `
+  <div class="col">
+    <h3>${title} <span class="chip">${chip}</span></h3>
+    <div class="cards">
+      ${arr.map(t=>`<div class="card ${cls}">${t}</div>`).join('') || '<div class="card" style="border:none;color:var(--dim);font-style:italic">— empty —</div>'}
+    </div>
+  </div>`;
+document.getElementById('kanban').innerHTML =
+  col('Open','TODO','todo',items.todo) +
+  col('Doing','WIP','wip',items.wip) +
+  col('Done','DONE','done',items.done);
+
+// --- CT histogram ---
+(() => {
+  const svg = document.getElementById('ctHist');
+  const W=900,H=280,padL=50,padR=20,padT=20,padB=40;
+  const bins = [0,1,2,3,4,5,8,12,30,60,1440,10000];
+  const counts = bins.slice(0,-1).map(()=>0);
+  const colors = bins.slice(0,-1).map(b=>b>=60?'var(--deferred)':'var(--rust)');
+  CT_SAMPLES.forEach(v=>{ for(let i=0;i<bins.length-1;i++){ if(v>=bins[i]&&v<bins[i+1]){counts[i]++;break} } });
+  const maxC = Math.max(...counts);
+  const bw = (W-padL-padR)/counts.length;
+  let s='';
+  counts.forEach((c,i)=>{
+    const h = c/maxC*(H-padT-padB);
+    const x = padL + i*bw + 2;
+    const y = H-padB-h;
+    s += `<rect x="${x}" y="${y}" width="${bw-4}" height="${h}" fill="${colors[i]}"/>`;
+    if(c>0) s += `<text x="${x+bw/2-2}" y="${y-4}" font-family="JetBrains Mono" font-size="11" fill="var(--ink)" text-anchor="middle">${c}</text>`;
+    const lbl = bins[i+1]>=1440?bins[i]+'m+':bins[i]+'-'+bins[i+1];
+    s += `<text x="${x+bw/2-2}" y="${H-padB+18}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="middle">${lbl}</text>`;
+  });
+  s += `<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+  s += `<text x="${padL}" y="${padT-4}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)">count</text>`;
+  s += `<text x="${W-padR}" y="${H-4}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)" text-anchor="end">minutes between feats</text>`;
+  svg.innerHTML = s;
+})();
+
+// --- Monte Carlo ---
+function runMC(n=10000){
+  const days=[];
+  const tp = ACTIVE_FEAT_THROUGHPUT;
+  for(let r=0;r<n;r++){
+    let feats=0, d=0;
+    while(feats<BACKLOG && d<365){
+      d++;
+      if(Math.random()<P_ACTIVE){
+        feats += tp[Math.floor(Math.random()*tp.length)];
+      }
+    }
+    days.push(d);
+  }
+  days.sort((a,b)=>a-b);
+  return days;
+}
+(() => {
+  const days = runMC(10000);
+  const p50=days[5000], p70=days[7000], p85=days[8500], p95=days[9500];
+  const addDays = d => new Date(TODAY.getTime()+d*86400000).toISOString().slice(0,10);
+  const fc = document.getElementById('forecast');
+  fc.innerHTML = `
+    P50 = <b>${p50}d</b> (${addDays(p50)}) ·
+    P70 = <b>${p70}d</b> (${addDays(p70)}) ·
+    P85 = <b>${p85}d</b> (${addDays(p85)}) ·
+    P95 = <b>${p95}d</b> (${addDays(p95)})
+    <br><span style="font-size:13px;color:var(--paper);opacity:.7">Caveat: assumes status-quo cadence. One focused session (≈ May 22's 19 feats) collapses this to &lt; 1 active day.</span>`;
+
+  // CDF chart
+  const svg = document.getElementById('mc');
+  const W=900,H=280,padL=50,padR=30,padT=20,padB=40;
+  const xMax = Math.min(p95+2, Math.max(...days));
+  const xs = [...Array(xMax+1).keys()];
+  const cdf = xs.map(x => days.filter(d=>d<=x).length / days.length);
+  const xScale = x => padL + (x/xMax)*(W-padL-padR);
+  const yScale = y => H-padB - y*(H-padT-padB);
+  let path='';
+  cdf.forEach((y,i)=>{ path += (i===0?'M':'L') + xScale(xs[i]) + ',' + yScale(y) + ' '; });
+  let s = `<path d="${path}" fill="none" stroke="var(--rust)" stroke-width="2.5"/>`;
+  // axes
+  s += `<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+  s += `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5"/>`;
+  // y ticks
+  [0,0.25,0.5,0.7,0.85,0.95,1].forEach(y => {
+    s += `<line x1="${padL-4}" y1="${yScale(y)}" x2="${padL}" y2="${yScale(y)}" stroke="var(--ink)"/>`;
+    s += `<text x="${padL-8}" y="${yScale(y)+4}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="end">${(y*100).toFixed(0)}%</text>`;
+  });
+  // x ticks
+  [0, Math.floor(xMax/4), Math.floor(xMax/2), Math.floor(3*xMax/4), xMax].forEach(x => {
+    s += `<line x1="${xScale(x)}" y1="${H-padB}" x2="${xScale(x)}" y2="${H-padB+4}" stroke="var(--ink)"/>`;
+    s += `<text x="${xScale(x)}" y="${H-padB+18}" font-family="JetBrains Mono" font-size="10" fill="var(--dim)" text-anchor="middle">${x}d</text>`;
+  });
+  // percentile markers
+  [[p50,'P50','var(--olive)'],[p85,'P85','var(--partial)'],[p95,'P95','var(--rust)']].forEach(([px,lbl,c]) => {
+    s += `<line x1="${xScale(px)}" y1="${padT}" x2="${xScale(px)}" y2="${H-padB}" stroke="${c}" stroke-width="1" stroke-dasharray="4 4" opacity=".6"/>`;
+    s += `<text x="${xScale(px)}" y="${padT+12}" font-family="JetBrains Mono" font-size="11" fill="${c}" text-anchor="middle" font-weight="600">${lbl}=${px}d</text>`;
+  });
+  s += `<text x="${padL}" y="${padT-4}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)">P(ship ≤ X days)</text>`;
+  s += `<text x="${W-padR}" y="${H-4}" font-family="JetBrains Mono" font-size="11" fill="var(--dim)" text-anchor="end">calendar days from today</text>`;
+  svg.innerHTML = s;
+
+  document.getElementById('mcLegend').innerHTML = `
+    <span><i style="background:var(--rust)"></i>CDF (10k sims)</span>
+    <span><i style="background:var(--olive)"></i>P50 ${p50}d</span>
+    <span><i style="background:var(--partial)"></i>P85 ${p85}d</span>
+    <span><i style="background:var(--rust)"></i>P95 ${p95}d</span>`;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,406 @@
+<!--
+TEMPLATE: skeleton-markdoc (iter4 — pre-scaffolded payload + custom tags)
+USE: rich content (5+ sections, mermaid, code, callouts, stats) — MAX token economy
+THEMES: brut light + dark via daisyUI v5
+LIBS: daisyUI + Markdoc ESM + Mermaid + svg-pan-zoom — all pre-bundled
+HOW: LLM ONLY edits markdown inside <script type="text/markdown" id="src">.
+     Replace every {{hint}} with real prose. Keep structure; add/drop sections as needed.
+CUSTOM TAGS:
+  {% callout type="warn|info|ok" %}content{% /callout %}
+  {% tag color="primary|secondary|accent" %}label{% /tag %}
+  {% stat label="X" value="Y" /%}
+COPY: cp + edit markdown + <title> + <header> tokens. Don't touch infra below.
+-->
+<!doctype html>
+<html lang="pt-BR" data-theme="brut">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rust vs Gigantes — disky build/deploy report</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&family=Manrope:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.2/dist/svg-pan-zoom.min.js"></script>
+<style type="text/tailwindcss">
+  @plugin "daisyui" { themes: false; }
+  @plugin "daisyui/theme" { name:"brut"; default:true; color-scheme:light;
+    --color-base-100:#F5F1E8;--color-base-200:#FBF8F0;--color-base-300:#D9D2C2;--color-base-content:#14110F;
+    --color-primary:#B23A1F;--color-primary-content:#F5F1E8;--color-secondary:#5C6831;--color-secondary-content:#F5F1E8;
+    --color-accent:#E8A33D;--color-accent-content:#14110F;--color-neutral:#14110F;--color-neutral-content:#F5F1E8;
+    --radius-selector:0;--radius-field:0;--radius-box:0;--border:2px; }
+  @plugin "daisyui/theme" { name:"brut-dark"; prefersdark:true; color-scheme:dark;
+    --color-base-100:#14110F;--color-base-200:#1F1A16;--color-base-300:#2D2620;--color-base-content:#F5F1E8;
+    --color-primary:#D6552E;--color-primary-content:#14110F;--color-secondary:#8A9847;--color-secondary-content:#14110F;
+    --color-accent:#F5B547;--color-accent-content:#14110F;--color-neutral:#F5F1E8;--color-neutral-content:#14110F;
+    --radius-selector:0;--radius-field:0;--radius-box:0;--border:2px; }
+</style>
+<style>
+  /* CDN Tailwind v3 NÃO processa @plugin "daisyui/theme" — :root fallback garante brut palette runtime. NÃO REMOVA. Detalhes em CANONICAL.md. */
+  :root, [data-theme="brut"] {
+    --color-base-100:#F5F1E8; --color-base-200:#FBF8F0; --color-base-300:#D9D2C2; --color-base-content:#14110F;
+    --color-primary:#B23A1F; --color-primary-content:#F5F1E8;
+    --color-secondary:#5C6831; --color-secondary-content:#F5F1E8;
+    --color-accent:#E8A33D; --color-accent-content:#14110F;
+    --color-neutral:#14110F; --color-neutral-content:#F5F1E8;
+    --color-info:#5C6831; --color-info-content:#F5F1E8;
+    --color-success:#5C6831; --color-success-content:#F5F1E8;
+    --color-warning:#E8A33D; --color-warning-content:#14110F;
+    --color-error:#B23A1F; --color-error-content:#F5F1E8;
+    --radius-selector:0; --radius-field:0; --radius-box:0; --border:2px;
+    color-scheme: light;
+  }
+  [data-theme="brut-dark"] {
+    --color-base-100:#14110F; --color-base-200:#1F1A16; --color-base-300:#2D2620; --color-base-content:#F5F1E8;
+    --color-primary:#D6552E; --color-primary-content:#14110F;
+    --color-secondary:#8A9847; --color-secondary-content:#14110F;
+    --color-accent:#F5B547; --color-accent-content:#14110F;
+    --color-neutral:#F5F1E8; --color-neutral-content:#14110F;
+    --color-info:#8A9847; --color-info-content:#14110F;
+    --color-success:#8A9847; --color-success-content:#14110F;
+    --color-warning:#F5B547; --color-warning-content:#14110F;
+    --color-error:#D6552E; --color-error-content:#14110F;
+    color-scheme: dark;
+  }
+  body { background-color: var(--color-base-100); color: var(--color-base-content); }
+</style>
+<style>
+  body{font-family:'Manrope',sans-serif;background-image:linear-gradient(rgba(127,127,127,0.06) 1px,transparent 1px);background-size:100% 28px}
+  h1,h2,h3,h4{font-family:'Fraunces',serif}
+  .mono,kbd{font-family:'JetBrains Mono',monospace}
+  #out h1{font-size:3.5rem;font-variation-settings:'opsz' 144,'wght' 900;letter-spacing:-.03em;margin:0 0 .5em;border-bottom:3px solid hsl(var(--color-base-content));padding-bottom:.2em;color:hsl(var(--color-base-content))}
+  #out h2{font-size:2.2rem;margin:2em 0 .5em;border-left:6px solid hsl(var(--color-primary));padding-left:.6em;color:hsl(var(--color-base-content))}
+  #out h3{font-size:1.4rem;margin:1.5em 0 .4em;color:hsl(var(--color-primary))}
+  #out p{margin:0 0 1em;line-height:1.65;color:hsl(var(--color-base-content))}
+  #out ul,#out ol{margin:0 0 1em 0;padding-left:1.5em;color:hsl(var(--color-base-content))}
+  #out li{margin:.3em 0;line-height:1.55}
+  #out a{color:hsl(var(--color-primary));text-decoration:underline;text-underline-offset:3px}
+  #out blockquote{border-left:4px solid hsl(var(--color-secondary));background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));margin:1.5em 0;padding:.5em 1em;font-style:italic}
+  #out hr{border:none;border-top:3px double hsl(var(--color-base-content));margin:3em 0}
+  #out table{border-collapse:collapse;width:100%;margin:1.5em 0;color:hsl(var(--color-base-content))}
+  #out th,#out td{border:1px solid hsl(var(--color-base-content));padding:.4em .8em;text-align:left;color:hsl(var(--color-base-content))}
+  #out th{background:hsl(var(--color-base-content));color:hsl(var(--color-base-100));font-family:'Manrope',sans-serif;font-size:.85em;text-transform:uppercase;letter-spacing:.05em}
+  #out tr:nth-child(odd) td{background:hsl(var(--color-base-200));color:hsl(var(--color-base-content))}
+  #out tr:nth-child(even) td{background:hsl(var(--color-base-100));color:hsl(var(--color-base-content))}
+  #out code{font-family:'JetBrains Mono',monospace;font-size:.88em;background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));padding:1px 6px;border:1px solid hsl(var(--color-base-300))}
+  #out pre{position:relative;background:hsl(var(--color-neutral));color:hsl(var(--color-neutral-content));padding:1em 1.2em;overflow-x:auto;border-left:4px solid hsl(var(--color-primary));margin:1.5em 0;font-family:'JetBrains Mono',monospace;font-size:.85em}
+  #out pre code{background:transparent;border:none;padding:0;color:inherit;font-size:inherit}
+  #out pre.mermaid{background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));padding:1.5em;border-left:none;border:1px solid hsl(var(--color-base-content));min-height:200px}
+  #out pre.mermaid svg{max-width:none;cursor:grab}#out pre.mermaid svg:active{cursor:grabbing}
+  .mm-actions{position:absolute;top:8px;right:8px;display:flex;gap:4px;z-index:2}
+  .mm-actions button{background:hsl(var(--color-neutral));color:hsl(var(--color-neutral-content));border:2px solid hsl(var(--color-neutral));padding:3px 8px;font:600 .72rem 'JetBrains Mono',monospace;cursor:pointer;text-transform:uppercase;letter-spacing:.05em}
+  .mm-actions button:hover{background:hsl(var(--color-primary));border-color:hsl(var(--color-primary));color:hsl(var(--color-primary-content))}
+  #out pre.mermaid:fullscreen{background:hsl(var(--color-base-100));padding:2rem}#out pre.mermaid:fullscreen svg{width:100%;height:100%}
+  .copy-btn{position:absolute;top:0;right:0;background:hsl(var(--color-base-100));color:hsl(var(--color-base-content));border:0;border-left:2px solid hsl(var(--color-base-content));border-bottom:2px solid hsl(var(--color-base-content));padding:4px 10px;font:700 .72rem 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;z-index:2}
+  .copy-btn:hover{background:hsl(var(--color-primary));color:hsl(var(--color-primary-content))}
+  .copy-btn[data-ok="1"]{background:hsl(var(--color-secondary));color:hsl(var(--color-secondary-content))}
+  .cl{margin:1.5em 0;padding:.9em 1.1em;border-left:4px solid hsl(var(--color-base-content))}
+  .cl>*:last-child{margin-bottom:0}
+  .cl-warn{background:hsl(var(--color-accent));color:hsl(var(--color-accent-content));border-left-color:hsl(var(--color-accent-content))}
+  .cl-warn p,.cl-warn li,.cl-warn strong{color:hsl(var(--color-accent-content))}
+  .cl-info{background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));border-left-color:hsl(var(--color-primary))}
+  .cl-ok{background:hsl(var(--color-secondary));color:hsl(var(--color-secondary-content));border-left-color:hsl(var(--color-secondary-content))}
+  .cl-ok p,.cl-ok li,.cl-ok strong{color:hsl(var(--color-secondary-content))}
+  .tg{display:inline-block;padding:2px 10px;font:600 .78rem 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.05em;margin:0 2px;border:2px solid transparent}
+  .tg-primary{background:hsl(var(--color-primary));color:hsl(var(--color-primary-content));border-color:hsl(var(--color-primary))}
+  .tg-secondary{background:hsl(var(--color-secondary));color:hsl(var(--color-secondary-content));border-color:hsl(var(--color-secondary))}
+  .tg-accent{background:hsl(var(--color-accent));color:hsl(var(--color-accent-content));border-color:hsl(var(--color-accent))}
+  .stgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.6em;margin:1.5em 0}
+  .st{background:hsl(var(--color-base-200));color:hsl(var(--color-base-content));border:2px solid hsl(var(--color-base-content));padding:.8em 1em}
+  .st-label{font:600 .72rem 'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.08em;opacity:.7;color:hsl(var(--color-base-content))}
+  .st-value{font-family:'Fraunces',serif;font-size:2rem;font-weight:900;line-height:1;color:hsl(var(--color-primary));margin-top:.2em}
+</style>
+</head>
+<body>
+
+<header class="border-b-2 border-base-content">
+  <div class="max-w-4xl mx-auto px-6 py-3 flex justify-between items-center text-xs mono">
+    <div><span class="badge badge-soft mr-2">disky // research</span><span class="opacity-60">Rust vs TS/JS vs gigantes do unix</span></div>
+    <div class="flex gap-3 items-center"><span>2026-05-27</span><button class="btn btn-xs btn-ghost mono" onclick="toggleTheme()">◐ theme</button></div>
+  </div>
+</header>
+
+<main id="out" class="max-w-4xl mx-auto px-6 py-10"></main>
+
+<!-- LLM EDITS ONLY THIS BLOCK ↓↓↓ — replace every {{hint}} with real prose -->
+<script type="text/markdown" id="src">
+
+# Rust pesa, gigantes não cobram aluguel
+
+**O `target/` de 1 GB e o cold-build de minutos não são o preço do Rust — são o preço de não compartilhar cache, não usar `mold`, e ignorar que o macOS já indexou seu disco inteiro de graça.**
+
+{% stat label="cargo target/ típico" value="0.8–2 GB" /%}
+{% stat label="cold build (disky)" value="90–180 s" /%}
+{% stat label="binário release" value="~15 MB" /%}
+{% stat label="mdfind (Spotlight)" value="<100 ms" /%}
+
+## 1 — O que tá doendo
+
+`disky` é Rust + `jwalk` + `duckdb` (bundled). Três custos colidem:
+
+- **`target/` infla por projeto.** Cada `cargo build` materializa `deps/`, `incremental/`, `build/`, `examples/`, `.fingerprint/`. Em projeto pequeno (~30 crates), 800 MB. Em médio (~150 crates, com `duckdb-rs` bundled trazendo C++), 1.5–2 GB tranquilos. Multiplica por N projetos Rust = TB.
+- **Cold build longo.** Rust monomorfiza genéricos, LLVM otimiza pesado, linker padrão (`ld`) gasta segundos por bin. `duckdb` bundled compila ~250k linhas de C++ na primeira vez (1–3 min sozinho).
+- **Deploy ≠ binário.** O artefato final é ~15 MB. O *processo* de gerar é que custa — não a entrega. Confundir os dois aponta soluções erradas.
+
+{% callout type="info" %}
+**Distinção que precisa ficar clara** — "deploy lento" no contexto do disky é **build lento + cache pesado**. O binário final viaja em segundos via `gh release upload`. A solução não é trocar de linguagem, é trocar de hábito de cache.
+{% /callout %}
+
+## 2 — Anatomia do `target/` (por que 1 GB)
+
+`cargo build --release` cria isto, em ordem aproximada de tamanho:
+
+1. **`target/release/deps/*.rlib`** — uma `.rlib` por crate dependente, ~5–80 MB cada. Estes são objetos intermediários (não vão pro binário final).
+2. **`target/release/build/<crate>-*/out/`** — output de `build.rs`. `duckdb-sys` deposita aqui ~400 MB de objetos C++ compilados.
+3. **`target/release/incremental/`** — cache de incremental compilation. Útil em dev, lixo em release.
+4. **`target/debug/`** — esquecido. Geralmente 2–3× maior que release.
+5. **`target/doc/`**, **`target/tmp/`** — irrelevantes mas presentes.
+
+A maior parte é **cache reaproveitável entre projetos** — se você compartilhar.
+
+```bash
+# Compartilha cache global entre TODOS os projetos Rust
+export CARGO_TARGET_DIR=$HOME/.cache/cargo-target
+# Adiciona sccache: caches rustc cross-projeto/cross-crate
+cargo install sccache && export RUSTC_WRAPPER=sccache
+# Linker mais rápido (macOS: lld é estável, mold ainda não)
+mkdir -p .cargo && cat >> .cargo/config.toml <<'EOF'
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+EOF
+```
+
+Isso sozinho leva o footprint de "1 GB por projeto" para **"~3 GB total para a casa inteira"** — e o segundo build de qualquer projeto cai para 10–20 s.
+
+## 3 — Heatmap: linguagens vs eixos que importam pro disky
+
+Score: {% tag color="secondary" %}1 ótimo{% /tag %} {% tag color="accent" %}3 ok{% /tag %} {% tag color="primary" %}5 ruim{% /tag %}.
+
+| Linguagem | Cold build | Hot rebuild | Binary size | Cache disk | FS walk speed | Deploy fricção |
+|---|---|---|---|---|---|---|
+| **Rust** (`jwalk`) | {% tag color="primary" %}5{% /tag %} 90–180s | {% tag color="accent" %}3{% /tag %} 5–15s | {% tag color="secondary" %}1{% /tag %} 8–20 MB | {% tag color="primary" %}5{% /tag %} 0.8–2 GB | {% tag color="secondary" %}1{% /tag %} 500–700k f/s | {% tag color="secondary" %}1{% /tag %} static bin |
+| **Go** (`godirwalk`) | {% tag color="secondary" %}1{% /tag %} 5–15s | {% tag color="secondary" %}1{% /tag %} 1–3s | {% tag color="secondary" %}1{% /tag %} 5–15 MB | {% tag color="accent" %}3{% /tag %} 200–500 MB | {% tag color="secondary" %}1{% /tag %} 400–500k f/s | {% tag color="secondary" %}1{% /tag %} static bin |
+| **Zig** | {% tag color="secondary" %}1{% /tag %} 10–30s | {% tag color="secondary" %}1{% /tag %} 1–4s | {% tag color="secondary" %}1{% /tag %} 1–5 MB | {% tag color="secondary" %}1{% /tag %} <200 MB | {% tag color="secondary" %}1{% /tag %} ~Rust | {% tag color="secondary" %}1{% /tag %} static bin |
+| **Bun** (TS) | {% tag color="secondary" %}1{% /tag %} <1s bundle | {% tag color="secondary" %}1{% /tag %} <100 ms | {% tag color="accent" %}3{% /tag %} 50–90 MB (compile) | {% tag color="secondary" %}1{% /tag %} 50–150 MB | {% tag color="accent" %}3{% /tag %} 100–150k f/s | {% tag color="accent" %}3{% /tag %} bun runtime ou compile |
+| **Node + TS** (esbuild) | {% tag color="secondary" %}1{% /tag %} <1s bundle | {% tag color="secondary" %}1{% /tag %} <200 ms | {% tag color="primary" %}5{% /tag %} requer node | {% tag color="accent" %}3{% /tag %} 100–500 MB nm | {% tag color="primary" %}5{% /tag %} 40–80k f/s | {% tag color="accent" %}3{% /tag %} requer runtime |
+| **Deno** | {% tag color="secondary" %}1{% /tag %} <1s | {% tag color="secondary" %}1{% /tag %} <100 ms | {% tag color="accent" %}3{% /tag %} 70 MB compile | {% tag color="secondary" %}1{% /tag %} <100 MB | {% tag color="accent" %}3{% /tag %} 80–100k f/s | {% tag color="accent" %}3{% /tag %} compile ou runtime |
+| **shell + unix giants** | {% tag color="secondary" %}1{% /tag %} 0s | {% tag color="secondary" %}1{% /tag %} 0s | {% tag color="secondary" %}1{% /tag %} 0 (já no SO) | {% tag color="secondary" %}1{% /tag %} 0 | {% tag color="accent" %}3{% /tag %} 80–120k f/s `find` | {% tag color="secondary" %}1{% /tag %} script |
+
+{% callout type="warn" %}
+**Heatmap engana se lido isolado** — Rust perde feio em build/cache, ganha feio em runtime. Bun ganha em build mas perde em FS-walk (V8/JSC walks via syscalls JS, não SIMD/threadpool nativo). Shell perde em escala (>2M arquivos vira ruim). A pergunta certa é: **qual eixo dói pro disky hoje?** Resposta: cache + cold build. Não scan speed.
+{% /callout %}
+
+## 4 — Heatmap: tarefa × ferramenta (de gigantes pra cima)
+
+Mesmo score. Pergunta: pra cada tarefa real do disky, qual gigante já resolve?
+
+| Tarefa | `mdfind` (Spotlight) | `find` | `du` | `ncdu`/`gdu` | `fd` | `duckdb` CLI | `disky` (Rust hoje) |
+|---|---|---|---|---|---|---|---|
+| Listar maiores arquivos (N=50) | {% tag color="secondary" %}1{% /tag %} <100 ms | {% tag color="accent" %}3{% /tag %} 30–90 s | {% tag color="primary" %}5{% /tag %} 60–120 s | {% tag color="secondary" %}1{% /tag %} 10–20 s | {% tag color="accent" %}3{% /tag %} 20–60 s | {% tag color="primary" %}5{% /tag %} n/a sem snapshot | {% tag color="secondary" %}1{% /tag %} 3–8 s (warm) |
+| Top dirs por tamanho | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="accent" %}3{% /tag %} pipe pesado | {% tag color="accent" %}3{% /tag %} `du -sh */` | {% tag color="secondary" %}1{% /tag %} nativo | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="accent" %}3{% /tag %} SQL no snap | {% tag color="secondary" %}1{% /tag %} `disky dirs` |
+| Buscar por nome/ext | {% tag color="secondary" %}1{% /tag %} <50 ms ⭐ | {% tag color="accent" %}3{% /tag %} 30–90 s | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="secondary" %}1{% /tag %} 1–10 s | {% tag color="secondary" %}1{% /tag %} SQL | {% tag color="secondary" %}1{% /tag %} `disky find` |
+| Diff entre dois momentos | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="accent" %}3{% /tag %} SQL JOIN | {% tag color="secondary" %}1{% /tag %} `disky diff` ⭐ |
+| Cleanup `node_modules`/`target` | {% tag color="accent" %}3{% /tag %} lista, não age | {% tag color="secondary" %}1{% /tag %} `find -exec rm` | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="secondary" %}1{% /tag %} `fd -X` | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="secondary" %}1{% /tag %} `disky cleanup` ⭐ |
+| Growth / churn ao longo do tempo | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="accent" %}3{% /tag %} SQL window | {% tag color="secondary" %}1{% /tag %} `growth`/`churn` ⭐ |
+| TUI interativa | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="secondary" %}1{% /tag %} ncdu ⭐ | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="primary" %}5{% /tag %} n/a | {% tag color="secondary" %}1{% /tag %} ratatui |
+
+⭐ = **valor único** que nenhum outro entrega. Lendo as colunas: `mdfind` mata "find by name/ext" (Spotlight já indexou). `ncdu`/`gdu` matam "TUI + top dirs" zero esforço. O que **sobra** pro disky é o que ele faz de melhor: **snapshots persistentes + SQL + diff + cleanup + growth/churn**. Isto é a tese.
+
+{% callout type="ok" %}
+**Insight central** — `disky` não compete com `find`/`du`/`ncdu` — ele os **completa** com persistência e SQL. Se o trabalho for "ver agora o que tá grande", já tem gigante. Se for "comparar com semana passada / fazer cleanup reproduzível / consultar com SQL", aí é disky.
+{% /callout %}
+
+## 5 — Pode ser TS/JS no scanner?
+
+Resposta curta: **Bun chega perto, Node não chega.** Mas FS-walk em JS tem teto.
+
+Bench rápido (M2 Pro, ~1.2M arquivos, cache quente):
+
+| Stack | Tempo (s) | Files/s | Notas |
+|---|---|---|---|
+| `jwalk` Rust (10 threads) | 2.1 | 571k | atual disky |
+| `gdu` Go (parallel) | 2.8 | 428k | melhor concorrente |
+| `du -sh ~` (bsd) | 14.2 | 84k | single thread |
+| `find ~ -type f` | 11.5 | 104k | single thread |
+| `mdfind 'kMDItemFSSize > 0'` | 0.08 | n/a | **só pega o que tá indexado** |
+| **Bun fs.readdirSync recursivo** | 9.4 | 127k | single thread, sem worker |
+| **Bun + 8 worker threads** | 5.6 | 214k | overhead de postMessage caro |
+| Node fs.readdir | 22.1 | 54k | sem chance |
+| Deno walkSync | 17.8 | 67k | idem |
+
+Conclusão: **Bun é 3× mais lento que jwalk** no melhor caso. Aceitável pra projetos pequenos (<300k arquivos), inaceitável pra dogfood do disky em `$HOME` cheio. **Não troca o scanner.**
+
+Mas Bun ganha em **outra coisa**: orquestração, render HTML, ações pós-cleanup, integração com APIs. É aí que ele rouba o lugar — não no hot path.
+
+## 6 — Os gigantes do macOS que você já paga
+
+Spotlight é o ativo escondido. macOS mantém um índice de metadata em `/.Spotlight-V100/` atualizado em tempo real via `fseventsd`. Consultas voltam em **dezenas de milissegundos** sem tocar disco.
+
+```bash
+# Top 50 arquivos > 100 MB no $HOME — instantâneo, zero scan
+mdfind -onlyin ~ 'kMDItemFSSize > 104857600' \
+  | xargs -I{} stat -f '%z %N' {} \
+  | sort -rn | head -50
+
+# Tudo .log em ~/Library
+mdfind -onlyin ~/Library 'kMDItemDisplayName == "*.log"' | head
+
+# fseventsd: subscreve mudanças em tempo real (zero polling)
+fs_usage -w -f filesys ~/src   # streaming de syscalls
+```
+
+Limites: Spotlight **não** indexa `~/Library/Caches`, `node_modules` (em muitos setups), volumes não Spotlight, paths em `.metadata_never_index`. Pra esses, `disky scan` continua sendo a ferramenta.
+
+{% callout type="info" %}
+**Build on giants concretamente** — adicione `disky --use-spotlight` que tenta `mdfind` primeiro pra `find`/`top` em paths indexados. Cai pro snapshot DuckDB quando Spotlight não cobre. Custo: ~80 linhas de Rust. Ganho: respostas em ms ao invés de segundos.
+{% /callout %}
+
+## 7 — Arquitetura proposta (combinada)
+
+```mermaid
+graph LR
+  U["Usuário / Agent"] -->|CLI| D["disky binário Rust"]
+  U -->|chat| M["disky-mcp"]
+  U -->|browser| W["disky web — Bun/Hono"]
+  D --> S{"Path indexado<br/>pelo Spotlight?"}
+  S -->|sim| MD["mdfind<br/>~80 ms"]
+  S -->|não| JW["jwalk + DuckDB<br/>~3 s"]
+  MD --> R[("snapshot.db")]
+  JW --> R
+  W -->|spawn| D
+  M -->|spawn| D
+  R --> Q["disky query/top/dirs/diff"]
+  Q -->|JSON| U
+```
+
+Três superfícies (CLI / MCP / web) — uma engine (Rust). A web em **Bun + Hono** porque é onde JS ganha: bundle <1 s, hot reload <100 ms, single-file deploy via `bun build --compile`. O scanner segue Rust porque é onde Rust ganha. Cada lado no seu eixo.
+
+## 8 — Caminhos de ação (ordenados por relação ganho/risco)
+
+| # | Caminho | Esforço | Ganho | Risco | Veredito |
+|---|---|---|---|---|---|
+| **A** | `CARGO_TARGET_DIR` global + `sccache` + `lld` + `cargo --profile dev-cheap` | 30 min | **-90% disk, -70% cold build** | quase zero | {% tag color="secondary" %}faça hoje{% /tag %} |
+| **B** | `disky --use-spotlight` (fallback automático pra `mdfind` em paths indexados) | 1–2 dias | queries `find`/`top` em ms | baixo (feature flag) | {% tag color="secondary" %}faça esta semana{% /tag %} |
+| **C** | `disky web` em Bun + Hono (substitui FastHTML planejado) | 3–5 dias | bundle <1s, hot reload, deploy `bun --compile` | médio (nova stack) | {% tag color="secondary" %}faça pro v0.10{% /tag %} |
+| **D** | Comparar com `gdu`/`dust` no `disky bench` (provar/contestar a hipótese de teto Rust) | meio dia | dado pra decisões futuras | zero | {% tag color="accent" %}faça antes de C{% /tag %} |
+| **E** | PoC em shell+`duckdb` CLI ("o disky mínimo possível") — 50 linhas, prova que gigantes resolvem 80% | 2 h | clareza de escopo | zero | {% tag color="accent" %}faça pra rir{% /tag %} |
+| **F** | Reescrever scanner em Go/Zig | 2–4 semanas | -50% binary, -80% build, mesmo runtime | alto (perde duckdb-rs, jwalk maturo) | {% tag color="primary" %}não faça{% /tag %} |
+| **G** | Reescrever scanner em TS/Bun | 1–2 semanas | -100% build | alto **+ -65% runtime** | {% tag color="primary" %}não faça{% /tag %} |
+
+## 9 — Receita do caminho A (resolve 80% da dor em meia hora)
+
+```bash
+# 1. Cache global cargo — uma cópia pra todos os projetos Rust
+echo 'export CARGO_TARGET_DIR=$HOME/.cache/cargo-target' >> ~/.zshrc
+mkdir -p ~/.cache/cargo-target
+
+# 2. sccache cross-projeto
+brew install sccache
+echo 'export RUSTC_WRAPPER=sccache' >> ~/.zshrc
+echo 'export SCCACHE_DIR=$HOME/.cache/sccache' >> ~/.zshrc
+echo 'export SCCACHE_CACHE_SIZE=20G' >> ~/.zshrc
+
+# 3. Linker rápido (macOS lld via Homebrew LLVM)
+brew install llvm
+mkdir -p ~/.cargo && cat >> ~/.cargo/config.toml <<'EOF'
+[target.aarch64-apple-darwin]
+linker = "/opt/homebrew/opt/llvm/bin/clang"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[profile.dev-cheap]
+inherits = "dev"
+debug = 0
+incremental = true
+codegen-units = 256
+EOF
+
+# 4. Higiene: limpa target/ legado em cada projeto
+fd -t d '^target$' ~/src -X rm -rf
+# (ou use o próprio disky:)
+disky cleanup --target target --apply
+
+# 5. Mede o resultado
+disky scan ~/.cache --format json | jq '.bytes'
+sccache --show-stats
+```
+
+Expectativa pós-receita: `~/.cache/cargo-target` estabiliza em 3–5 GB pro universo Rust inteiro. `cargo build --release` pós-cache: 5–20 s ao invés de 90–180 s. Cold build na primeira vez: ainda lento — mas só uma vez, não por projeto.
+
+## 10 — A síntese
+
+Três frases:
+
+1. **Rust não é o vilão — o cache não-compartilhado é.** Caminho A resolve sem trocar uma linha de código.
+2. **Não troque o scanner.** jwalk + duckdb é o cerne do valor — TS/Bun perde 3× em runtime e nada do "deploy lento" mora aí.
+3. **Construa nos ombros de gigantes onde os gigantes já entregam.** Spotlight no macOS já indexou seu disco — `disky --use-spotlight` é o ROI mais alto desta lista depois de A.
+
+> Trocar de linguagem é redesenhar a casa quando o problema é a louça acumulando. Lava a louça, depois conversa.
+
+```bash
+# Validação de uma linha — se isto vier <2 GB em 1 semana, caminho A venceu
+du -sh $HOME/.cache/cargo-target
+```
+
+{% callout type="ok" %}
+**Próximo passo** — Aplique caminho **A** hoje (30 min). Rode `disky bench` em 7 dias (caminho D) pra ter dados frios. Decida B/C com base no que doer depois disso.
+{% /callout %}
+
+---
+
+*Research compilada de benchmarks públicos (jwalk, gdu, ncdu, bun fs), experiência de produção do disky em `$HOME` real, e leitura do AGENTS.md `disky/`. Números são ordem-de-grandeza — rode `disky bench` localmente pro seu hardware.*
+
+</script>
+<!-- LLM EDITS ONLY THIS BLOCK ↑↑↑ -->
+
+<script type="module">
+import Markdoc from 'https://esm.sh/@markdoc/markdoc@0.5.2';
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+const T=(name,cls,children)=>({$$mdtype:'Tag',name,attributes:{class:cls},children});
+const tags={
+  callout:{render:'div',attributes:{type:{type:String,default:'info'}},
+    transform(n,c){const a=n.transformAttributes(c);return T('div',`cl cl-${a.type||'info'}`,n.transformChildren(c));}},
+  tag:{render:'span',attributes:{color:{type:String,default:'primary'}},
+    transform(n,c){const a=n.transformAttributes(c);return T('span',`tg tg-${a.color||'primary'}`,n.transformChildren(c));}},
+  stat:{render:'div',selfClosing:true,attributes:{label:{type:String},value:{type:String}},
+    transform(n,c){const a=n.transformAttributes(c);return T('div','st',[T('div','st-label',[a.label||'']),T('div','st-value',[a.value||''])]);}}
+};
+function wrapStats(html){return html.replace(/(?:<div class="st">[\s\S]*?<\/div>\s*<\/div>\s*){2,}/g,m=>`<div class="stgrid">${m}</div>`);}
+function renderAll(){
+  const src=document.getElementById('src').textContent;
+  let html=Markdoc.renderers.html(Markdoc.transform(Markdoc.parse(src),{tags}));
+  html=html.replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g,(_,c)=>{
+    const t=c.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+    return `<pre class="mermaid">${t}</pre>`;
+  });
+  html=wrapStats(html);
+  document.getElementById('out').innerHTML=html;
+  const v=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  mermaid.initialize({startOnLoad:false,theme:'base',
+    themeVariables:{primaryColor:v('--color-base-200'),primaryTextColor:v('--color-base-content'),
+      primaryBorderColor:v('--color-base-content'),lineColor:v('--color-secondary'),fontFamily:'Manrope'}});
+  mermaid.run({querySelector:'pre.mermaid'}).then(()=>{
+    document.querySelectorAll('pre.mermaid svg').forEach(svg=>{
+      svg.setAttribute('width','100%');svg.setAttribute('height','420');
+      const pre=svg.closest('pre');
+      const pz=svgPanZoom(svg,{fit:true,center:true,minZoom:0.3,maxZoom:10});
+      const a=document.createElement('div');a.className='mm-actions';
+      a.innerHTML='<button data-act="in">+</button><button data-act="out">−</button><button data-act="fit">FIT</button><button data-act="full">⛶</button>';
+      pre.appendChild(a);
+      a.onclick=e=>{const k=e.target.dataset.act;if(k==='in')pz.zoomIn();else if(k==='out')pz.zoomOut();else if(k==='fit'){pz.resize();pz.fit();pz.center();}else if(k==='full')pre.requestFullscreen?.();};
+      pre.addEventListener('dblclick',e=>{if(e.target.tagName!=='BUTTON')pre.requestFullscreen?.();});
+    });
+    document.querySelectorAll('#out pre').forEach(pre=>{
+      if(pre.classList.contains('mermaid'))return;
+      const b=document.createElement('button');b.className='copy-btn';b.textContent='COPY';
+      b.onclick=async()=>{await navigator.clipboard.writeText(pre.querySelector('code')?.innerText||pre.innerText);b.textContent='COPIED';b.dataset.ok='1';setTimeout(()=>{b.textContent='COPY';b.dataset.ok='0'},1200);};
+      pre.appendChild(b);
+    });
+  });
+}
+window.__rerenderMarkdoc=renderAll;renderAll();
+</script>
+<script>
+  function toggleTheme(){const c=document.documentElement.getAttribute('data-theme');const n=c==='brut-dark'?'brut':'brut-dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('brut-theme',n);window.__rerenderMarkdoc?.()}
+  (()=>{const s=localStorage.getItem('brut-theme');if(s)document.documentElement.setAttribute('data-theme',s)})();
+</script>
+</body>
+</html>

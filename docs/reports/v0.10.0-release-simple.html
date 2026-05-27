@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>disky v0.10.0 — release report · CLI is the surface</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F5F1E8; --ink:#14110F; --rust:#B23A1F; --olive:#5C6831;
+  --dim:#6B655E; --line:#D9D2C2; --card:#FBF8F0;
+  --done:#3F6B2A; --partial:#B8841C; --risk:#B23A1F; --deferred:#8C857B;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'Manrope',sans-serif;line-height:1.5}
+.wrap{max-width:1100px;margin:0 auto;padding:64px 32px 96px}
+header{margin-bottom:56px;border-bottom:1px solid var(--line);padding-bottom:40px}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--rust);letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px}
+h1{font-family:'Fraunces',serif;font-variation-settings:'opsz' 144,'wght' 700;font-size:72px;line-height:1;letter-spacing:-.025em;margin:0 0 12px}
+h1 .v{color:var(--rust)}
+.sub{font-family:'Fraunces',serif;font-size:24px;color:var(--dim);font-weight:300;margin:0 0 16px;font-variation-settings:'opsz' 24,'wght' 400}
+.meta{margin-top:28px;display:flex;gap:32px;flex-wrap:wrap;color:var(--dim);font-size:13px;font-family:'JetBrains Mono',monospace}
+.meta b{color:var(--ink);font-weight:600}
+section{margin-top:64px;display:grid;grid-template-columns:80px 1fr;gap:32px;align-items:start}
+section .num{font-family:'Fraunces',serif;font-size:48px;font-weight:300;color:var(--rust);line-height:1;font-variation-settings:'opsz' 48}
+section h2{font-family:'Fraunces',serif;font-size:34px;font-weight:600;margin:0 0 16px;letter-spacing:-.01em;font-variation-settings:'opsz' 36}
+section p{margin:0 0 16px;max-width:760px}
+.callout{background:var(--ink);color:var(--paper);padding:24px 28px;margin-top:16px;font-size:16px;border-left:4px solid var(--rust)}
+.callout b{color:var(--rust);font-weight:600}
+.callout code{font-family:'JetBrains Mono',monospace;background:#fff2;padding:2px 6px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-top:8px}
+.tile{background:var(--card);border:1px solid var(--line);padding:22px}
+.tile .k{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-family:'JetBrains Mono',monospace}
+.tile .v{font-family:'Fraunces',serif;font-variation-settings:'opsz' 96,'wght' 700;font-size:48px;line-height:1.05;margin-top:6px;letter-spacing:-.025em}
+.tile .v.rust{color:var(--rust)}
+.tile .v.olive{color:var(--olive)}
+.tile .u{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);margin-top:4px}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line)}
+th{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);font-weight:600}
+td.num{text-align:right;font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+td code,p code,li code{font-family:'JetBrains Mono',monospace;font-size:12px;background:#0001;padding:2px 6px}
+.pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;padding:2px 8px;font-weight:600}
+.pill.done{background:var(--done);color:var(--paper)}
+.pill.dropped{background:var(--risk);color:var(--paper)}
+.pill.deferred{background:var(--deferred);color:var(--paper)}
+ul{padding-left:20px}
+ul.tight li{margin-bottom:4px}
+.diff{background:var(--card);border:1px solid var(--line);padding:18px;font-family:'JetBrains Mono',monospace;font-size:13px;margin-top:8px;white-space:pre-wrap}
+.diff .add{color:var(--olive)}
+.diff .del{color:var(--rust)}
+.diff .ctx{color:var(--dim)}
+.signal{padding:18px;background:var(--card);border-left:4px solid var(--olive);margin-top:16px;font-size:15px}
+hr{border:none;border-top:1px solid var(--line);margin:48px 0 0}
+@media (max-width:720px){section{grid-template-columns:1fr;gap:8px}section .num{font-size:32px}h1{font-size:48px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">release report · 2026-05-27</div>
+  <h1>disky <span class="v">v0.10.0</span></h1>
+  <p class="sub">CLI é a superfície. Web e MCP fora. Manutenção encolhe, contrato fica nítido.</p>
+  <div class="meta">
+    <div><b>tag</b> v0.10.0 (local, não pushed)</div>
+    <div><b>commit</b> 7ded431</div>
+    <div><b>net diff</b> +58 / −980 LOC</div>
+    <div><b>files</b> 6 changed</div>
+    <div><b>cut by</b> Gabriel + Claude Opus 4.7</div>
+  </div>
+</header>
+
+<section>
+  <div class="num">01</div>
+  <div>
+    <h2>O que mudou</h2>
+    <div class="tiles">
+      <div class="tile"><div class="k">LOC removidas</div><div class="v rust">925</div><div class="u">src/bin/disky-mcp.rs</div></div>
+      <div class="tile"><div class="k">Items dropped</div><div class="v rust">8</div><div class="u">de 17 must-ship</div></div>
+      <div class="tile"><div class="k">Items kept</div><div class="v olive">9</div><div class="u">já mergeados v0.7→v0.9</div></div>
+      <div class="tile"><div class="k">Bins agora</div><div class="v">1</div><div class="u">só <code>disky</code></div></div>
+      <div class="tile"><div class="k">Surfaces</div><div class="v">1</div><div class="u">CLI</div></div>
+      <div class="tile"><div class="k">Versão</div><div class="v">0.10.0</div><div class="u">de 0.6.0 (out-of-sync)</div></div>
+    </div>
+    <div class="callout">
+      <b>Decisão:</b> CLI é a superfície oficial. Web (não construído) e MCP (925 LOC, 13 tools) foram cortados. Única consumidora real (Claude Code) executa <code>Bash</code> direto — toda superfície secundária só duplicava o envelope JSON. <b>Resurrection path</b> documentado: 1 active day de <code>git log --diff-filter=D</code> reativa <code>disky-mcp</code> se earn-back acionar.
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="num">02</div>
+  <div>
+    <h2>Diff arquivos · v0.9.0 → v0.10.0</h2>
+    <div class="diff"><span class="ctx">commit 7ded431 · 2026-05-27 13:00:12 -0300</span>
+<span class="del">D  src/bin/disky-mcp.rs                  925 −</span>
+<span class="add">M  Cargo.toml                              4 ±   version 0.6.0 → 0.10.0, [[bin]] disky-mcp gone</span>
+<span class="add">M  AGENTS.md                              57 ±   "MCP scope" + "Three surfaces" rewritten</span>
+<span class="add">M  CHANGELOG.md                           32 +   v0.10.0 entry com resurrection path</span>
+<span class="add">M  .gitignore                              5 +   .docs/ + bilimanager artifacts</span>
+<span class="ctx">M  Cargo.lock                              2 ±</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="num">03</div>
+  <div>
+    <h2>Punch-list resolvida</h2>
+    <table>
+      <thead><tr><th>Item</th><th>Status</th><th>Motivo</th></tr></thead>
+      <tbody>
+        <tr><td>disky_growth/churn/predict/empty/old/filter MCP tools</td><td><span class="pill done">SHIP v0.9.0</span></td><td>Mergeado antes do cut</td></tr>
+        <tr><td>disky-mcp instalado em pessoal + mukutu profiles</td><td><span class="pill done">SHIP v0.9.0</span></td><td>Manual JSON patch nos profiles</td></tr>
+        <tr><td>MCP <code>resources/list</code> + <code>resources/read</code></td><td><span class="pill dropped">DROP</span></td><td>Zero user em host non-shell-out</td></tr>
+        <tr><td>MCP <code>prompts/list</code> (3 canned flows)</td><td><span class="pill dropped">DROP</span></td><td>Skill já entrega via <code>/disky</code></td></tr>
+        <tr><td>MCP progress notifications (scan + cleanup)</td><td><span class="pill dropped">DROP</span></td><td>NDJSON em stderr cobre via CLI</td></tr>
+        <tr><td><code>disky web</code> FastHTML local server</td><td><span class="pill dropped">DROP</span></td><td>Botão = copy-paste, agent executa via Bash</td></tr>
+        <tr><td><code>disky install-mcp</code> subcommand</td><td><span class="pill dropped">DROP</span></td><td>Sem MCP → desnecessário</td></tr>
+        <tr><td><code>tests/mcp_protocol.rs</code></td><td><span class="pill dropped">DROP</span></td><td>Sem MCP → desnecessário</td></tr>
+        <tr><td><code>AGENTS.md</code> + <code>CHANGELOG.md</code> updates</td><td><span class="pill done">SHIP</span></td><td>Reescritos neste cut</td></tr>
+        <tr><td><code>metrics/baseline.json</code> reseed</td><td><span class="pill deferred">DEFER</span></td><td>v0.10.1 quando rodar scan limpo</td></tr>
+        <tr><td>Smoke tests E2E</td><td><span class="pill deferred">DEFER</span></td><td>Skill <code>/disky</code> próxima sessão</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px;color:var(--dim);font-size:13px">17 must-ship → <b>9 done · 6 dropped · 2 deferred</b>. Versão sai com escopo cristalizado em vez de inchada.</p>
+  </div>
+</section>
+
+<section>
+  <div class="num">04</div>
+  <div>
+    <h2>Grill que travou a decisão</h2>
+    <p>4 perguntas, 4 respostas, ~5 min. Sequência preservada na sessão <code>dc2884dc</code>.</p>
+    <table>
+      <thead><tr><th>#</th><th>Pergunta</th><th>Decisão</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>O que fazer com <code>disky-mcp</code>?</td><td>Apaga agora (75% rec.)</td></tr>
+        <tr><td>2</td><td>Modelo dos botões sem web?</td><td>Skill via <code>AskUserQuestion</code> guia limpeza</td></tr>
+        <tr><td>3</td><td>Shape do fluxo da skill?</td><td>Triage → propose → confirm → apply (70% rec.)</td></tr>
+        <tr><td>4</td><td>Versão pós-cut?</td><td>v0.10.0 (não 1.0.0)</td></tr>
+        <tr><td>5</td><td>Ingest notebook MCP agora?</td><td>Cria + paralelizou — 204 sources prontas</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="num">05</div>
+  <div>
+    <h2>Bonus · NotebookLM rate-test</h2>
+    <p>Durante grill, paralelizamos <code>notebooklm source add</code> pra ver se valia ingerir 204 URLs do MCP spec. Achado vira patch pro bili <code>knowledge new</code>.</p>
+    <table>
+      <thead><tr><th>Conc</th><th>n</th><th class="num">Wall</th><th class="num">Rate</th><th class="num">Falhas</th><th>Speedup vs seq</th></tr></thead>
+      <tbody>
+        <tr><td>1 (seq baseline)</td><td>—</td><td class="num">~3–4s/url</td><td class="num">0.28/s</td><td class="num">0</td><td>1.0×</td></tr>
+        <tr><td>5</td><td>10</td><td class="num">14.6s</td><td class="num">0.69/s</td><td class="num">0</td><td>2.5×</td></tr>
+        <tr><td>10</td><td>20</td><td class="num">17.2s</td><td class="num">1.16/s</td><td class="num">0</td><td>4.1×</td></tr>
+        <tr><td>20</td><td>40</td><td class="num">23.1s</td><td class="num">1.73/s</td><td class="num">0</td><td>6.2×</td></tr>
+      </tbody>
+    </table>
+    <div class="signal"><b>Acionável bili:</b> trocar sequencial 3–4s/URL por <code>asyncio.Semaphore(10)</code> no <code>bili knowledge new</code>. 204 URLs vai de ~13min → ~3min. Zero rate-limit observado até P=20.</div>
+    <p style="margin-top:16px"><b>Notebook MCP criado:</b> <code>0e703189-34a8-42f6-88fe-acb2bada1852</code> · 236 sources, todas <b>ready</b> · não usado nesta cut (defer earn-back).</p>
+  </div>
+</section>
+
+<section>
+  <div class="num">06</div>
+  <div>
+    <h2>Próximos passos</h2>
+    <ul class="tight">
+      <li><code>git push origin main v0.10.0</code> — quando você decidir publicar (não fiz autônomo, tag affecta external)</li>
+      <li>Limpar profiles: editar <code>~/.claude-pessoal/.claude.json</code> + <code>~/.claude-mukutu/.claude.json</code>, deletar entry <code>mcpServers.disky</code></li>
+      <li><code>cargo install --path . --force</code> — reinstala só <code>disky</code> (o <code>disky-mcp</code> bin some sozinho)</li>
+      <li>Skill <code>/disky</code> v2 — implementar fluxo triage → propose → confirm → apply via <code>AskUserQuestion</code></li>
+      <li>Receita rust-vs-giants — <code>sccache</code> + <code>CARGO_HOME</code> global → libera 1-2 GB <code>target/</code> por projeto</li>
+      <li>Patch bili <code>knowledge new</code> — async P=10 (provado neste session)</li>
+    </ul>
+  </div>
+</section>
+
+<hr>
+<p style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim);margin-top:32px;text-align:center">
+  generated 2026-05-27 · sessão dc2884dc · disky · single page · zero deps · brut palette
+</p>
+
+</div>
+</body>
+</html>
