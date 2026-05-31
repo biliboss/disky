@@ -2,11 +2,12 @@
 name = "disky"
 version = "0.11.0"
 edition = "2021"
-description = "Fast macOS disk analyzer — scan, explore, clean up"
+description = "Fast macOS disk analyzer and cleanup CLI in Rust — ncdu / dust / GrandPerspective alternative with snapshot diff, agent-native JSON, and Trash-restorable cleanup."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/biliboss/disky"
-homepage = "https://github.com/biliboss/disky"
-keywords = ["disk", "analyzer", "cli", "macos", "tui"]
+homepage = "https://biliboss.github.io/disky"
+documentation = "https://docs.rs/disky"
+keywords = ["disk-usage", "disk-analyzer", "ncdu", "macos", "cli"]
 categories = ["command-line-utilities", "filesystem"]
 readme = "README.md"
 rust-version = "1.75"

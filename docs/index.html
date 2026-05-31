@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>disky — Fast macOS disk analyzer and cleanup CLI</title>
+<meta name="description" content="Fast macOS disk analyzer and cleanup CLI in Rust. Scan 2M files in seconds, Trash-restorable cleanup, agent-native JSON. Alternative to ncdu, dust, du, GrandPerspective, DaisyDisk.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta property="og:title" content="disky — Fast macOS disk analyzer and cleanup CLI">
+<meta property="og:description" content="Fast macOS disk analyzer and cleanup CLI in Rust. ncdu / dust / GrandPerspective alternative.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://biliboss.github.io/disky/">
+<link rel="canonical" href="https://biliboss.github.io/disky/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=Manrope:wght@400;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper:#F5F1E8; --ink:#14110F; --rust:#B23A1F; --olive:#5C6831;
+    --dim:#6B655E; --line:#D9D2C2; --card:#FBF8F0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: 'Manrope', sans-serif; line-height: 1.6;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 6rem 2rem 4rem; }
+  h1 {
+    font-family: 'Fraunces', serif; font-weight: 600;
+    font-size: clamp(3rem, 8vw, 5.5rem); line-height: 1; margin: 0 0 1rem;
+    font-variation-settings: "opsz" 144;
+  }
+  .tagline {
+    font-family: 'Fraunces', serif; font-size: 1.5rem; color: var(--dim);
+    margin: 0 0 3rem; font-weight: 300; font-style: italic;
+  }
+  h2 {
+    font-family: 'Fraunces', serif; font-weight: 500;
+    font-size: 2rem; margin: 4rem 0 1rem;
+    display: flex; align-items: baseline; gap: 1.5rem;
+  }
+  h2::before {
+    content: attr(data-num);
+    font-size: 3rem; color: var(--rust); font-weight: 300;
+    font-variation-settings: "opsz" 144;
+  }
+  pre, code {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.95rem;
+  }
+  pre {
+    background: var(--card); border: 1px solid var(--line);
+    padding: 1.25rem 1.5rem; border-radius: 4px; overflow-x: auto;
+  }
+  code { background: var(--card); padding: 0.1em 0.4em; border-radius: 3px; }
+  pre code { background: none; padding: 0; }
+  a { color: var(--rust); text-decoration: none; border-bottom: 1px solid var(--line); }
+  a:hover { border-bottom-color: var(--rust); }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { padding: 0.75rem 0.5rem; text-align: left; border-bottom: 1px solid var(--line); }
+  th { font-weight: 700; color: var(--rust); }
+  .links { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 2rem 0; }
+  .links a { font-weight: 500; }
+  footer { margin-top: 6rem; padding-top: 2rem; border-top: 1px solid var(--line); color: var(--dim); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>disky</h1>
+<p class="tagline">Fast macOS disk analyzer and cleanup CLI in Rust.</p>
+
+<p>
+  Scan 2&nbsp;million files in seconds, diff snapshots, cleanup safely (Trash-restorable),
+  and pipe JSON to any agent. Alternative to <code>ncdu</code>, <code>dust</code>,
+  <code>du</code>, GrandPerspective, DaisyDisk &mdash; built for the terminal AND for
+  AI agents that shell out.
+</p>
+
+<div class="links">
+  <a href="https://github.com/biliboss/disky">GitHub repo</a>
+  <a href="https://github.com/biliboss/disky/releases">Releases</a>
+  <a href="https://crates.io/crates/disky">crates.io</a>
+  <a href="https://docs.rs/disky">docs.rs</a>
+  <a href="https://github.com/biliboss/disky/blob/main/CHANGELOG.md">Changelog</a>
+</div>
+
+<h2 data-num="01">Install</h2>
+<pre><code>cargo install disky</code></pre>
+
+<h2 data-num="02">Quick start</h2>
+<pre><code>disky scan /                   # scan from root (~3 min, 2M files)
+disky                          # ncdu-style TUI
+disky top --physical           # largest files (APFS-aware)
+disky cleanup --apply --reversible    # safe cleanup → ~/.Trash</code></pre>
+
+<h2 data-num="03">Why disky</h2>
+<table>
+  <thead><tr><th></th><th>disky</th><th>ncdu</th><th>dust</th><th>du</th></tr></thead>
+  <tbody>
+    <tr><td>Snapshot storage</td><td>DuckDB</td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td>Diff between scans</td><td>yes</td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td>Trash-safe cleanup</td><td>yes</td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td>APFS sparse-file aware</td><td>yes</td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td>JSON for agents</td><td>yes</td><td>—</td><td>—</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<h2 data-num="04">Agent-native</h2>
+<p>
+  Every command emits an envelope <code>{schema_version, kind, records}</code>. Errors on
+  stderr follow RFC&nbsp;9457. Exit codes are stable. Run <code>disky schema</code> for
+  the machine descriptor.
+</p>
+
+<footer>
+  Dual-licensed under MIT or Apache-2.0. Built by
+  <a href="https://github.com/biliboss">@biliboss</a>.
+</footer>
+
+</div>
+</body>
+</html>
