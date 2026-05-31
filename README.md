@@ -33,27 +33,26 @@ prompt-engineering.
 
 ## Install
 
-### Homebrew (coming soon)
+### From source (works today)
 
 ```bash
-brew install biliboss/tap/disky
-```
-
-### crates.io
-
-```bash
-cargo install disky
+cargo install --git https://github.com/biliboss/disky
 ```
 
 ### Pre-built binary
 
 Download from [Releases](https://github.com/biliboss/disky/releases) — `aarch64-apple-darwin` and `x86_64-apple-darwin` tarballs.
 
-### From source
+### crates.io (coming soon)
 
 ```bash
-git clone https://github.com/biliboss/disky && cd disky
-cargo install --path .
+cargo install disky
+```
+
+### Homebrew (coming soon)
+
+```bash
+brew install biliboss/tap/disky
 ```
 
 ## Quick start
