@@ -12,3 +12,4 @@ bilimanager
 # Local-only scratch (QA screenshots from doqa, ad-hoc HTML copies). Never committed.
 # Use docs/ for committed artifacts.
 .docs/
+.DS_Store
