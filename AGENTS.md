@@ -1,6 +1,6 @@
 # disky
 
-Fast macOS disk analyzer — scan, explore, clean up.
+Fast macOS disk analyzer and cleanup CLI in Rust — `ncdu` / `dust` / GrandPerspective alternative.
 
 ## Stack
 
@@ -11,6 +11,20 @@ Fast macOS disk analyzer — scan, explore, clean up.
 | `ratatui 0.29` + `crossterm 0.28` | TUI — ncdu-style tree, requires real TTY |
 | `flume 0.11` | Bounded channel walker→writer, cap 256 |
 | `memchr 2` | `memrchr(b'.', ...)` for ext extraction (2-3x faster than `Path::extension`) |
+
+## Distribution
+
+Five indexable surfaces — `disky schema` + JSON envelopes are the agent contract:
+
+| Surface | URL | Notes |
+|---|---|---|
+| Repo | `github.com/biliboss/disky` | 18 topics, SEO description, social-preview pending |
+| crates.io | `crates.io/crates/disky` | `cargo install disky` (primary install path) |
+| docs.rs | `docs.rs/disky` | auto-built on crate publish |
+| Releases | `github.com/biliboss/disky/releases` | `aarch64-apple-darwin` + `x86_64-apple-darwin` tarballs per tag |
+| GitHub Pages | `biliboss.github.io/disky` | source: `main` `/docs`, `.nojekyll` bypass + `docs/index.html` (brut palette) |
+
+Install order in README is the order to recommend: `cargo install disky` → binary download → `cargo install --git`. Homebrew tap is "coming soon" (earn-back: someone actually asks).
 
 ## Snapshot diff
 
@@ -149,8 +163,7 @@ does what used to take four:
 disky scan / --emit-top 50 --emit-dirs 20 --emit-ext 30 --format json
 ```
 
-Returns a `scan_bundle` envelope with `stats`, `top`, `dirs`, `ext`. MCP
-`disky_scan` accepts the same `emit_top` / `emit_dirs` / `emit_ext` ints.
+Returns a `scan_bundle` envelope with `stats`, `top`, `dirs`, `ext`.
 
 ## Scan progress (NDJSON on stderr)
 
@@ -403,8 +416,13 @@ Auto-saved to `~/Library/Application Support/disky/YYYY-MM-DD_HH-MM.db` via `dir
 
 ## CI
 
-`cargo fmt --check` + `cargo clippy -- -D warnings` + `cargo build --release` on `macos-latest`.
+`cargo fmt --check` + `cargo clippy -- -D warnings` + `cargo build --release` on `macos-latest` AND `ubuntu-latest`.
 Run `cargo fmt` before committing — rustfmt has opinions on inline if-else.
+
+**Known fmt drift** (as of 2026-06-01): `tests/lib_integration.rs:206` —
+closure formatting differs between macOS and Linux rustfmt outputs. Pre-existing,
+not introduced by SEO/release sweep. Fix: run `cargo fmt` on Linux (or in CI's
+container) and commit the result. Until then, Linux CI fails on every push.
 
 **Build footprint (v0.10.1+):** apply the `sccache` + `$CARGO_HOME`
 global cache recipe in `CONTRIBUTING.md#build-footprint` before any
@@ -450,8 +468,30 @@ No containers, no registry, no CI gating for releases — artifacts ship direct.
 
 **Versioning:** bump `version` in `Cargo.toml` + add CHANGELOG entry before tagging.
 
-## Single surface — CLI only (v0.10.0 · 2026-05-27)
+## Release gotchas
 
-Prior plan ("CLI + web + MCP three surfaces") was rejected after 4-round grill: only real consumer is Claude Code which shells out — every secondary surface duplicated the CLI without buying new users. `disky-mcp` (925 LOC) and the unbuilt `disky web` plan were dropped. CLI is contract.
+- **>3 tags pushed simultaneously → GitHub suppresses webhook events.** Per GH
+  docs, pushing more than three tags in one `git push` fires zero workflow
+  events. Discovered 2026-05-31 pushing `v0.7.0..v0.11.0` in one shot — Release
+  workflow didn't fire on any of them. Push tags one at a time, OR fall back to
+  `gh release create vX.Y.Z --notes-file -` with CHANGELOG extracted via the
+  same awk pattern `release.yml` uses (`awk "/^## \[${V}\]/{flag=1; next} /^## \[/{flag=0} flag"`).
+- **crates.io publish requires verified email** + `cargo login <token>`. Token
+  expires in 7 days by default. Email verification is a one-time setup at
+  `crates.io/settings/profile`.
+- **`cargo publish` blocks on dirty working tree.** `.DS_Store` is the usual
+  culprit on macOS — already gitignored. If you see it, just `rm .DS_Store`.
+- **GH Pages on `/docs` source needs `.nojekyll`** to skip Jekyll's scss
+  pipeline (the default `jekyll-theme-primer` crashes on this layout). The
+  bypass file lives at `docs/.nojekyll`; `docs/index.html` is the actual
+  landing page.
 
-**Authority for non-CLI hosts:** none. Until a real Claude Desktop / Cursor / Zed user requests disky and can't shell out, MCP / web do not return. Resurrection path documented in CHANGELOG v0.10.0.
+## SEO follow-ups (pending)
+
+Operational state of distribution-side work — what's done lives in CHANGELOG; below is what's still owed:
+
+- **Social preview image** — Settings → Options → Social preview. 1280×640 PNG, TUI screenshot (not a logo, 2-3× CTR per Octoverse 2024).
+- **Awesome-list PRs** — `rust-unofficial/awesome-rust` (Filesystem), `jaywcjlove/awesome-mac` (Dev Tools), `sindresorhus/awesome-macos-command-line`. Each merged PR = permanent DR-80+ backlink.
+- **Launch sequencing** (single day, in order): Lobste.rs morning → Show HN late morning ET → /r/rust Saturday release thread → X/Mastodon with og:image + asciinema.
+- **Homebrew tap** — `brew tap biliboss/tap` + formula auto-generated from GH Release tarballs. Earn-back trigger: user explicitly asks OR weekly tarball downloads cross ~50.
+- **docs.rs build** — verify after first crates.io sync that `docs.rs/disky` renders cleanly (DuckDB bundled feature can blow up sandbox builds).
