@@ -33,20 +33,20 @@ prompt-engineering.
 
 ## Install
 
-### From source (works today)
+### crates.io
 
 ```bash
-cargo install --git https://github.com/biliboss/disky
+cargo install disky
 ```
 
 ### Pre-built binary
 
 Download from [Releases](https://github.com/biliboss/disky/releases) — `aarch64-apple-darwin` and `x86_64-apple-darwin` tarballs.
 
-### crates.io (coming soon)
+### From source
 
 ```bash
-cargo install disky
+cargo install --git https://github.com/biliboss/disky
 ```
 
 ### Homebrew (coming soon)
