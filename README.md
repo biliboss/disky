@@ -61,6 +61,8 @@ brew install biliboss/tap/disky
 disky scan /                       # scan from root (~3 min for 2M files)
 disky                              # open ncdu-style TUI
 
+disky free                         # live free space on the $HOME volume (no scan)
+disky free /Volumes/EXT            # …or any other volume
 disky top --physical               # largest files (physical bytes — APFS-aware)
 disky dirs --physical              # largest directories
 disky ext                          # usage by extension
@@ -80,6 +82,7 @@ disky scan /                       # before
 disky scan /                       # after
 disky diff @latest~1 @latest       # what grew, shrank, was added or removed
 disky growth --over-n 5            # OLS fit across 5 most-recent snapshots
+disky predict                      # fill-by date; free-byte budget probed live
 ```
 
 ### Agent-native output
