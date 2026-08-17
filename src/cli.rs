@@ -217,8 +217,8 @@ pub enum Command {
         #[arg(long, value_name = "N")]
         over_n: Option<usize>,
         /// Free-byte budget the projection extrapolates against. Only used
-        /// with `--over-n`. Default: free bytes on the volume that holds
-        /// `$HOME` (best-effort; may be 0 if `statvfs` fails).
+        /// with `--over-n`. Default: live free bytes on the volume that holds
+        /// `$HOME` (omitted from the projection if `statvfs` fails).
         #[arg(long, value_name = "BYTES")]
         fill_target: Option<u64>,
         #[arg(short, long, default_value_t = 50)]
@@ -226,13 +226,22 @@ pub enum Command {
     },
 
     /// Predict when the disk fills based on linear regression over all
-    /// snapshots in the data dir. Pass `--free-bytes <N>` so the fit
-    /// can compute a fill-by date.
+    /// snapshots in the data dir. Defaults the fill target to the live free
+    /// space on the `$HOME` volume — pass `--free-bytes <N>` to override.
     Predict {
-        /// Bytes currently free on the volume. Get via
-        /// `df -k / | tail -1 | awk '{print $4*1024}'`.
+        /// Bytes currently free on the volume. Default: probed live via
+        /// `statvfs` on the `$HOME` volume (see `disky free`).
         #[arg(long, value_name = "BYTES")]
         free_bytes: Option<u64>,
+    },
+
+    /// Live free space on a volume — no snapshot needed, no scan needed.
+    /// Reports total / free / used bytes and used percent for the volume
+    /// holding PATH. This is the number to gate a cleanup loop on; `stats`
+    /// reports what a past scan measured, which is a different question.
+    Free {
+        /// Path whose volume to probe. Default: `$HOME`.
+        path: Option<std::path::PathBuf>,
     },
 
     /// Per-directory churn — files modified within the last N hours/days.

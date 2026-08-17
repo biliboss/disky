@@ -306,6 +306,8 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                 }
                 // list_snapshots() returns oldest..newest; take the last N.
                 let pick: Vec<(String, i64)> = parsed[parsed.len() - n..].to_vec();
+                // Same default as `predict`: probe the volume when unset.
+                let fill_target = fill_target.or_else(|| disky::volume::free_bytes(None));
                 let rows = query::growth_over_n(&pick, limit, fill_target)?;
                 if format.is_machine() {
                     let payload = json!({
@@ -416,7 +418,10 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             }
         }
         Command::Predict { free_bytes } => {
-            let rec = disky::predict::predict(physical, free_bytes)?;
+            // Without a budget the fit has nothing to extrapolate against, so
+            // fall back to the live volume rather than emitting a null date.
+            let budget = free_bytes.or_else(|| disky::volume::free_bytes(None));
+            let rec = disky::predict::predict(physical, budget)?;
             if format.is_machine() {
                 let payload = json!({
                     "schema_version": SCHEMA_VERSION,
@@ -443,6 +448,27 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                         rec.reason.as_deref().unwrap_or("unknown")
                     ),
                 }
+            }
+        }
+        Command::Free { path } => {
+            let target = path
+                .or_else(dirs::home_dir)
+                .ok_or_else(|| DiskyError::new(ExitCode::Io, "no path", "home dir unavailable"))?;
+            let v = disky::volume::probe(&target)
+                .map_err(|e| DiskyError::new(ExitCode::Io, "statvfs failed", e.to_string()))?;
+            if format.is_machine() {
+                let payload = json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "kind": "volume",
+                    "records": [&v],
+                });
+                println!("{}", payload);
+            } else {
+                let gb = |b: u64| b as f64 / 1024.0_f64.powi(3);
+                println!("Path:  {}", v.path);
+                println!("Total: {:>10.1} GB", gb(v.total_bytes));
+                println!("Used:  {:>10.1} GB  ({:.0}%)", gb(v.used_bytes), v.used_pct);
+                println!("Free:  {:>10.1} GB", gb(v.free_bytes));
             }
         }
         Command::Churn {

@@ -107,6 +107,25 @@ dedicated `feat(...): ... (P<N>)` commit; see those for design details.
 
 
 ### Added
+- `disky free [PATH]` — live `statvfs` probe of the volume holding `PATH`
+  (default `$HOME`). Emits `{path, total_bytes, free_bytes, used_bytes,
+  used_pct}` under `kind="volume"`. No snapshot and no scan required, so a
+  cleanup loop can gate on "keep 30 GB free" without a 3-minute traversal.
+  `stats` answers what a past scan measured; this answers what the filesystem
+  says now. `free_bytes` uses `f_bavail` (unprivileged-writable), not the
+  root-only figure.
+- New `volume` module: `volume::probe(path)` and `volume::free_bytes(path)`.
+  The latter returns `None` on probe failure — never `0`, which would read as
+  a full disk.
+
+### Changed
+- `disky predict` defaults `--free-bytes` to the live `$HOME`-volume free
+  space. Previously omitting the flag produced `fill_at: null` with reason
+  "provide --free-bytes", which made the command useless by default and
+  forced callers into `df -k / | awk '{print $4*1024}'`.
+- `disky growth --over-n` defaults `--fill-target` the same way. Its `--help`
+  already claimed this default; the code never implemented it.
+
 - `disky cleanup` (CLI + MCP) now adds `summary: [CategorySummary]` and
   `total_bytes` to the JSON envelope, aggregating hits across paths per
   category. Text mode prints a second table beneath the per-path list

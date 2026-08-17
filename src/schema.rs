@@ -43,6 +43,7 @@ fn commands() -> Value {
         { "name": "stats",  "args": snapshot_with(&["summarize:bool", "raw:bool"]),     "output": "Stats | Scalar (with --summarize) | raw u64 (with --raw)" },
         { "name": "query",  "args": snapshot_with(&["sql:string", "limit:int=1000"]),    "output": "Object[]" },
         { "name": "list",   "args": {},                                                  "output": "Snapshot[]" },
+        { "name": "free",   "args": { "path": "path? — default $HOME" },                 "output": "VolumeRecord[] under kind='volume'. Record: {path, total_bytes:u64, free_bytes:u64, used_bytes:u64, used_pct:f64}. Live statvfs — no snapshot required." },
         {
             "name": "diff",
             "args": { "a": "@latest|<id>|<path>", "b": "@latest|<id>|<path>", "limit": "int=100" },

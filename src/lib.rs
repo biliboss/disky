@@ -21,3 +21,4 @@ pub mod render;
 pub mod scan;
 pub mod schema;
 pub mod snapshots;
+pub mod volume;
