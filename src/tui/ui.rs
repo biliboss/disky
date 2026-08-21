@@ -7,6 +7,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     Frame,
 };
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 pub fn render(frame: &mut Frame, app: &App, list_state: &mut ListState) {
     let area = frame.area();
@@ -163,9 +164,14 @@ fn size_bar(size: i64, max: i64, width: usize) -> String {
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
-        s.to_string()
-    } else {
-        format!("{}…", &s[..max.saturating_sub(1)])
+    let max = max.saturating_sub(1); // reserve 1 column for '…'
+    let mut width = 0;
+    for (byte_i, ch) in s.char_indices() {
+        let ch_w = ch.width().unwrap_or(0);
+        if width + ch_w > max {
+            return format!("{}…", &s[..byte_i]);
+        }
+        width += ch_w;
     }
+    s.to_string()
 }
