@@ -21,7 +21,7 @@ use tree::load_root;
 pub fn run(snapshot_spec: Option<String>) -> Result<()> {
     let path = snapshots::resolve(snapshot_spec.as_deref().unwrap_or("@latest"))?;
 
-    let conn = db::open(&path)?;
+    let conn = db::open_read_only(&path)?;
 
     // detect scan root from DB (smallest depth path)
     let root_path: String = conn

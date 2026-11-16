@@ -105,6 +105,11 @@ dedicated `feat(...): ... (P<N>)` commit; see those for design details.
 
 ## [Unreleased]
 
+### Fixed
+- Read commands (`top`, `dirs`, `ext`, `stats`, `query`, `find`, `cleanup`,
+  `predict`, `tui`, …) open snapshots read-only. A snapshot the current user
+  cannot write, such as one created by `sudo disky scan /`, no longer fails
+  with "Permission denied".
 
 ### Added
 - `disky cleanup` (CLI + MCP) now adds `summary: [CategorySummary]` and

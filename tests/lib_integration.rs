@@ -194,6 +194,28 @@ fn churn_detects_recently_modified_files() {
     assert!(rows.iter().all(|r| !r.path.ends_with("/cold")));
 }
 
+/// A snapshot the current user cannot write (root-owned after `sudo disky
+/// scan`, or in a shared data dir) must still answer queries. Mode 0444
+/// stands in for "owned by someone else".
+#[cfg(unix)]
+#[test]
+fn read_only_snapshot_file_is_queryable() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("tree");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("a.bin"), vec![0u8; 4096]).unwrap();
+
+    let snap = dir.path().join("snap.db");
+    disky::scan::run(root.to_str().unwrap(), snap.to_str().unwrap()).unwrap();
+    fs::set_permissions(&snap, fs::Permissions::from_mode(0o444)).unwrap();
+
+    let conn = db::open_read_only(snap.to_str().unwrap()).expect("read-only open succeeds");
+    let s = query::stats(&conn).unwrap();
+    assert_eq!(s.files, 1);
+}
+
 /// Synthesize a snapshot DB directly via DuckDB appenders (skips the
 /// filesystem-walk path of `disky::scan::run`) so we can stress cleanup
 /// against ~1 M rows without writing 1 M actual files. The shape matches
