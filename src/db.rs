@@ -1,11 +1,26 @@
 use anyhow::Result;
-use duckdb::Connection;
+use duckdb::{AccessMode, Config, Connection};
 
+/// Open a snapshot for writing. Only `scan` needs this.
 pub fn open(path: &str) -> Result<Connection> {
     let conn = Connection::open(path)?;
+    set_threads(&conn)?;
+    Ok(conn)
+}
+
+/// Open an existing snapshot without write access, so a snapshot owned by
+/// another user (a `sudo disky scan`, a shared data dir) stays queryable.
+pub fn open_read_only(path: &str) -> Result<Connection> {
+    let config = Config::default().access_mode(AccessMode::ReadOnly)?;
+    let conn = Connection::open_with_flags(path, config)?;
+    set_threads(&conn)?;
+    Ok(conn)
+}
+
+fn set_threads(conn: &Connection) -> Result<()> {
     let cpus = num_cpus::get();
     conn.execute_batch(&format!("PRAGMA threads={cpus};"))?;
-    Ok(conn)
+    Ok(())
 }
 
 pub fn create_schema(conn: &Connection) -> Result<()> {

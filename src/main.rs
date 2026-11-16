@@ -67,7 +67,7 @@ fn emit_error(err: &DiskyError, format: Format) {
 
 fn open_snapshot(spec: &str) -> anyhow::Result<duckdb::Connection> {
     let path = snapshots::resolve(spec)?;
-    db::open(&path)
+    db::open_read_only(&path)
 }
 
 fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
@@ -95,7 +95,7 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             let want_bundle =
                 emit_top.is_some() || emit_dirs.is_some() || emit_ext.is_some() || emit_stats;
             if want_bundle {
-                let conn = db::open(&db_path)?;
+                let conn = db::open_read_only(&db_path)?;
                 let mut bundle = serde_json::Map::new();
                 bundle.insert("schema_version".into(), json!(disky::query::SCHEMA_VERSION));
                 bundle.insert("kind".into(), json!("scan_bundle"));
