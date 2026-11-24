@@ -1,0 +1,134 @@
+/* Disk Cleanup — tokens extracted from the Claude Design snapshot.
+ *
+ * Source: _ds/organic-2eb7c489-…/styles.css ("Organic" design system) plus
+ * literal values used inline in snapshot.html.
+ *
+ * Mapping to the existing disky "brut" palette (AGENTS.md § Design Feel,
+ * claude-skill/disky/render.py, docs/index.html):
+ *   NO hex value matches the brut palette exactly. Each design token below is
+ *   listed with the brut role it plays (`≈ brut:<name> <hex>`) so the spec
+ *   can decide: adopt brut (AGENTS.md says off-palette hex is a bug for
+ *   /disky HTML) or adopt Organic as a new, separate GUI surface.
+ *   Tokens with no brut equivalent are marked NEW.
+ */
+
+:root {
+  /* ── Core roles ─────────────────────────────────────────────── */
+  --color-bg:        #f5ead8; /* ≈ brut:paper    #F5F1E8 — page/window background */
+  --color-surface:   #ebddc5; /* ≈ brut:card     #FBF8F0 — sidebar, title bar, cards, footers (darker than bg here; brut card is lighter) */
+  --color-text:      #201e1d; /* ≈ brut:ink      #14110F */
+  --color-accent:    #c67139; /* ≈ brut:rust     #B23A1F — primary CTA, selected nav, used-space ring */
+  --color-accent-2:  #7a8a5e; /* ≈ brut:olive    #5C6831 — success, cleaning progress, "Safe"/"Done", freed ring */
+  --color-divider:   color-mix(in srgb, #201e1d 16%, transparent); /* ≈ brut:line #D9D2C2 */
+
+  /* ── Tonal ramps (OKLCH, shared lightness scale) ────────────── */
+  --color-neutral-100: #f9f4ed; /* NEW */
+  --color-neutral-200: #eee7db; /* NEW — outer canvas, disk-bar track */
+  --color-neutral-300: #dcd3c4; /* NEW — switch track off, traffic light */
+  --color-neutral-400: #c0b6a5; /* NEW — unchecked checkbox border */
+  --color-neutral-500: #a19786; /* NEW */
+  --color-neutral-600: #82796a; /* NEW */
+  --color-neutral-700: #645c50; /* ≈ brut:dim #6B655E — secondary text (used everywhere) */
+  --color-neutral-800: #474238; /* NEW — body paragraph text */
+  --color-neutral-900: #2e2b25; /* NEW — dialog backdrop base, shadow ink */
+
+  --color-accent-100: #fff2eb; /* NEW — "Goal" feed card bg, tag-accent bg */
+  --color-accent-200: #ffe1d0; /* NEW — treemap tile */
+  --color-accent-300: #ffc6a5; /* NEW — treemap tile */
+  --color-accent-400: #f6a06b; /* NEW — treemap tile, traffic light */
+  --color-accent-500: #d67f48; /* NEW */
+  --color-accent-600: #b2622d; /* NEW — .btn-primary:hover */
+  --color-accent-700: #8c491a; /* NEW — .btn-primary:active, links, icon tint, selected tile ring */
+  --color-accent-800: #643312; /* NEW — link hover, tag-accent text, nav badge text */
+  --color-accent-900: #402310; /* NEW */
+
+  --color-accent-2-100: #f0fae1; /* NEW — tag-accent-2 bg */
+  --color-accent-2-200: #e1eecc; /* NEW — treemap tile */
+  --color-accent-2-300: #ccdbb2; /* NEW — treemap tile, logo arc, traffic light */
+  --color-accent-2-400: #aebf92; /* NEW */
+  --color-accent-2-500: #8fa073; /* NEW */
+  --color-accent-2-600: #728157; /* NEW */
+  --color-accent-2-700: #56633f; /* ≈ brut:done #3F6B2A — category icon tint, goal marker, shield icon */
+  --color-accent-2-800: #3d472b; /* NEW — tag-accent-2 text */
+  --color-accent-2-900: #272e1b; /* NEW */
+
+  /* Treemap tile cycle (order matters — index % 7) */
+  --tile-0: var(--color-accent-300);
+  --tile-1: var(--color-accent-2-300);
+  --tile-2: var(--color-neutral-300);
+  --tile-3: var(--color-accent-200);
+  --tile-4: var(--color-accent-2-200);
+  --tile-5: var(--color-neutral-200);
+  --tile-6: var(--color-accent-400);
+
+  /* ── Typography ─────────────────────────────────────────────── */
+  --font-heading: "Caprasimo", system-ui, sans-serif; /* ≈ brut:display Fraunces — NEW face */
+  --font-heading-weight: 400;
+  --font-body: "Figtree", system-ui, sans-serif;      /* ≈ brut:sans Manrope — NEW face */
+  /* weights loaded: Figtree 400/600/700, Caprasimo 400. No mono face in design (brut mono = JetBrains Mono). */
+
+  --fs-body: 15px;  --lh-body: 1.55;
+  --fs-h1: 42px; --fs-h2: 32px; --fs-h3: 25px; --fs-h4: 20px; --fs-h5: 16px; --fs-h6: 13px;
+  /* Screen-title overrides used inline: 54 (done), 46 (home), 40 (scanning/cleaning),
+     38 (review, ring label), 36 (assistant/large/dupes/history/settings), 34 (map) */
+  --fs-screen-hero: 46px;
+  --fs-screen-title: 36px;
+  --fs-ring-number: 38px;
+  --fs-small: 13px; --fs-xs: 12px; --fs-micro: 11px; --fs-kicker: 10px;
+  --tracking-heading: -0.015em;
+  --tracking-caps: 0.08em; /* h6, table th */
+
+  /* ── Spacing (design-system scale, 4.4px base) ──────────────── */
+  --space-1: 4.4px;
+  --space-2: 8.8px;
+  --space-3: 13.2px;
+  --space-4: 17.6px;
+  --space-6: 26.4px;
+  --space-8: 35.2px;
+  /* Layout literals: screen padding 36–48px × 56px; sidebar 236px;
+     right rail 300px (home/done) / 320px (assistant) / 260px (map);
+     title bar 40px; app window 1200 × 780 */
+  --layout-sidebar-w: 236px;
+  --layout-titlebar-h: 40px;
+  --layout-screen-px: 56px;
+
+  /* ── Radii ──────────────────────────────────────────────────── */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+  --radius-card: calc(var(--radius-lg) * 1.15); /* .card, .dialog — 32.2px */
+  --radius-pill: 999px;                          /* .btn, .tag, .seg, .input, nav items, bars */
+
+  /* ── Elevation ──────────────────────────────────────────────── */
+  /* NOTE: brut forbids box shadows ("No box shadows"). Design uses them on
+     the app window, toast, dialog and switch knob. */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
+
+  /* ── Component sizes ────────────────────────────────────────── */
+  --checkbox-size: 24px;   /* round, 2px border */
+  --switch-w: 46px; --switch-h: 28px; --switch-knob: 22px; --switch-pad: 3px;
+  --btn-icon-size: 36px;
+  --input-min-h: 36px;
+  --progress-h: 14px;      /* scan/clean bar */
+  --diskbar-h: 8px;        /* sidebar disk usage bar */
+  --ring-stroke: 14;       /* viewBox units on 120 box, r=50 */
+
+  /* ── Motion ─────────────────────────────────────────────────── */
+  --motion-ring: stroke-dasharray .8s ease;
+  --motion-bar: width .8s ease;
+  --motion-goal-fill: width .6s ease;
+  --motion-chevron: transform .2s;
+  /* Simulated timers in prototype: scan +1.4%/50ms (~3.6s), clean +2.5%/50ms (~2s),
+     350ms pause before results */
+
+  /* ── Translucent overlays (color-mix on text/accent) ────────── */
+  --overlay-hover: color-mix(in srgb, var(--color-text) 7%, transparent);
+  --overlay-active: color-mix(in srgb, var(--color-text) 14%, transparent);
+  --overlay-row-hover: color-mix(in srgb, var(--color-text) 4%, transparent);
+  --overlay-ghost-hover: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  --overlay-ghost-active: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  --overlay-backdrop: color-mix(in srgb, var(--color-neutral-900) 50%, transparent);
+  --text-muted: color-mix(in srgb, var(--color-text) 55%, transparent);
+}

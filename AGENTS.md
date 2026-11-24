@@ -231,6 +231,19 @@ fontFamily: { display:['Fraunces','serif'], sans:['Manrope','sans-serif'],
 
 Any HTML rendered by the `/disky` skill or release-report tooling MUST use these tokens. Any one-off hex outside this set is a bug.
 
+**Exception — the desktop GUI (`gui/`, 2026-11-24).** The Tauri + SolidJS app
+does NOT use the brut palette. It pixel-matches the Claude Design project
+"Disk Cleanup" and is built on that project's **Organic** design system
+(cream `#f5ead8` ground, terracotta `#c67139` accent, sage `#7a8a5e` second
+accent, Caprasimo display over Figtree body, 16 px radii / pill buttons,
+Lucide icons at stroke 2.75). Inside `gui/`, take every color, font, space,
+radius and shadow from the Organic tokens (`var(--color-*)`, `--font-*`,
+`--space-*`, `--radius-*`, `--shadow-*`) — a hard-coded value the tokens
+already carry is a bug there, exactly as a freelance hex is a bug in the
+brut surfaces. The design snapshot and spec live in `specs/disk-cleanup/`.
+The brut palette still governs everything else (skill HTML reports,
+release reports, `docs/index.html`).
+
 ## Surface scope (decision, v0.10.0 · 2026-05-27)
 
 **CLI is the only surface.** Web server and MCP server were dropped in v0.10.0. Rationale: only real consumer is Claude Code, which shells out — every other surface duplicated the CLI and doubled maintenance. Validated by 4-round grill (2026-05-27, recoverable from session `dc2884dc`).
@@ -248,6 +261,22 @@ Any HTML rendered by the `/disky` skill or release-report tooling MUST use these
 2. Browser-driven cleanup UX is requested by someone running disky outside an agent → add `disky web` (FastHTML local server, 1-2 active days).
 
 Until either trigger, **CLI is canonical**. JSON envelopes + RFC 9457 errors + `disky schema` are the agent contract.
+
+**Amendment (2026-11-24) — desktop GUI reinstated.** The maintainer asked
+for a native GUI for running disky outside an agent, which meets earn-back
+criterion 2. It ships as a **Tauri + SolidJS desktop app in `gui/`**, not a
+`disky web` server. Constraints:
+
+- The CLI stays canonical. The GUI is a client of the same engine (the
+  `disky` library crate or the `--format json` envelopes). It never forks
+  scan, query or cleanup logic, and anything the GUI can do must also be
+  doable from the CLI.
+- Destructive actions follow the same rules as the `/disky` wizard:
+  default dry-run, explicit per-target confirmation, and Trash
+  (`--reversible`) as the default.
+- `gui/` is a separate build and does not join the CLI's release matrix
+  until it has its own CI job.
+- MCP remains removed (criterion 1 has still not triggered).
 
 ## Claude Code skill — `/disky` (v2 wizard)
 
