@@ -194,120 +194,400 @@ fn churn_detects_recently_modified_files() {
     assert!(rows.iter().all(|r| !r.path.ends_with("/cold")));
 }
 
+/// Batched appender for synthetic snapshots (50k rows per flush, like scan).
+struct Batch<'a> {
+    conn: &'a duckdb::Connection,
+    rows: Vec<db::FileRecord>,
+}
+
+impl<'a> Batch<'a> {
+    fn new(conn: &'a duckdb::Connection) -> Self {
+        Batch {
+            conn,
+            rows: Vec::with_capacity(50_000),
+        }
+    }
+
+    fn push(&mut self, path: &str, is_dir: bool, size: i64, mtime: i64) {
+        let name = path.rsplit('/').next().unwrap_or(path).to_string();
+        self.rows.push(db::FileRecord {
+            ext: if is_dir {
+                None
+            } else {
+                name.rsplit_once('.').map(|(_, e)| e.to_string())
+            },
+            name,
+            path: path.to_string(),
+            size,
+            physical_size: if is_dir { None } else { Some(size) },
+            mtime: Some(mtime),
+            is_dir,
+            depth: path.matches('/').count() as i32,
+        });
+        if self.rows.len() >= 50_000 {
+            self.flush();
+        }
+    }
+
+    fn flush(&mut self) {
+        if !self.rows.is_empty() {
+            db::append_batch(self.conn, &self.rows).unwrap();
+            self.rows.clear();
+        }
+    }
+}
+
+const T0: i64 = 1_700_000_000;
+const DAY: i64 = 86_400;
+const SYNTH_HOME: &str = "/tmp/synth/home";
+
+fn finish_snapshot(conn: duckdb::Connection, root: &str) {
+    db::write_scan_meta(&conn, root, T0, Some(T0 + 100), true, 0, 0).unwrap();
+    db::build_indexes(&conn).unwrap();
+    drop(conn);
+}
+
 /// Synthesize a snapshot DB directly via DuckDB appenders (skips the
 /// filesystem-walk path of `disky::scan::run`) so we can stress cleanup
 /// against ~1 M rows without writing 1 M actual files. The shape matches
 /// what scan would produce: each "project" gets a `node_modules` (or
-/// `target`) dir plus N file rows whose paths sit underneath it.
+/// `target`) dir plus N file rows whose paths sit underneath it. On top,
+/// ~50k rows sit under the location rules' folders (`~/Library/Caches`,
+/// `~/Downloads`) so the location path is measured too.
 fn synth_big_snapshot(num_projects: usize, files_per_proj: usize) -> (TempDir, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let db_path = dir.path().join("big.db");
     let conn = db::open(db_path.to_str().unwrap()).unwrap();
     db::create_schema(&conn).unwrap();
-
-    let mut batch: Vec<db::FileRecord> = Vec::with_capacity(50_000);
-    let push =
-        |batch: &mut Vec<db::FileRecord>, rec: db::FileRecord, conn: &duckdb::Connection| {
-            batch.push(rec);
-            if batch.len() >= 50_000 {
-                db::append_batch(conn, batch).unwrap();
-                batch.clear();
-            }
-        };
+    let mut batch = Batch::new(&conn);
 
     // half the projects host `node_modules`, half host `target` — both
     // are in the default cleanup target set.
     for i in 0..num_projects {
-        let project = format!("/tmp/synth/proj-{:06}", i);
         let cat = if i % 2 == 0 { "node_modules" } else { "target" };
-        let target_dir = format!("{}/{}", project, cat);
-        push(
-            &mut batch,
-            db::FileRecord {
-                path: target_dir.clone(),
-                name: cat.to_string(),
-                ext: None,
-                size: 0,
-                physical_size: None,
-                mtime: Some(1_700_000_000),
-                is_dir: true,
-                depth: 3,
-            },
-            &conn,
-        );
+        let target_dir = format!("/tmp/synth/proj-{:06}/{}", i, cat);
+        batch.push(&target_dir, true, 0, T0);
         for f in 0..files_per_proj {
-            let path = format!("{}/file-{:04}.bin", target_dir, f);
-            push(
-                &mut batch,
-                db::FileRecord {
-                    path,
-                    name: format!("file-{:04}.bin", f),
-                    ext: Some("bin".into()),
-                    size: 1024,
-                    physical_size: Some(1024),
-                    mtime: Some(1_700_000_000),
-                    is_dir: false,
-                    depth: 4,
-                },
-                &conn,
+            batch.push(
+                &format!("{}/file-{:04}.bin", target_dir, f),
+                false,
+                1024,
+                T0,
             );
         }
     }
-    if !batch.is_empty() {
-        db::append_batch(&conn, &batch).unwrap();
+
+    // Location rows: 100 cache folders + 100 download folders (half older
+    // than 90 days), 250 files each = 50k rows.
+    let caches = format!("{SYNTH_HOME}/Library/Caches");
+    let downloads = format!("{SYNTH_HOME}/Downloads");
+    batch.push(&caches, true, 0, T0);
+    batch.push(&downloads, true, 0, T0);
+    for i in 0..SYNTH_LOCATION_DIRS {
+        let cache = format!("{caches}/com.vendor.app{i:03}");
+        batch.push(&cache, true, 0, T0);
+        let dl = format!("{downloads}/download-{i:03}");
+        let dl_mtime = if i % 2 == 0 { T0 - 200 * DAY } else { T0 };
+        batch.push(&dl, true, 0, dl_mtime);
+        for f in 0..SYNTH_LOCATION_FILES {
+            batch.push(&format!("{cache}/blob-{f:04}"), false, 1024, T0);
+            batch.push(&format!("{dl}/part-{f:04}.bin"), false, 1024, dl_mtime);
+        }
     }
-    db::write_scan_meta(
-        &conn,
-        "/tmp/synth",
-        1_700_000_000,
-        Some(1_700_000_100),
-        true,
-        0,
-        0,
-    )
-    .unwrap();
-    db::build_indexes(&conn).unwrap();
-    drop(conn);
+    batch.flush();
+    drop(batch);
+    finish_snapshot(conn, "/tmp/synth");
     (dir, db_path)
+}
+
+const SYNTH_LOCATION_DIRS: usize = 100;
+const SYNTH_LOCATION_FILES: usize = 250;
+
+fn synth_ctx(home: &str, root: &str) -> cleanup::ScanContext {
+    cleanup::ScanContext {
+        home: Some(PathBuf::from(home)),
+        scan_root: Some(root.to_string()),
+        now_secs: T0 + DAY,
+        installed_apps: Some(cleanup::InstalledApps::default()),
+        ..Default::default()
+    }
+}
+
+fn all_targets() -> Vec<String> {
+    cleanup::default_target_names()
+        .into_iter()
+        .map(String::from)
+        .collect()
 }
 
 #[test]
 fn cleanup_is_fast_on_large_snapshot() {
     // 2_000 projects × 500 files/project + 2_000 target-dir rows
-    // ≈ 1.002 M rows total. Roughly the shape of a real macOS home
-    // directory with thousands of node_modules / target dirs.
+    // ≈ 1.002 M rows, plus ~50k rows under cache / Downloads locations.
+    // Roughly the shape of a real macOS home directory with thousands of
+    // node_modules / target dirs.
     let (_dir, db_path) = synth_big_snapshot(2_000, 500);
     let conn = db::open(db_path.to_str().unwrap()).unwrap();
-    let targets: Vec<String> = cleanup::default_target_names()
-        .into_iter()
-        .map(String::from)
-        .collect();
+    let ctx = synth_ctx(SYNTH_HOME, "/tmp/synth");
 
     let start = std::time::Instant::now();
-    let hits = cleanup::scan(&conn, &targets, 10_000).unwrap();
+    let hits = cleanup::scan_with(&conn, &all_targets(), 10_000, &ctx).unwrap();
     let elapsed = start.elapsed();
 
+    let dev: Vec<_> = hits
+        .iter()
+        .filter(|h| h.category == "node_modules" || h.category == "target")
+        .collect();
     assert_eq!(
-        hits.len(),
+        dev.len(),
         2_000,
         "expected one hit per project, got {}",
-        hits.len()
+        dev.len()
     );
     // Each project has 500 × 1024 bytes = 512_000.
-    let total_bytes: u64 = hits.iter().map(|h| h.bytes).sum();
-    assert_eq!(total_bytes, 2_000 * 500 * 1024);
-    let total_files: u64 = hits.iter().map(|h| h.files).sum();
-    assert_eq!(total_files, 2_000 * 500);
+    let dev_bytes: u64 = dev.iter().map(|h| h.bytes).sum();
+    assert_eq!(dev_bytes, 2_000 * 500 * 1024);
+    let dev_files: u64 = dev.iter().map(|h| h.files).sum();
+    assert_eq!(dev_files, 2_000 * 500);
 
-    // Generous threshold for CI variance. The grouped-query fix lands
-    // around ~0.2-0.5 s on an M-series Mac vs ~80 s for the per-target
-    // loop on the same fixture.
+    let per_dir = SYNTH_LOCATION_FILES as u64 * 1024;
+    let caches: Vec<_> = hits.iter().filter(|h| h.category == "app_caches").collect();
+    assert_eq!(caches.len(), SYNTH_LOCATION_DIRS);
+    assert!(caches.iter().all(|h| h.bytes == per_dir));
+    let old: Vec<_> = hits
+        .iter()
+        .filter(|h| h.category == "old_downloads")
+        .collect();
+    assert_eq!(
+        old.len(),
+        SYNTH_LOCATION_DIRS / 2,
+        "only the 200-day-old half"
+    );
+    assert!(old.iter().all(|h| h.bytes == per_dir));
+    assert_eq!(
+        hits.len(),
+        2_000 + SYNTH_LOCATION_DIRS + SYNTH_LOCATION_DIRS / 2
+    );
+
+    // REQ-DCLEAN-033.A4 — the bound is < 1 s with a release build; the
+    // threshold here is generous for debug builds and CI variance. The
+    // grouped-query fix lands around ~0.2-0.5 s on an M-series Mac vs
+    // ~80 s for the per-target loop on the same fixture.
     assert!(
         elapsed < std::time::Duration::from_secs(5),
         "cleanup::scan took {:?} on a ~1 M-row snapshot — should be < 5 s",
         elapsed
     );
     eprintln!("cleanup_is_fast_on_large_snapshot: {:?}", elapsed);
+}
+
+/// Build a small snapshot from `(path, is_dir, size, mtime)` rows.
+fn small_snapshot(rows: &[(&str, bool, i64, i64)], root: &str) -> (TempDir, duckdb::Connection) {
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = dir.path().join("small.db");
+    let conn = db::open(db_path.to_str().unwrap()).unwrap();
+    db::create_schema(&conn).unwrap();
+    let mut batch = Batch::new(&conn);
+    for (path, is_dir, size, mtime) in rows {
+        batch.push(path, *is_dir, *size, *mtime);
+    }
+    batch.flush();
+    drop(batch);
+    finish_snapshot(conn, root);
+    let conn = db::open(db_path.to_str().unwrap()).unwrap();
+    (dir, conn)
+}
+
+fn by_path<'a>(hits: &'a [cleanup::CleanupHit], path: &str) -> Option<&'a cleanup::CleanupHit> {
+    hits.iter().find(|h| h.path == path)
+}
+
+#[test]
+fn cleanup_reports_system_categories() {
+    let old = T0 - 200 * DAY;
+    let rows: &[(&str, bool, i64, i64)] = &[
+        ("/h/Library/Caches", true, 0, T0),
+        ("/h/Library/Caches/com.foo", true, 0, T0),
+        ("/h/Library/Caches/com.foo/a.bin", false, 100, T0),
+        ("/h/Library/Caches/CloudKit", true, 0, T0),
+        ("/h/Library/Caches/CloudKit/x", false, 7, T0),
+        ("/h/Library/Caches/.DS_Store", false, 7, T0),
+        ("/h/.Trash", true, 0, T0),
+        ("/h/.Trash/x.pdf", false, 50, T0),
+        ("/h/Downloads", true, 0, T0),
+        ("/h/Downloads/old.zip", false, 200, old),
+        ("/h/Downloads/new.zip", false, 300, T0),
+        ("/h/Downloads/oldproj", true, 0, old),
+        ("/h/Downloads/oldproj/node_modules", true, 0, old),
+        ("/h/Downloads/oldproj/node_modules/x.js", false, 10, old),
+        ("/h/Downloads/mixed", true, 0, old),
+        ("/h/Downloads/mixed/stale.txt", false, 1, old),
+        ("/h/Downloads/mixed/fresh.txt", false, 1, T0),
+        ("/h/Library/Logs/foo.log", false, 40, T0),
+    ];
+    // Application Support (keyed by name) and Containers (keyed by bundle
+    // id): one dir row + one file row each, as a real scan records them.
+    let support = "/h/Library/Application Support";
+    let containers = "/h/Library/Containers";
+    let mut owned: Vec<(String, bool, i64, i64)> = Vec::new();
+    for child in [
+        format!("{support}/Leftover"),
+        format!("{support}/Slack"),
+        format!("{support}/com.apple.x"),
+        format!("{containers}/com.tinyspeck.slackmacgap"),
+        format!("{containers}/com.gone.Widget"),
+    ] {
+        owned.push((format!("{child}/data"), false, 30, T0));
+        owned.push((child, true, 0, T0));
+    }
+    let rows: Vec<(&str, bool, i64, i64)> = rows
+        .iter()
+        .copied()
+        .chain(owned.iter().map(|(p, d, s, m)| (p.as_str(), *d, *s, *m)))
+        .collect();
+    let rows = rows.as_slice();
+    let (_d, conn) = small_snapshot(rows, "/h");
+    let mut ctx = synth_ctx("/h", "/h");
+    ctx.installed_apps = Some(cleanup::InstalledApps::from_apps([(
+        Some("com.tinyspeck.slackmacgap"),
+        vec!["Slack"],
+    )]));
+    let hits = cleanup::scan_with(&conn, &all_targets(), 1000, &ctx).unwrap();
+
+    let cache = by_path(&hits, "/h/Library/Caches/com.foo").expect("app cache hit");
+    assert_eq!(cache.category, "app_caches");
+    assert_eq!(cache.safety, cleanup::Safety::Safe);
+    assert_eq!(cache.bytes, 100);
+    assert!(by_path(&hits, "/h/Library/Caches/CloudKit").is_none());
+    assert!(by_path(&hits, "/h/Library/Caches/.DS_Store").is_none());
+
+    let trash = by_path(&hits, "/h/.Trash/x.pdf").expect("trash hit (a file)");
+    assert_eq!(trash.category, "trash");
+    assert_eq!(trash.safety, cleanup::Safety::Safe);
+    assert_eq!((trash.bytes, trash.files), (50, 1));
+    assert!(trash.note.as_deref().unwrap().contains("permanently"));
+
+    let dl = by_path(&hits, "/h/Downloads/old.zip").expect("old download");
+    assert_eq!(dl.category, "old_downloads");
+    assert_eq!(dl.safety, cleanup::Safety::Review);
+    assert!(by_path(&hits, "/h/Downloads/new.zip").is_none());
+    // A folder with anything recent in it is not old.
+    assert!(by_path(&hits, "/h/Downloads/mixed").is_none());
+    // The old project is reported once; its node_modules is not double-counted.
+    assert_eq!(by_path(&hits, "/h/Downloads/oldproj").unwrap().bytes, 10);
+    assert!(by_path(&hits, "/h/Downloads/oldproj/node_modules").is_none());
+
+    let log = by_path(&hits, "/h/Library/Logs/foo.log").expect("log hit");
+    assert_eq!(log.category, "logs");
+    assert_eq!(log.safety, cleanup::Safety::Review);
+
+    let leftovers: Vec<&str> = hits
+        .iter()
+        .filter(|h| h.category == "app_leftovers")
+        .map(|h| h.path.as_str())
+        .collect();
+    assert_eq!(leftovers.len(), 2, "got {leftovers:?}");
+    assert!(leftovers.contains(&"/h/Library/Application Support/Leftover"));
+    assert!(leftovers.contains(&"/h/Library/Containers/com.gone.Widget"));
+
+    // REQ-DCLEAN-033.A1 — every JSON record carries category + safety.
+    let json = serde_json::to_value(&hits).unwrap();
+    for rec in json.as_array().unwrap() {
+        assert!(rec["category"].is_string(), "{rec}");
+        let safety = rec["safety"].as_str().unwrap();
+        assert!(safety == "safe" || safety == "review", "{rec}");
+    }
+}
+
+#[test]
+fn cleanup_leftovers_need_an_app_list() {
+    // No installed apps known → nothing is provably a leftover.
+    let rows: &[(&str, bool, i64, i64)] = &[
+        ("/h/Library/Application Support/Whatever", true, 0, T0),
+        ("/h/Library/Application Support/Whatever/db", false, 30, T0),
+    ];
+    let (_d, conn) = small_snapshot(rows, "/h");
+    let ctx = synth_ctx("/h", "/h");
+    let hits = cleanup::scan_with(&conn, &["app_leftovers".to_string()], 100, &ctx).unwrap();
+    assert!(hits.is_empty(), "got {hits:?}");
+}
+
+#[test]
+fn cleanup_missing_location_is_silent() {
+    // REQ-DCLEAN-033.A5 — a snapshot with none of the system locations
+    // still returns the dev hits, and no error, for every category.
+    let rows: &[(&str, bool, i64, i64)] = &[
+        ("/h/src/app/node_modules", true, 0, T0),
+        ("/h/src/app/node_modules/x.js", false, 10, T0),
+    ];
+    let (_d, conn) = small_snapshot(rows, "/h");
+    for home in [Some("/h"), Some("/does/not/exist"), None] {
+        let mut ctx = synth_ctx("/h", "/h");
+        ctx.home = home.map(PathBuf::from);
+        let hits = cleanup::scan_with(&conn, &all_targets(), 100, &ctx).unwrap();
+        assert_eq!(hits.len(), 1, "home={home:?}: {hits:?}");
+        assert_eq!(hits[0].category, "node_modules");
+        assert_eq!(hits[0].safety, cleanup::Safety::Review);
+    }
+}
+
+#[test]
+fn cleanup_respects_root_and_ignore() {
+    // REQ-DCLEAN-033.A3 — nothing outside the root, under an ignored
+    // segment, or inside an excluded folder is returned.
+    let rows: &[(&str, bool, i64, i64)] = &[
+        ("/h/src/a/node_modules", true, 0, T0),
+        ("/h/src/a/node_modules/x", false, 1, T0),
+        ("/h/src/keepme/node_modules", true, 0, T0),
+        ("/h/src/keepme/node_modules/x", false, 1, T0),
+        ("/h/src/b/target", true, 0, T0),
+        ("/h/src/b/target/x", false, 1, T0),
+        ("/h/srcother/target", true, 0, T0),
+        ("/h/srcother/target/x", false, 1, T0),
+        ("/h/Library/Caches/foo", true, 0, T0),
+        ("/h/Library/Caches/foo/x", false, 1, T0),
+        ("/h/.Trash/y", false, 1, T0),
+    ];
+    let (_d, conn) = small_snapshot(rows, "/h/src");
+    let mut ctx = synth_ctx("/h", "/h/src");
+    ctx.ignore = vec!["keepme".to_string()];
+    ctx.excluded = vec!["/h/src/b".to_string()];
+    let hits = cleanup::scan_with(&conn, &all_targets(), 100, &ctx).unwrap();
+    let paths: Vec<&str> = hits.iter().map(|h| h.path.as_str()).collect();
+    assert_eq!(paths, vec!["/h/src/a/node_modules"]);
+
+    // `scan` (no explicit context) reads the root from scan_meta.
+    let hits = cleanup::scan(&conn, &all_targets(), 100).unwrap();
+    assert!(
+        hits.iter().all(|h| h.path.starts_with("/h/src/")),
+        "{hits:?}"
+    );
+}
+
+#[test]
+fn cleanup_trash_is_refused_in_reversible_mode() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("in-trash.bin");
+    fs::write(&f, b"x").unwrap();
+    let hit = cleanup::CleanupHit {
+        category: cleanup::TRASH_CATEGORY.to_string(),
+        safety: cleanup::Safety::Safe,
+        path: f.to_string_lossy().into_owned(),
+        bytes: 1,
+        files: 1,
+        note: None,
+    };
+    let handled = cleanup::apply(std::slice::from_ref(&hit), cleanup::ApplyMode::Trash).unwrap();
+    assert!(handled.is_empty());
+    assert!(
+        f.exists(),
+        "trash item must be left alone in reversible mode"
+    );
+
+    // Permanent mode deletes it (file hits are supported, not just dirs).
+    let handled = cleanup::apply(&[hit], cleanup::ApplyMode::Delete).unwrap();
+    assert_eq!(handled.len(), 1);
+    assert!(!f.exists());
 }
 
 #[test]

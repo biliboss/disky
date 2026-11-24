@@ -202,11 +202,20 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             reversible,
         } => {
             let conn = open_snapshot(&snapshot)?;
+            // A dry-run previews every category. A bare `--apply` stays
+            // limited to the developer-artefact categories it always
+            // covered; system-level categories must be named in `--target`.
             let targets: Vec<String> = if target.is_empty() {
-                cleanup::default_target_names()
-                    .into_iter()
-                    .map(String::from)
-                    .collect()
+                let names = if apply {
+                    eprintln!(
+                        "cleanup: --apply without --target covers developer artefacts only; \
+                         name system categories explicitly (e.g. --target app_caches)"
+                    );
+                    cleanup::dev_category_names()
+                } else {
+                    cleanup::category_names()
+                };
+                names.into_iter().map(String::from).collect()
             } else {
                 target
             };

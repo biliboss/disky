@@ -4,7 +4,7 @@
 
 use serde_json::{json, Value};
 
-use crate::cleanup::TARGETS;
+use crate::cleanup::{LocationFilter, Matcher, CATEGORIES};
 use crate::query::SCHEMA_VERSION;
 
 pub fn document() -> Value {
@@ -90,9 +90,42 @@ fn commands() -> Value {
                 "reversible": "bool (default false — with apply, trash instead of rm)"
             },
             "output": "CleanupHit[]",
-            "targets": TARGETS.iter().map(|(n, b)| json!({"name": n, "basenames": b})).collect::<Vec<_>>()
+            "targets": cleanup_categories()
         }
     ])
+}
+
+/// Every cleanup category with its safety class, straight from the engine
+/// table (`cleanup::CATEGORIES`).
+fn cleanup_categories() -> Value {
+    CATEGORIES
+        .iter()
+        .map(|c| match c.matcher {
+            Matcher::Basename(b) => json!({
+                "name": c.name,
+                "safety": c.safety,
+                "kind": "basename",
+                "basenames": b,
+            }),
+            Matcher::Location {
+                locations, filter, ..
+            } => json!({
+                "name": c.name,
+                "safety": c.safety,
+                "kind": "location",
+                "locations": locations
+                    .iter()
+                    .map(|l| json!({"pattern": l.pattern, "safety": l.safety}))
+                    .collect::<Vec<_>>(),
+                "filter": match filter {
+                    LocationFilter::All => json!(null),
+                    LocationFilter::OlderThanDays(d) => json!({"older_than_days": d}),
+                    LocationFilter::AppLeftovers => json!("no_installed_app"),
+                },
+                "note": c.note,
+            }),
+        })
+        .collect()
 }
 
 fn snapshot_with(extras: &[&str]) -> Value {
@@ -123,8 +156,8 @@ fn records() -> Value {
         },
         "Scalar":     { "bytes": "u64", "files": "u64" },
         "Snapshot":   { "path": "string", "id": "string?", "bytes": "u64" },
-        "CleanupHit":      { "category": "string", "path": "string", "bytes": "u64", "files": "u64" },
-        "CategorySummary": { "category": "string", "paths": "u64", "bytes": "u64", "files": "u64" },
+        "CleanupHit":      { "category": "string", "safety": "safe|review", "path": "string", "bytes": "u64", "files": "u64", "note": "string? (e.g. trash: permanent, refused with --reversible)" },
+        "CategorySummary": { "category": "string", "safety": "safe|review (review if any hit is)", "paths": "u64", "bytes": "u64", "files": "u64" },
         "DiffRow":    { "path": "string", "kind": "added|removed|grew|shrank", "size_a": "u64", "size_b": "u64", "delta": "i64" },
         "GrowthRow":  { "path": "string", "kind": "grew|shrank|added|removed", "size_a": "u64", "size_b": "u64", "delta_bytes": "i64", "rate_bytes_per_day": "f64", "days_between": "f64" },
         "ChurnRow":   { "path": "string", "recent_files": "u64", "recent_bytes": "u64", "total_files": "u64", "total_bytes": "u64", "churn_score": "f64 (0..1)" },

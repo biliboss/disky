@@ -138,7 +138,11 @@ pub enum Command {
     /// Find well-known disk-hoggy directories (node_modules, target, …).
     /// Defaults to dry-run; pass `--apply` to delete.
     Cleanup {
-        /// Comma-separated target categories (default: all known)
+        /// Comma-separated categories (default: all for a dry-run; developer
+        /// artefacts only with --apply). Developer: node_modules, target,
+        /// pycache, next, dist, build, venv, gradle, pytest. System:
+        /// system_caches, app_caches, temp, logs, trash, app_leftovers,
+        /// old_downloads. `disky schema` lists each with its safety.
         #[arg(short, long, value_delimiter = ',')]
         target: Vec<String>,
         #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]

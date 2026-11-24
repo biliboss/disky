@@ -328,12 +328,16 @@ pub fn cleanup(hits: &[CleanupHit], applied: Option<&[String]>, format: Format) 
         }
         return Ok(());
     }
-    println!("{:<14} {:>12} {:>10}  PATH", "CATEGORY", "SIZE", "FILES");
-    println!("{}", "-".repeat(80));
+    println!(
+        "{:<14} {:<7} {:>12} {:>10}  PATH",
+        "CATEGORY", "SAFETY", "SIZE", "FILES"
+    );
+    println!("{}", "-".repeat(88));
     for h in hits {
         println!(
-            "{:<14} {:>12} {:>10}  {}",
+            "{:<14} {:<7} {:>12} {:>10}  {}",
             h.category,
+            h.safety.as_str(),
             format_size(h.bytes, BINARY),
             h.files,
             h.path,
@@ -342,20 +346,26 @@ pub fn cleanup(hits: &[CleanupHit], applied: Option<&[String]>, format: Format) 
     if !summary.is_empty() {
         println!();
         println!(
-            "{:<14} {:>12} {:>10} {:>8}",
-            "CATEGORY", "TOTAL", "FILES", "PATHS"
+            "{:<14} {:<7} {:>12} {:>10} {:>8}",
+            "CATEGORY", "SAFETY", "TOTAL", "FILES", "PATHS"
         );
-        println!("{}", "-".repeat(50));
+        println!("{}", "-".repeat(58));
         for s in &summary {
             println!(
-                "{:<14} {:>12} {:>10} {:>8}",
+                "{:<14} {:<7} {:>12} {:>10} {:>8}",
                 s.category,
+                s.safety.as_str(),
                 format_size(s.bytes, BINARY),
                 s.files,
                 s.paths,
             );
         }
-        println!("{:<14} {:>12}", "TOTAL", format_size(total_bytes, BINARY));
+        println!(
+            "{:<14} {:<7} {:>12}",
+            "TOTAL",
+            "",
+            format_size(total_bytes, BINARY)
+        );
     }
     if let Some(rm) = applied {
         println!();

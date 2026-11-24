@@ -502,6 +502,30 @@ The shell is the frame around every screen: a title bar of `--layout-titlebar-h`
 
 The engine currently finds developer artefacts (`node_modules`, `target`, …). It MUST also produce the snapshot's categories: system caches, app caches, temporary files, logs, the Trash, app leftovers and old downloads. Each carries a `safety` of `safe` or `review`.
 
+implementations:
+  - src/cleanup.rs:scan_with
+  - src/cleanup.rs:apply
+  - src/cleanup.rs:InstalledApps
+  - src/cleanup.rs:CleanupHit
+  - src/cleanup.rs:Safety
+  - src/cleanup.rs:summarise
+  - src/cleanup.rs:CATEGORIES
+  - src/cleanup.rs:category
+  - src/cleanup.rs:in_scope
+  - src/cleanup.rs:location_roots
+
+verifies:
+  - tests/lib_integration.rs:cleanup_reports_system_categories
+  - src/cleanup.rs:dev_categories_keep_names_and_are_review
+  - src/cleanup.rs:safety_serialises_lowercase
+  - src/cleanup.rs:category_names_are_unique
+  - src/cleanup.rs:location_safety_classes_match_contract
+  - tests/lib_integration.rs:cleanup_respects_root_and_ignore
+  - src/cleanup.rs:in_scope_rejects_paths_outside_root
+  - src/cleanup.rs:in_scope_rejects_ignored_and_excluded_paths
+  - tests/lib_integration.rs:cleanup_is_fast_on_large_snapshot
+  - tests/lib_integration.rs:cleanup_missing_location_is_silent
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-033.A1 -->
 - `disky cleanup --format json` emits each hit with a `category` and a `safety` field. Existing developer-artefact categories keep their names, and their `safety` is `review`.

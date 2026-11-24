@@ -8,12 +8,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn disky_bin() -> PathBuf {
-    let mut p = std::env::current_exe().unwrap();
-    p.pop();
-    if p.ends_with("deps") {
-        p.pop();
-    }
-    let candidate = p.join("disky");
+    // Cargo sets this for integration tests; robust to the build-dir layout.
+    let candidate = PathBuf::from(env!("CARGO_BIN_EXE_disky"));
     assert!(
         candidate.exists(),
         "disky binary not built at {} — `cargo test` should build it",

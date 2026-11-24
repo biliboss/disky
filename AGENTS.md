@@ -49,6 +49,31 @@ disky cleanup --target node_modules,target --apply --reversible  # → ~/.Trash
 ```
 
 JSON output: `{kind:"cleanup", applied:bool, removed:[paths], records:[CleanupHit], summary:[CategorySummary], total_bytes:N}`.
+`CleanupHit = {category, safety: safe|review, path, bytes, files, note?}`.
+
+**Categories (REQ-DCLEAN-033).** One table, `cleanup::CATEGORIES` — the GUI
+and `disky schema` read it; nothing else defines a category.
+
+| Category | Matches | Safety |
+|---|---|---|
+| dev (`node_modules` … `pytest`) | dir basename, anywhere | review |
+| `system_caches` | children of `/Library/Caches` (not `com.apple.*`) | safe |
+| `app_caches` | children of `~/Library/Caches` (not iCloud state) | safe |
+| `temp` | children of `/private/tmp` (safe) and `/private/var/folders/*/*/T` (review — live files) | review |
+| `logs` | children of `~/Library/Logs`, `/Library/Logs` | review |
+| `trash` | children of `~/.Trash` — refused with `--reversible`, permanent only | safe |
+| `app_leftovers` | children of `~/Library/Application Support` / `~/Library/Containers` matching **no** installed app (bundle id, name, executable, vendor) under `/Applications`, `~/Applications`, `/System/Applications` | review |
+| `old_downloads` | children of `~/Downloads` whose newest mtime is > 90 days old | review |
+
+Rules: `ALWAYS_SKIP_SUBSTRINGS` applies to the basename (dev) rules only —
+location rules bypass it and carry their own `skip_children`. Hits outside
+the scan root, under a `.diskyignore` segment, or in an excluded folder are
+dropped (`cleanup::in_scope`). A missing location yields nothing. Nested hits
+are dropped (outermost wins), so bytes are never counted twice. No app list
+→ no `app_leftovers` (when in doubt, don't report). A dry-run with no
+`--target` previews every category; `--apply` with no `--target` covers the
+dev categories only — system categories must be named. Still one grouped
+range-join: ~0.2 s on a 1.05 M-row snapshot (release).
 
 **Performance (v0.11.0):** Single grouped range-join with a TEMP table
 of target dirs. DuckDB plans zone-maps + IEJoin in one pass.
