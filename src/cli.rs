@@ -288,4 +288,18 @@ pub enum Command {
         #[arg(long, default_value_t = false)]
         apply: bool,
     },
+
+    /// List the clean-history log (every applied `cleanup`), newest first.
+    History {
+        #[arg(short, long, default_value_t = 50)]
+        limit: usize,
+    },
+
+    /// Move every trashed item of a history entry back to its original
+    /// path. Never overwrites: occupied paths are reported as conflicts and
+    /// stay in the Trash. Re-running retries items not yet restored.
+    Restore {
+        /// Entry id from `disky history`.
+        id: String,
+    },
 }

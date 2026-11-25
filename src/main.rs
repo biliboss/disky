@@ -8,7 +8,7 @@ use disky::exit::{classify, DiskyError, ExitCode};
 use disky::policy::{apply_policy, Policy, SnapshotMeta};
 use disky::query::SCHEMA_VERSION;
 use disky::render::{resolve_format, Format};
-use disky::{cleanup, db, query, render, scan, schema, snapshots};
+use disky::{cleanup, db, history, query, render, scan, schema, snapshots};
 use serde_json::json;
 use std::process::ExitCode as ProcExit;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -220,17 +220,25 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                 target
             };
             let hits = cleanup::scan(&conn, &targets, limit)?;
-            let removed = if apply {
+            let outcome = if apply {
                 let mode = if reversible {
                     cleanup::ApplyMode::Trash
                 } else {
                     cleanup::ApplyMode::Delete
                 };
-                Some(cleanup::apply(&hits, mode)?)
+                Some(cleanup::apply(&hits, mode, Some(&history::log_path()))?)
             } else {
                 None
             };
-            render::cleanup(&hits, removed.as_deref(), format)?;
+            render::cleanup(
+                &hits,
+                outcome.as_ref().map(|o| o.handled.as_slice()),
+                outcome
+                    .as_ref()
+                    .and_then(|o| o.entry.as_ref())
+                    .map(|e| e.id.as_str()),
+                format,
+            )?;
         }
         Command::Diff { a, b, limit } => {
             let path_a = snapshots::resolve(&a)?;
@@ -621,6 +629,15 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                     plan.total_removed_bytes
                 );
             }
+        }
+        Command::History { limit } => {
+            let mut entries = history::list(&history::log_path())?;
+            entries.truncate(limit);
+            render::history(&entries, format)?;
+        }
+        Command::Restore { id } => {
+            let report = history::restore(&history::log_path(), &id)?;
+            render::restore(&report, format)?;
         }
         Command::List => {
             let snaps = snapshots::list_snapshots();

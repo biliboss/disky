@@ -213,51 +213,113 @@ fn scan_emit_bundle_includes_top_and_stats() {
     assert!(!v["ext"].as_array().unwrap().is_empty());
 }
 
+/// Run disky with `HOME` pointed at `home`, so the Trash, the data dir and
+/// the clean-history log all live under the test's temp dir — never the
+/// real user's.
+fn run_in_home(home: &std::path::Path, args: &[&str]) -> std::process::Output {
+    Command::new(disky_bin())
+        .env("HOME", home)
+        .env_remove("XDG_DATA_HOME")
+        .env_remove("DISKY_CONFIG_PATH")
+        .env_remove("DISKY_FORMAT")
+        .env_remove("DISKY_SNAPSHOT")
+        .args(args)
+        .output()
+        .unwrap()
+}
+
+fn json_in_home(home: &std::path::Path, args: &[&str]) -> Value {
+    let out = run_in_home(home, args);
+    assert!(out.status.success(), "{:?} failed: {:?}", args, out);
+    serde_json::from_str(String::from_utf8(out.stdout).unwrap().trim()).expect("valid JSON")
+}
+
+/// Scan `<home>/proj` (holding one `node_modules`) and clean it to the
+/// (temp) Trash. Returns the cleanup envelope.
+fn trash_node_modules(home: &std::path::Path) -> Value {
+    fs::create_dir_all(home.join("proj/node_modules")).unwrap();
+    fs::write(home.join("proj/node_modules/big.js"), vec![0u8; 1024]).unwrap();
+    let db = home.join("snap.db");
+    let proj = home.join("proj");
+    let out = run_in_home(
+        home,
+        &["scan", proj.to_str().unwrap(), "--db", db.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "scan: {:?}", out);
+    json_in_home(
+        home,
+        &[
+            "cleanup",
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--apply",
+            "--reversible",
+            "--target",
+            "node_modules",
+            "--format",
+            "json",
+        ],
+    )
+}
+
 #[test]
 fn cleanup_reversible_moves_to_trash() {
-    let dir = temp_dir();
-    fs::create_dir_all(dir.join("proj/node_modules")).unwrap();
-    fs::write(dir.join("proj/node_modules/big.js"), vec![0u8; 1024]).unwrap();
-    let db = dir.join("snap.db");
-    let out = Command::new(disky_bin())
-        .args(["scan"])
-        .arg(&dir)
-        .args(["--db"])
-        .arg(&db)
-        .output()
-        .unwrap();
-    assert!(out.status.success(), "scan: {:?}", out);
-
-    let v = run_json(&[
-        "cleanup",
-        "--snapshot",
-        db.to_str().unwrap(),
-        "--apply",
-        "--reversible",
-        "--target",
-        "node_modules",
-        "--format",
-        "json",
-    ]);
+    let home = temp_dir();
+    let v = trash_node_modules(&home);
     assert_eq!(v["applied"], true);
     let removed = v["removed"].as_array().unwrap();
     assert!(!removed.is_empty(), "removed empty: {}", v);
-    let nm = dir.join("proj/node_modules");
-    assert!(!nm.exists(), "node_modules should have been moved to trash");
+    assert!(
+        !home.join("proj/node_modules").exists(),
+        "node_modules should have been moved to trash"
+    );
+    let in_trash = fs::read_dir(home.join(".Trash")).unwrap().count();
+    assert_eq!(in_trash, 1, "moved into the temp HOME's Trash");
+    let _ = fs::remove_dir_all(&home);
+}
 
-    // Best-effort cleanup of the trash entry we just created so we don't
-    // leak across test runs. Match prefix on basename + unix ts suffix.
-    if let Some(home) = dirs::home_dir() {
-        let trash = home.join(".Trash");
-        if let Ok(entries) = fs::read_dir(&trash) {
-            for e in entries.flatten() {
-                let name = e.file_name().to_string_lossy().into_owned();
-                if name.starts_with("node_modules-") {
-                    let _ = fs::remove_dir_all(e.path());
-                }
-            }
-        }
-    }
+#[test]
+fn history_and_restore_round_trip_through_the_cli() {
+    let home = temp_dir();
+    let v = trash_node_modules(&home);
+    let id = v["history_id"].as_str().expect("history_id").to_string();
+
+    let h = json_in_home(&home, &["history", "--format", "json"]);
+    assert_eq!(h["kind"], "history");
+    let recs = h["records"].as_array().unwrap();
+    assert_eq!(recs.len(), 1);
+    assert_eq!(recs[0]["id"], id);
+    assert_eq!(recs[0]["mode"], "trash");
+    assert_eq!(recs[0]["categories"][0], "node_modules");
+    assert!(recs[0]["items"][0]["trash_path"].is_string());
+    assert!(recs[0]["restored_at"].is_null());
+
+    let r = json_in_home(&home, &["restore", &id, "--format", "json"]);
+    assert_eq!(r["kind"], "restore");
+    assert_eq!(r["records"][0]["restored"].as_array().unwrap().len(), 1);
+    assert!(home.join("proj/node_modules/big.js").exists());
+
+    // Fully restored → refused with a non-zero exit and an RFC 9457 error.
+    let again = run_in_home(&home, &["restore", &id, "--format", "json"]);
+    assert_eq!(again.status.code(), Some(1));
+    let err: Value = serde_json::from_str(String::from_utf8(again.stderr).unwrap().trim()).unwrap();
+    assert!(err["detail"]
+        .as_str()
+        .unwrap()
+        .contains("already restored at"));
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn history_is_empty_and_restore_unknown_id_is_not_found() {
+    let home = temp_dir();
+    let h = json_in_home(&home, &["history", "--format", "json"]);
+    assert_eq!(h["kind"], "history");
+    assert!(h["records"].as_array().unwrap().is_empty());
+
+    let out = run_in_home(&home, &["restore", "no-such-id", "--format", "json"]);
+    assert_eq!(out.status.code(), Some(4));
+    let _ = fs::remove_dir_all(&home);
 }
 
 #[test]

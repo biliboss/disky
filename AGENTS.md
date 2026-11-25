@@ -82,6 +82,33 @@ of target dirs. DuckDB plans zone-maps + IEJoin in one pass.
 Prior algos (per-target loop, LEFT JOIN with LIKE) preserved in
 `src/cleanup.rs` history comment.
 
+## History & restore (REQ-DCLEAN-034)
+
+Every `cleanup --apply` (CLI or GUI, both via `cleanup::apply`) appends one
+entry to `<data dir>/history.json`, next to the snapshots. The `.json`
+extension keeps it out of `@latest` and `disky list`.
+
+```
+disky history [--limit N] --format json   # kind:"history", newest first
+disky restore <id> --format json          # kind:"restore", records:[RestoreReport]
+```
+
+`Entry = {id, ts, mode: trash|delete, categories, bytes, items:[Item], restored_at?}`,
+`Item = {original_path, trash_path (null in delete mode), bytes, status}`, with
+`status = in_trash|restored|conflict|missing|deleted`. The `cleanup` envelope
+carries `history_id` when an entry was written.
+
+Rules: restore never overwrites. An occupied original path is a `conflict`
+and the item stays in the Trash. An item gone from its Trash path is reported
+`missing` ("no longer in Trash"), and the rest are still restored. Re-running
+restore retries only items not yet restored. `restored_at` is set once every
+item is back, and after that restore refuses with "already restored at <ts>"
+(exit 1). Delete-mode entries are refused (exit 1), and unknown ids exit 4.
+Every read-modify-write holds `flock` on `history.lock` and swaps the file in
+with temp + rename, so concurrent GUI/CLI writers never lose an entry. Tests
+pass a `trash_root` to `cleanup::apply_with` (crate-private), and the CLI
+tests set a temp `HOME`. No test touches the real `~/.Trash` or log.
+
 ## `.diskyignore` loader (v0.11.0)
 
 Module `src/ignore.rs` (170 LOC, std-only) provides:

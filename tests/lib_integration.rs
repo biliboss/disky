@@ -577,16 +577,16 @@ fn cleanup_trash_is_refused_in_reversible_mode() {
         files: 1,
         note: None,
     };
-    let handled = cleanup::apply(std::slice::from_ref(&hit), cleanup::ApplyMode::Trash).unwrap();
-    assert!(handled.is_empty());
+    let out = cleanup::apply(std::slice::from_ref(&hit), cleanup::ApplyMode::Trash, None).unwrap();
+    assert!(out.handled.is_empty() && out.entry.is_none());
     assert!(
         f.exists(),
         "trash item must be left alone in reversible mode"
     );
 
     // Permanent mode deletes it (file hits are supported, not just dirs).
-    let handled = cleanup::apply(&[hit], cleanup::ApplyMode::Delete).unwrap();
-    assert_eq!(handled.len(), 1);
+    let out = cleanup::apply(&[hit], cleanup::ApplyMode::Delete, None).unwrap();
+    assert_eq!(out.handled.len(), 1);
     assert!(!f.exists());
 }
 

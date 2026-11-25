@@ -1042,20 +1042,50 @@ pub enum ApplyMode {
     Trash,
 }
 
-/// True when `path` already lives in `~/.Trash`.
-fn is_in_trash(path: &str) -> bool {
-    dirs::home_dir().is_some_and(|h| Path::new(path).starts_with(h.join(".Trash")))
+/// What [`apply`] did: the paths it handled and the history entry it
+/// recorded (REQ-DCLEAN-034). `entry` is `None` when nothing was handled.
+#[derive(Debug, Clone)]
+pub struct ApplyOutcome {
+    pub handled: Vec<String>,
+    pub entry: Option<crate::history::Entry>,
 }
 
-/// Remove or trash the listed paths. Returns paths that were actually handled.
+/// `~/.Trash`, the Trash used outside tests.
+fn user_trash() -> Result<PathBuf> {
+    Ok(dirs::home_dir()
+        .ok_or_else(|| anyhow::anyhow!("home dir unavailable"))?
+        .join(".Trash"))
+}
+
+/// Remove or trash the listed paths and, when `log` is given and anything
+/// was handled, append one entry to the clean-history log.
 ///
 /// In [`ApplyMode::Trash`], hits that are already in the Trash (the `trash`
 /// category) are refused: moving them would be a no-op, and emptying them
 /// would not be reversible.
-pub fn apply(hits: &[CleanupHit], mode: ApplyMode) -> Result<Vec<String>> {
+pub fn apply(hits: &[CleanupHit], mode: ApplyMode, log: Option<&Path>) -> Result<ApplyOutcome> {
+    // Delete mode never touches the Trash, so it works without a home dir.
+    let trash = match mode {
+        ApplyMode::Trash => user_trash()?,
+        ApplyMode::Delete => user_trash().unwrap_or_default(),
+    };
+    apply_with(hits, mode, log, &trash)
+}
+
+/// [`apply`] with an explicit Trash root, so tests never touch `~/.Trash`.
+pub(crate) fn apply_with(
+    hits: &[CleanupHit],
+    mode: ApplyMode,
+    log: Option<&Path>,
+    trash_root: &Path,
+) -> Result<ApplyOutcome> {
+    use crate::history::{Entry, Item, ItemStatus, Mode};
+
     let mut handled = Vec::new();
+    let mut items = Vec::new();
+    let mut categories: Vec<String> = Vec::new();
     for h in hits {
-        match mode {
+        let trash_path = match mode {
             ApplyMode::Delete => {
                 let p = Path::new(&h.path);
                 let is_dir = p.symlink_metadata().is_ok_and(|m| m.is_dir());
@@ -1065,13 +1095,15 @@ pub fn apply(hits: &[CleanupHit], mode: ApplyMode) -> Result<Vec<String>> {
                     std::fs::remove_file(p)
                 };
                 match res {
-                    Ok(()) => handled.push(h.path.clone()),
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Ok(()) => None,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
                     Err(e) => return Err(e.into()),
                 }
             }
             ApplyMode::Trash => {
-                if h.category == TRASH_CATEGORY || is_in_trash(&h.path) {
+                let in_trash = !trash_root.as_os_str().is_empty()
+                    && Path::new(&h.path).starts_with(trash_root);
+                if h.category == TRASH_CATEGORY || in_trash {
                     eprintln!(
                         "cleanup: refused {} — it is already in the Trash and cannot be \
                          removed reversibly; rerun with --apply without --reversible to \
@@ -1080,28 +1112,58 @@ pub fn apply(hits: &[CleanupHit], mode: ApplyMode) -> Result<Vec<String>> {
                     );
                     continue;
                 }
-                match move_to_trash(&h.path) {
-                    Ok(_) => handled.push(h.path.clone()),
+                match move_to_trash(&h.path, trash_root) {
+                    Ok(dest) => Some(dest.to_string_lossy().into_owned()),
                     Err(_) => {
-                        if !Path::new(&h.path).exists() {
-                            continue;
+                        if Path::new(&h.path).exists() {
+                            eprintln!("cleanup: skip {} (move-to-trash failed)", h.path);
                         }
-                        eprintln!("cleanup: skip {} (move-to-trash failed)", h.path);
                         continue;
                     }
                 }
             }
+        };
+        handled.push(h.path.clone());
+        if !categories.contains(&h.category) {
+            categories.push(h.category.clone());
         }
+        items.push(Item {
+            original_path: h.path.clone(),
+            status: if trash_path.is_some() {
+                ItemStatus::InTrash
+            } else {
+                ItemStatus::Deleted
+            },
+            trash_path,
+            bytes: h.bytes,
+        });
     }
-    Ok(handled)
+
+    let entry = match log {
+        Some(log) if !items.is_empty() => {
+            let mode = match mode {
+                ApplyMode::Trash => Mode::Trash,
+                ApplyMode::Delete => Mode::Delete,
+            };
+            let entry =
+                crate::history::append(log, Entry::new(mode, categories, items)).map_err(|e| {
+                    e.context(format!(
+                        "cleanup handled {} path(s) but could not record them in the \
+                         history log {}",
+                        handled.len(),
+                        log.display()
+                    ))
+                })?;
+            Some(entry)
+        }
+        _ => None,
+    };
+    Ok(ApplyOutcome { handled, entry })
 }
 
-fn move_to_trash(path: &str) -> Result<std::path::PathBuf> {
-    let trash = dirs::home_dir()
-        .ok_or_else(|| anyhow::anyhow!("home dir unavailable"))?
-        .join(".Trash");
-    std::fs::create_dir_all(&trash)?;
-    let src = std::path::Path::new(path);
+fn move_to_trash(path: &str, trash: &Path) -> Result<PathBuf> {
+    std::fs::create_dir_all(trash)?;
+    let src = Path::new(path);
     let name = src
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
@@ -1396,5 +1458,81 @@ mod tests {
         ]);
         let paths: Vec<_> = out.iter().map(|h| h.path.as_str()).collect();
         assert_eq!(paths, vec!["/a/b", "/a/bc", "/z"]);
+    }
+
+    fn real_hit(category: &str, path: &Path, bytes: u64) -> CleanupHit {
+        CleanupHit {
+            path: path.to_string_lossy().into_owned(),
+            ..hit(category, bytes, 1)
+        }
+    }
+
+    #[test]
+    fn apply_trash_records_one_history_entry() {
+        use crate::history::{ItemStatus, Mode};
+        let tmp = tempfile::tempdir().unwrap();
+        let trash = tmp.path().join("Trash");
+        let log = tmp.path().join("history.json");
+        let nm = tmp.path().join("proj/node_modules");
+        let tg = tmp.path().join("proj/target");
+        std::fs::create_dir_all(&nm).unwrap();
+        std::fs::create_dir_all(&tg).unwrap();
+        std::fs::write(nm.join("x.js"), b"x").unwrap();
+        let hits = [
+            real_hit("node_modules", &nm, 100),
+            real_hit("target", &tg, 50),
+        ];
+
+        let out = apply_with(&hits, ApplyMode::Trash, Some(&log), &trash).unwrap();
+        assert_eq!(out.handled.len(), 2);
+        let entries = crate::history::load(&log).unwrap();
+        assert_eq!(entries.len(), 1);
+        let e = &entries[0];
+        assert_eq!(Some(e), out.entry.as_ref());
+        assert_eq!(e.mode, Mode::Trash);
+        assert_eq!(e.bytes, 150);
+        assert_eq!(e.categories, ["node_modules", "target"]);
+        for (item, hit) in e.items.iter().zip(&hits) {
+            assert_eq!(item.original_path, hit.path);
+            assert_eq!(item.bytes, hit.bytes);
+            assert_eq!(item.status, ItemStatus::InTrash);
+            let t = Path::new(item.trash_path.as_deref().unwrap());
+            assert!(t.starts_with(&trash) && t.exists(), "{t:?}");
+        }
+        assert!(!nm.exists());
+        assert!(nm_contents_in_trash(&e.items[0]));
+    }
+
+    fn nm_contents_in_trash(item: &crate::history::Item) -> bool {
+        Path::new(item.trash_path.as_deref().unwrap())
+            .join("x.js")
+            .exists()
+    }
+
+    #[test]
+    fn apply_delete_records_entry_without_trash_paths() {
+        use crate::history::{ItemStatus, Mode};
+        let tmp = tempfile::tempdir().unwrap();
+        let log = tmp.path().join("history.json");
+        let f = tmp.path().join("build");
+        std::fs::create_dir_all(&f).unwrap();
+        let hits = [real_hit("build", &f, 7)];
+        let out = apply_with(&hits, ApplyMode::Delete, Some(&log), &tmp.path().join("T")).unwrap();
+        assert_eq!(out.handled.len(), 1);
+        let e = &crate::history::load(&log).unwrap()[0];
+        assert_eq!(e.mode, Mode::Delete);
+        assert_eq!(e.items[0].trash_path, None);
+        assert_eq!(e.items[0].status, ItemStatus::Deleted);
+        assert!(!f.exists());
+    }
+
+    #[test]
+    fn apply_with_nothing_handled_writes_no_entry() {
+        let tmp = tempfile::tempdir().unwrap();
+        let log = tmp.path().join("history.json");
+        let gone = real_hit("build", &tmp.path().join("missing"), 1);
+        let out = apply_with(&[gone], ApplyMode::Delete, Some(&log), tmp.path()).unwrap();
+        assert!(out.handled.is_empty() && out.entry.is_none());
+        assert!(!log.exists());
     }
 }

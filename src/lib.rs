@@ -12,6 +12,7 @@ pub mod duration;
 pub mod envelope;
 pub mod exit;
 pub mod filter;
+pub mod history;
 pub mod ignore;
 pub mod pattern;
 pub mod policy;

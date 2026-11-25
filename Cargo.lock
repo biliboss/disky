@@ -813,6 +813,7 @@ dependencies = [
  "humansize",
  "indicatif",
  "jwalk",
+ "libc",
  "memchr",
  "num_cpus",
  "plist",

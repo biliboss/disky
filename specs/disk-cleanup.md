@@ -541,6 +541,39 @@ verifies:
 <!-- id: REQ-DCLEAN-034 -->
 ## Every applied clean MUST be recorded in a history log that Undo and restore read
 
+implementations:
+  - src/history.rs:Entry
+  - src/history.rs:Item
+  - src/history.rs:ItemStatus
+  - src/history.rs:RestoreReport
+  - src/history.rs:log_path
+  - src/history.rs:load
+  - src/history.rs:list
+  - src/history.rs:append
+  - src/history.rs:restore
+  - src/history.rs:with_lock
+  - src/cleanup.rs:apply
+  - src/cleanup.rs:apply_with
+  - src/cleanup.rs:ApplyOutcome
+  - src/render.rs:history
+  - src/render.rs:restore
+
+verifies:
+  - src/history.rs:append_then_list_is_newest_first
+  - src/history.rs:append_keeps_ids_unique
+  - src/history.rs:restore_moves_items_back_and_marks_entry
+  - src/history.rs:restore_never_overwrites_and_retries_after_conflict_clears
+  - src/history.rs:restore_reports_missing_and_restores_the_rest
+  - src/history.rs:restore_refuses_delete_entries
+  - src/history.rs:restore_refuses_fully_restored_and_unknown_entries
+  - src/history.rs:log_survives_reload_from_disk
+  - src/history.rs:concurrent_appends_lose_nothing
+  - src/cleanup.rs:apply_trash_records_one_history_entry
+  - src/cleanup.rs:apply_delete_records_entry_without_trash_paths
+  - src/cleanup.rs:apply_with_nothing_handled_writes_no_entry
+  - tests/agentic.rs:history_and_restore_round_trip_through_the_cli
+  - tests/agentic.rs:history_is_empty_and_restore_unknown_id_is_not_found
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-034.A1 -->
 - Every applied clean, from the CLI or the GUI, appends one entry: an id, a timestamp, a mode (`trash` or `delete`), the categories, the freed bytes, and for each item its original path, its Trash path (null in delete mode) and its bytes.

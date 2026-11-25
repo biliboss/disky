@@ -5,6 +5,26 @@ All notable changes to disky will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Clean-history log (REQ-DCLEAN-034): every `cleanup --apply` appends an entry
+  (id, timestamp, mode, categories, bytes, and per item the original path,
+  Trash path and status) to `history.json` in the data dir. Writes hold an
+  exclusive `flock` and swap the file in atomically.
+- `disky history` lists entries newest first (`kind:"history"`).
+- `disky restore <id>` moves trashed items back. It never overwrites:
+  occupied paths are conflicts, and items gone from the Trash are reported
+  as missing. Re-running retries the rest. Delete-mode and fully restored
+  entries are refused.
+- `cleanup` envelope gains `history_id`. `disky schema` documents
+  `history`, `restore`, `HistoryEntry`, `HistoryItem` and `RestoreReport`.
+
+### Changed
+- `cleanup::apply(hits, mode, log)` now returns `ApplyOutcome { handled, entry }`.
+- The agentic cleanup test runs under a temp `HOME`, so it no longer touches
+  the real `~/.Trash`.
+
 ## [0.10.0] — 2026-05-27
 
 ### Removed (BREAKING)

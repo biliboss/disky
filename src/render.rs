@@ -5,6 +5,7 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::cleanup::CleanupHit;
+use crate::history::{Entry, RestoreReport};
 use crate::query::{DiffRow, DirRow, ExtRow, FileRow, Stats, SCHEMA_VERSION};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -305,7 +306,12 @@ pub fn diff(rows: &[DiffRow], format: Format) -> Result<()> {
     Ok(())
 }
 
-pub fn cleanup(hits: &[CleanupHit], applied: Option<&[String]>, format: Format) -> Result<()> {
+pub fn cleanup(
+    hits: &[CleanupHit],
+    applied: Option<&[String]>,
+    history_id: Option<&str>,
+    format: Format,
+) -> Result<()> {
     let summary = crate::cleanup::summarise(hits);
     let total_bytes: u64 = summary.iter().map(|s| s.bytes).sum();
 
@@ -315,6 +321,7 @@ pub fn cleanup(hits: &[CleanupHit], applied: Option<&[String]>, format: Format) 
             "kind": "cleanup",
             "applied": applied.is_some(),
             "removed": applied.unwrap_or(&[]),
+            "history_id": history_id,
             "records": hits,
             "summary": summary,
             "total_bytes": total_bytes,
@@ -370,10 +377,69 @@ pub fn cleanup(hits: &[CleanupHit], applied: Option<&[String]>, format: Format) 
     if let Some(rm) = applied {
         println!();
         println!("Removed {} path(s).", rm.len());
+        if let Some(id) = history_id {
+            println!("Recorded as history entry {id} (see `disky history`).");
+        }
     } else {
         println!();
         println!("(dry-run — re-run with --apply to delete)");
     }
+    Ok(())
+}
+
+/// Clean-history log (REQ-DCLEAN-034), newest first.
+pub fn history(entries: &[Entry], format: Format) -> Result<()> {
+    if format.is_machine() {
+        return emit_records(entries, "history", format);
+    }
+    if entries.is_empty() {
+        println!("No cleanup history yet.");
+        return Ok(());
+    }
+    println!(
+        "{:<28} {:<24} {:<6} {:>12} {:>6}  STATUS",
+        "ID", "WHEN", "MODE", "FREED", "ITEMS"
+    );
+    println!("{}", "-".repeat(96));
+    for e in entries {
+        let status = match (&e.restored_at, e.mode) {
+            (Some(at), _) => format!("restored {at}"),
+            (None, crate::history::Mode::Delete) => "permanent".to_string(),
+            (None, crate::history::Mode::Trash) => "in trash".to_string(),
+        };
+        println!(
+            "{:<28} {:<24} {:<6} {:>12} {:>6}  {}",
+            e.id,
+            e.ts,
+            serde_json::to_value(e.mode)?.as_str().unwrap_or(""),
+            format_size(e.bytes, BINARY),
+            e.items.len(),
+            status,
+        );
+    }
+    Ok(())
+}
+
+pub fn restore(r: &RestoreReport, format: Format) -> Result<()> {
+    if format.is_machine() {
+        return emit_records(std::slice::from_ref(r), "restore", format);
+    }
+    for p in &r.restored {
+        println!("restored  {p}");
+    }
+    for p in &r.conflicts {
+        println!("conflict  {p} (something already exists there; left in the Trash)");
+    }
+    for p in &r.missing {
+        println!("missing   {p} (no longer in Trash)");
+    }
+    println!(
+        "Entry {}: {} restored, {} conflict(s), {} no longer in Trash.",
+        r.id,
+        r.restored.len(),
+        r.conflicts.len(),
+        r.missing.len()
+    );
     Ok(())
 }
 
