@@ -1,0 +1,345 @@
+---
+id: DISK-SCREENS-DOC
+title: Disk screens — Assistant, Space map, Large files, Duplicates, History, Settings
+owner: Selvakumar Esra
+priority: high
+snapshot: specs/disk-cleanup/snapshot.html
+tokens: specs/disk-cleanup/tokens.css
+version: 1
+---
+
+<!-- id: DISK-SCREENS-DOC -->
+# Disk screens
+
+This spec covers the six sidebar screens that `specs/disk-cleanup.md` left as placeholders (REQ-DCLEAN-032): Assistant, Space map, Large files, Duplicates, History and Settings. They come from the same Claude Design snapshot (`specs/disk-cleanup/snapshot.html`), which is the pixel reference. Where the snapshot's prototype logic is silent, this spec fills the gap with a stated default and marks it "gap-fill".
+
+Every rule in `specs/disk-cleanup.md` that governs the whole GUI also governs these screens:
+- the engine boundary (REQ-DCLEAN-001, 027);
+- size formatting (REQ-DCLEAN-028);
+- control states, keyboard and accessibility (REQ-DCLEAN-012 to 016 and 020 to 025);
+- the fixed window (REQ-DCLEAN-026);
+- latency budgets (REQ-DCLEAN-030);
+- tokens only (REQ-DCLEAN-031);
+- the app shell and navigation blocking (REQ-DCLEAN-011, 032).
+
+The CLI stays canonical (AGENTS.md "Surface scope"). Each new engine capability ships with a CLI command and a `--format json` envelope, and the GUI only calls the engine.
+
+Non-goals:
+- **Agent CLIs don't write text.** The Assistant never sends file contents anywhere, and in this version it doesn't call the selected agent CLI at all. Suggestion text is produced by the engine. The selected agent is recorded and named in the UI.
+- **No background service.** Scheduled scans, proactive checks and below-goal notifications run only while the disky app is running. No launchd agent is installed.
+- **No automatic cleaning.** Nothing on any screen cleans without an explicit user action, and every removal on these screens goes to the Trash.
+
+<!-- id: REQ-DSCR-001 -->
+## Preferences MUST persist in one store shared by the CLI and the GUI
+
+The engine owns one preferences store in disky's data directory. It holds:
+- trash-by-default, skip-recently-used, safe-only preselection and warn-below-goal (the four Settings toggles);
+- the space goal in bytes;
+- proactive checks on/off and their frequency (`hourly`, `daily` or `weekly`);
+- the selected agent id;
+- the scheduled-scan period (`off`, `weekly` or `monthly`);
+- the excluded folders.
+
+The defaults are the snapshot's initial state:
+- toggles: all on;
+- space goal: 80 GB;
+- proactive checks: on, `daily`;
+- agent: `claude`;
+- scheduled scan: `weekly`;
+- excluded folders: none.
+
+**Acceptance**
+<!-- id: REQ-DSCR-001.A1 -->
+- `disky prefs --format json` prints every preference. `disky prefs --set <key>=<value>` changes one and prints the result. An unknown key or invalid value exits 2 (usage) and changes nothing.
+<!-- id: REQ-DSCR-001.A2 -->
+- A preference changed in the GUI is what `disky prefs` reads next, and the reverse: one store, no copies.
+<!-- id: REQ-DSCR-001.A3 -->
+- A missing preferences file yields the defaults. A malformed file is reported as an error and never silently replaced.
+<!-- id: REQ-DSCR-001.A4 -->
+- Writes are atomic (temp file + rename), so a concurrent CLI and GUI write never leaves a truncated file.
+<!-- id: REQ-DSCR-001.A5 -->
+- The GUI reads the space goal, trash-by-default, safe-only, warn-below-goal and proactive-checks values from this store. It no longer uses hard-coded defaults (supersedes the defaults stated in `specs/disk-cleanup.md`).
+
+<!-- id: REQ-DSCR-002 -->
+## Excluded folders and skip-recently-used MUST be honoured by cleanup and every screen's results
+
+**Acceptance**
+<!-- id: REQ-DSCR-002.A1 -->
+- No cleanup hit, large file, duplicate copy or suggestion lies inside an excluded folder.
+<!-- id: REQ-DSCR-002.A2 -->
+- With skip-recently-used on, items modified in the last 30 days are left out of cleanup hits, large files and duplicates. With it off, they are included.
+<!-- id: REQ-DSCR-002.A3 -->
+- An excluded folder that doesn't exist is kept in the list and simply matches nothing.
+
+<!-- id: REQ-DSCR-003 -->
+## The engine MUST report a folder's immediate children by size for the space map
+
+**Acceptance**
+<!-- id: REQ-DSCR-003.A1 -->
+- `disky map [<path>] --snapshot <ref> --format json` returns the folder's immediate children, each with:
+  - name, absolute path and physical bytes (the sum of everything beneath it);
+  - whether it has children of its own.
+
+  Children are sorted by bytes, largest first. The default path is the snapshot's scan root.
+<!-- id: REQ-DSCR-003.A2 -->
+- The envelope carries the folder's own total and the volume capacity, so a share of disk can be shown without the GUI summing anything.
+<!-- id: REQ-DSCR-003.A3 -->
+- A path outside the snapshot exits 4 (not-found).
+<!-- id: REQ-DSCR-003.A4 -->
+- On a 1 M-row snapshot one call returns in under 1 s (release build).
+
+<!-- id: REQ-DSCR-004 -->
+## The engine MUST list large files with their last-opened time
+
+**Acceptance**
+<!-- id: REQ-DSCR-004.A1 -->
+- Scans record each file's last access time.
+- `disky large --snapshot <ref> --format json [--filter all|over-10gb|unused-1y]` lists regular files of at least 2 GB physical, largest first. Each file has:
+  - name and absolute path;
+  - physical bytes;
+  - last-opened time (RFC 3339);
+  - an `unused_1y` flag, true when the last-opened time is more than 365 days ago.
+<!-- id: REQ-DSCR-004.A2 -->
+- `over-10gb` keeps files of at least 10 GB, and `unused-1y` keeps flagged files. The envelope carries the count and total bytes of the filtered list.
+<!-- id: REQ-DSCR-004.A3 -->
+- A snapshot taken before access times were recorded lists files with a null last-opened time and `unused_1y` false, rather than failing.
+
+<!-- id: REQ-DSCR-005 -->
+## The engine MUST find duplicate files by content
+
+**Acceptance**
+<!-- id: REQ-DSCR-005.A1 -->
+- `disky dupes --snapshot <ref> --format json [--min-size <bytes>]` groups regular files whose contents are byte-identical. It compares sizes first, then a full content hash, and never decides by name alone. Each group has:
+  - a display name (the first copy's basename);
+  - the bytes of each copy;
+  - every copy's absolute path, oldest modification time first.
+
+  The default minimum size is 1 MB.
+<!-- id: REQ-DSCR-005.A2 -->
+- Groups are sorted by reclaimable bytes (bytes × (copies − 1)), largest first. The envelope carries the group count, the extra-copy count and the reclaimable total.
+<!-- id: REQ-DSCR-005.A3 -->
+- A file that has changed or vanished since the scan is re-checked and left out of its group. A group that drops below two copies is omitted.
+<!-- id: REQ-DSCR-005.A4 -->
+- Hard links to the same inode count as one file, never as duplicates.
+
+<!-- id: REQ-DSCR-006 -->
+## The engine MUST move reviewed files to the Trash and record a titled history entry
+
+**Acceptance**
+<!-- id: REQ-DSCR-006.A1 -->
+- `disky trash <path>... --title <title> --format json` moves each path to the Trash. It reports the handled paths, the failed paths with reasons, and the physical bytes freed, then appends one history entry with that title (REQ-DCLEAN-034).
+<!-- id: REQ-DSCR-006.A2 -->
+- The GUI can trash only paths the engine listed in the large-files or duplicates result the user is looking at. Any other path is refused, exactly as `clean` refuses unreviewed paths (REQ-DCLEAN-029.A1).
+<!-- id: REQ-DSCR-006.A3 -->
+- Trashing every copy of a duplicate group is refused. At least one copy always stays.
+<!-- id: REQ-DSCR-006.A4 -->
+- Tests use a temporary Trash root and log, never the real `~/.Trash` or history.
+
+<!-- id: REQ-DSCR-007 -->
+## The engine MUST detect which agent CLIs are installed
+
+**Acceptance**
+<!-- id: REQ-DSCR-007.A1 -->
+- `disky agents --format json` lists Claude Code (`claude`), Codex CLI (`codex`) and Gemini CLI (`gemini`), in that order. Each has `found` and, when found, the resolved path. Lookup covers `PATH` plus `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`.
+<!-- id: REQ-DSCR-007.A2 -->
+- Detection only checks for an executable file. It never runs the CLI.
+
+<!-- id: REQ-DSCR-008 -->
+## The engine MUST produce the Assistant's suggestions from the latest snapshot and the preferences
+
+**Acceptance**
+<!-- id: REQ-DSCR-008.A1 -->
+- `disky suggest --format json` returns suggestions in this order. Each has a key, a kind, its text, its bytes and its category ids.
+  - **`goal`** (kind "Goal"), when free space is below the goal: offers the safe categories' total.
+  - **`ok`** (kind "On track"), when free space is at or above the goal: no action, no bytes.
+  - **`dev`** (kind "Suggestion"), when the developer categories have hits.
+  - **`dl`** (kind "Suggestion"), when old downloads have hits.
+  - **`left`** (kind "Heads-up"), when app leftovers have hits.
+<!-- id: REQ-DSCR-008.A2 -->
+- Text follows the snapshot's sentences with real figures. For example, the goal text reads "Free space is down to <free>, under your <goal> goal. I found <safe> in safe categories: caches, temp files, logs and the Trash. Shall I clean them?". No figure is invented: every number comes from the snapshot or the disk.
+<!-- id: REQ-DSCR-008.A3 -->
+- A category with no hits produces no suggestion. With no snapshot, only `goal` or `ok` is returned, and `goal` carries no action.
+
+<!-- id: REQ-DSCR-009 -->
+## The Assistant screen MUST show the suggestion feed and MUST only ever open a review
+
+**Acceptance**
+<!-- id: REQ-DSCR-009.A1 -->
+- The layout matches the snapshot's Assistant screen at 1200×780 within 1% (masked dynamic numbers):
+  - **Header:** the status line "Watching · <agent> · checks <frequency>", or "Paused" when proactive checks are off, above the "Assistant" heading.
+  - **Feed:** one card per suggestion. The goal card uses the accent-100 surface.
+  - **Side panel:** on the right.
+<!-- id: REQ-DSCR-009.A2 -->
+- Each card shows the agent icon, the selected agent's name, when, the kind tag, the text and, when actionable, the primary and secondary buttons plus its size.
+  - The goal card's primary is "Review & confirm" and its secondary is "Not now".
+  - The others use "Review" and "Dismiss".
+<!-- id: REQ-DSCR-009.A3 -->
+- "Review & confirm" opens Smart Clean results with exactly the safe categories selected and the confirmation dialog open. "Review" opens results with exactly that suggestion's categories selected and the first one expanded.
+  - In both cases the results kicker reads "Prepared by <agent> · review before cleaning", and the history title is "Assistant cleanup".
+  - Nothing is cleaned until "Clean now".
+<!-- id: REQ-DSCR-009.A4 -->
+- "Not now" / "Dismiss" hides that card for the rest of the session.
+- With proactive checks off, the feed is empty. An empty feed shows "Nothing to review. You’ll hear from the assistant when something changes."
+<!-- id: REQ-DSCR-009.A5 -->
+- The sidebar's Assistant entry shows a badge with the number of actionable cards, and none when zero.
+- The Smart Clean shortcut reads "<n> suggestions waiting" or "Watching your space goal". The below-goal notification header names the selected agent ("Assistant · <agent>").
+
+<!-- id: REQ-DSCR-010 -->
+## The Assistant side panel MUST edit the space goal, proactive checks and agent
+
+**Acceptance**
+<!-- id: REQ-DSCR-010.A1 -->
+- **Space goal card:**
+  - the goal tag;
+  - "Keep at least <goal> free";
+  - a range control from 20 to 200 GB in 5 GB steps, with an accessible name;
+  - a fill bar showing free ÷ goal, capped at 100%;
+  - the note "<free> free now. When it drops below the goal, the assistant prepares a cleanup and asks you first."
+<!-- id: REQ-DSCR-010.A2 -->
+- Changing the goal saves it to the preferences store. The meter's goal marker, the goal tag and the suggestions update without a restart, and a dismissed goal card comes back.
+<!-- id: REQ-DSCR-010.A3 -->
+- **Proactive checks card:**
+  - a switch (`role="switch"`, `aria-checked`) with the label "Proactive checks";
+  - an Hourly / Daily / Weekly segmented radio group;
+  - the note "Never cleans on its own. Every cleanup needs your confirmation."
+
+  Both controls save to the store.
+<!-- id: REQ-DSCR-010.A4 -->
+- **Agent card:** lists the three agents from REQ-DSCR-007, showing "Found · <path>" (plus " · in use" for the selected agent) or "Not installed".
+  - A missing agent is disabled and can't be picked.
+  - Picking an agent saves it.
+  - The privacy note reads "Only file paths, sizes and dates are shared with the agent. File contents never leave this Mac."
+
+<!-- id: REQ-DSCR-011 -->
+## Proactive checks and scheduled scans MUST run only while the app runs and MUST never clean
+
+**Acceptance**
+<!-- id: REQ-DSCR-011.A1 -->
+- With proactive checks on, the app reloads the view and suggestions at the chosen frequency (hourly, daily or weekly) while it is running.
+<!-- id: REQ-DSCR-011.A2 -->
+- With a scheduled scan of `weekly` or `monthly`, the app starts a background scan when the latest snapshot is older than that period. This happens at launch and at each check. Navigation is not blocked by a background scan, and it is never started while a Smart Clean scan or clean is running.
+<!-- id: REQ-DSCR-011.A3 -->
+- With warn-below-goal on and free space below the goal, a macOS notification is posted once per below-goal episode while the app runs. Clicking it brings the window forward on Smart Clean.
+<!-- id: REQ-DSCR-011.A4 -->
+- No check, scan or notification ever cleans, trashes or deletes anything.
+
+<!-- id: REQ-DSCR-012 -->
+## The Space map screen MUST show a treemap of the selected folder and let the user drill in
+
+**Acceptance**
+<!-- id: REQ-DSCR-012.A1 -->
+- The layout matches the snapshot's Space map at 1200×780 within 1%. It has:
+  - a crumb line ("Macintosh HD  /  …") and the title "<folder> · <size>";
+  - an Up button, shown only below the root;
+  - the treemap;
+  - the "Selected" card;
+  - the hint "Click a block to inspect it, double-click to open."
+<!-- id: REQ-DSCR-012.A2 -->
+- **Treemap:** tiles come from REQ-DSCR-003's children, laid out with the snapshot's split algorithm.
+  - Each tile's area is proportional to its bytes.
+  - Tile colours cycle through the snapshot's seven tile tokens.
+  - Each tile shows its name and size.
+<!-- id: REQ-DSCR-012.A3 -->
+- **Selection:**
+  - Clicking a tile selects it, and the selection gets the inset accent-700 ring.
+  - Double-clicking, or "Open folder" on a tile with children, drills in.
+  - Up goes back one level.
+  - The largest tile is selected on entry.
+<!-- id: REQ-DSCR-012.A4 -->
+- **Selected card:** shows the name, full path, size and share of disk (one decimal).
+  - "Open folder" appears only when the selection has children.
+  - "Reveal in Finder" reveals the path in Finder via the backend.
+<!-- id: REQ-DSCR-012.A5 -->
+- **Keyboard:** tiles are buttons with an accessible name of "<name>, <size>". Enter or Space selects, and Enter on the selected tile opens it.
+- **No snapshot:** shows "No scans yet" with a "Start scan" action that goes to Smart Clean.
+
+<!-- id: REQ-DSCR-013 -->
+## The Large files screen MUST list large files with filters and move the selected ones to the Trash
+
+**Acceptance**
+<!-- id: REQ-DSCR-013.A1 -->
+- The layout matches the snapshot's Large files screen at 1200×780 within 1%. It has:
+  - the header "<count> files · <total>" and the heading "Large & old files";
+  - the All / Over 10 GB / Unused 1 year+ segmented radio group;
+  - the table (check, Name, Location, Last opened, Size);
+  - the footer.
+<!-- id: REQ-DSCR-013.A2 -->
+- Rows come from REQ-DSCR-004 for the chosen filter. "Last opened" is a relative time; its tag is accent when `unused_1y` is set and neutral otherwise. "Location" is the parent folder with the home directory shown as `~`.
+<!-- id: REQ-DSCR-013.A3 -->
+- Clicking a row or its round check toggles selection. The footer note reads either:
+  - "<n> selected · restorable from History for 30 days", or
+  - "Select files to move them to the Trash."
+<!-- id: REQ-DSCR-013.A4 -->
+- "Move <selected total> to Trash" is disabled with nothing selected. When clicked, it trashes exactly the selected paths through REQ-DSCR-006 with the title "Large files".
+  - Handled rows disappear.
+  - The meter refreshes.
+  - Failed paths stay listed, with an error in `--color-danger`.
+
+  It always uses the Trash, whatever the trash-by-default setting.
+<!-- id: REQ-DSCR-013.A5 -->
+- An empty list reads "No files over 2 GB." (gap-fill). No snapshot shows "No scans yet" with "Start scan".
+
+<!-- id: REQ-DSCR-014 -->
+## The Duplicates screen MUST let the user choose which copy to keep and remove the rest to the Trash
+
+**Acceptance**
+<!-- id: REQ-DSCR-014.A1 -->
+- The layout matches the snapshot's Duplicates screen at 1200×780 within 1%. It has:
+  - the header "<n> groups · one copy of each is kept, you choose which" and the heading "Duplicates";
+  - a two-column grid of group cards;
+  - the footer.
+<!-- id: REQ-DSCR-014.A2 -->
+- Each card shows the group name, a "<size> each" neutral tag, and one row per copy with a dot, the path and a "Keep" tag (accent-2) or "Remove" tag (outline). Exactly one copy per group is kept, and the first copy by default.
+<!-- id: REQ-DSCR-014.A3 -->
+- Choosing a copy makes it the kept one. The copy rows of one group form a radio group: arrow keys move between them and the kept copy is `aria-checked`.
+<!-- id: REQ-DSCR-014.A4 -->
+- **Footer:**
+  - The note reads "Frees <reclaimable> · removed copies go to the Trash".
+  - "Remove <n> extra copies" trashes every non-kept copy through REQ-DSCR-006, with the title "Duplicates".
+  - Handled copies vanish, and groups left with one copy vanish.
+  - The meter refreshes.
+<!-- id: REQ-DSCR-014.A5 -->
+- No groups reads "No duplicates found." (gap-fill). No snapshot shows "No scans yet" with "Start scan". While duplicates are being computed, the screen shows the busy indicator per REQ-DCLEAN-017.
+
+<!-- id: REQ-DSCR-015 -->
+## The History screen MUST list every recorded clean and restore eligible ones
+
+**Acceptance**
+<!-- id: REQ-DSCR-015.A1 -->
+- The layout matches the snapshot's History screen at 1200×780 within 1%. It has the header "<total> cleared · items stay restorable for 30 days" and the heading "History", plus one row per history entry, newest first.
+<!-- id: REQ-DSCR-015.A2 -->
+- Each row shows the trash icon, the entry title, "<when> · <detail>" and the freed size. "When" is a relative date. "Detail" is the category names, or for "Large files" and "Duplicates" entries the file names, or "<n> files" past three.
+<!-- id: REQ-DSCR-015.A3 -->
+- A trash entry younger than 30 days and not restored shows "Restore". Restore runs `disky restore` through the backend and refreshes the meter. Afterwards the row shows the "Restored" tag. Items no longer in the Trash are reported per REQ-DCLEAN-034.A4.
+<!-- id: REQ-DSCR-015.A4 -->
+- An entry 30 days or older shows the "Emptied" neutral tag. A delete-mode entry shows a "Deleted" neutral tag and no Restore (gap-fill).
+<!-- id: REQ-DSCR-015.A5 -->
+- No entries reads "Nothing cleaned yet." (gap-fill).
+
+<!-- id: REQ-DSCR-016 -->
+## The Settings screen MUST edit every preference and the excluded folders
+
+**Acceptance**
+<!-- id: REQ-DSCR-016.A1 -->
+- The layout matches the snapshot's Settings screen at 1200×780 within 1%. It has:
+  - the heading "Settings";
+  - four toggle rows, each with a label, a description and a switch (`role="switch"`, `aria-checked`);
+  - the "Scheduled scan" row with an Off / Weekly / Monthly segmented radio group;
+  - the "Never touch these folders" card.
+<!-- id: REQ-DSCR-016.A2 -->
+- Toggle labels and descriptions are the snapshot's text: "Move to Trash instead of deleting", "Skip recently used files", "Preselect only safe categories" and "Warn when below my space goal". Each switch saves its preference immediately.
+<!-- id: REQ-DSCR-016.A3 -->
+- "Add folder" opens the native folder picker and adds the chosen folder. Each excluded folder is shown as a chip with a remove button whose accessible name is "Remove <folder>" (gap-fill). Every change is saved immediately.
+<!-- id: REQ-DSCR-016.A4 -->
+- Turning trash-by-default off makes the Smart Clean confirmation default to "Delete permanently" and its footer note warn per the snapshot ("Trash is off in Settings, so items will be deleted permanently."). Large files and Duplicates still use the Trash.
+
+<!-- id: REQ-DSCR-017 -->
+## Every new screen MUST be pixel-checked against the snapshot
+
+**Acceptance**
+<!-- id: REQ-DSCR-017.A1 -->
+- Each of the six screens has a Playwright visual test at 1200×780 with `maxDiffPixelRatio` 0.01 against the snapshot rendered with `startScreen` set to that screen. Each test feeds fixtures shaped like the snapshot's sample data and masks only live numbers and the traffic-light slot.
+<!-- id: REQ-DSCR-017.A2 -->
+- Each screen passes an axe-core run with zero serious or critical violations, and the keyboard-only test covers its primary action.
+<!-- id: REQ-DSCR-017.A3 -->
+- No placeholder screen remains: every sidebar entry renders its real screen.
