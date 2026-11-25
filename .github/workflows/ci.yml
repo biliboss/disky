@@ -51,3 +51,50 @@ jobs:
         run: cargo build --release
       - name: cli tier
         run: cargo nextest run --test agentic
+
+  # The desktop GUI's regression suite (gui/): every screen's flows, the
+  # engine contract, pixel match against the design snapshot, axe and
+  # keyboard tests, and the Tauri crate. Same stages as
+  # `scripts/regression.sh gui`. macOS only: the app is macOS-only and the
+  # visual baselines are rendered on the runner from specs/disk-cleanup/
+  # snapshot.html, in the same browser as the app.
+  gui:
+    name: gui regression (macos)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: gui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gui/src-tauri
+      - uses: mozilla-actions/sccache-action@v0.0.6
+      - run: npm ci
+      - name: unit + flow tests (vitest)
+        run: npm test
+      - name: lints (tokens, boundary, controls)
+        run: npm run lint:tokens
+      - name: types (tsc)
+        run: npx tsc --noEmit -p .
+      - name: install Playwright browser
+        run: npx playwright install chromium
+      - name: visual + a11y + keyboard (playwright)
+        run: npx playwright test
+      - name: tauri fmt
+        working-directory: gui/src-tauri
+        run: cargo fmt --check
+      - name: tauri clippy
+        working-directory: gui/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+      - name: tauri tests
+        working-directory: gui/src-tauri
+        run: cargo test
