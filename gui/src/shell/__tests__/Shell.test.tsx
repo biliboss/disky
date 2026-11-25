@@ -82,6 +82,7 @@ function liveView(disk: CleanupView["disk"], goal: number): CleanupView {
     preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
     large_files_count: 0,
     categories: [],
+    catalogue: [],
   };
 }
 

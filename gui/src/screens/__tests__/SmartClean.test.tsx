@@ -44,6 +44,11 @@ function engineView(overrides: Record<string, unknown> = {}) {
         items: [{ name: "y", path: "/y", bytes: 600_000_000 }],
       },
     ],
+    catalogue: [
+      { id: "engine_cat_a", name: "Engine label A", safety: "safe" },
+      { id: "engine_cat_b", name: "Engine label B", safety: "review" },
+      { id: "engine_cat_c", name: "Engine label C", safety: "review" },
+    ],
     ...overrides,
   };
 }
@@ -145,8 +150,136 @@ async function startScanEntersScanningAtZero() {
   expect(screen.queryByTestId("idle")).toBeNull();
   expect(invoke).toHaveBeenCalledWith("scan", { root: null });
   await waitFor(() => expect(progressListeners).toHaveLength(1));
-  progressListeners[0]({ payload: { fraction: 0.42, current_path: "/Users", completed_category_ids: [] } });
+  emit(0.42, { current_path: "/Users" });
   expect(await screen.findByText("42%")).toBeInTheDocument();
+}
+
+/** Push one scan progress event through the mocked `listen`. */
+function emit(fraction: number, more: Record<string, unknown> = {}) {
+  for (const l of [...progressListeners]) {
+    l({ payload: { fraction, current_path: "", completed_category_ids: [], completed_category_bytes: {}, ...more } });
+  }
+}
+
+/** Start a scan that stays open; returns its resolver. */
+async function startOpenScan(view = engineView()) {
+  let finish!: (v: unknown) => void;
+  engine({
+    load_cleanup_view: () => view,
+    scan: () => new Promise((r) => (finish = r)),
+    stop_scan: () => undefined,
+  });
+  renderApp();
+  fireEvent.click(within(await idle()).getByRole("button", { name: "Start scan" }));
+  const scanning = await screen.findByTestId("scanning");
+  await waitFor(() => expect(progressListeners).toHaveLength(1));
+  return { scanning, finish: (v: unknown) => finish(v) };
+}
+
+/** Let promise chains settle without advancing any timer. */
+async function settle() {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+}
+
+async function scanningShowsHeadingPathAndTruncatedTooltip() {
+  const { scanning } = await startOpenScan();
+  expect(within(scanning).getByRole("heading", { level: 1 })).toHaveTextContent("Looking around…");
+  const long = "/Users/me/Library/Application Support/Some Very Long Vendor Name/Caches/deeply/nested/folder";
+  emit(0.1, { current_path: long });
+  const path = await within(scanning).findByText(long);
+  expect(path).toHaveAttribute("data-testid", "scan-path");
+  expect(path).toHaveAttribute("title", long);
+  expect(path).toHaveClass("scan-path");
+  expect(within(scanning).getByRole("button", { name: "Stop" })).toHaveClass("btn", "btn-secondary");
+}
+
+async function progressBarFollowsEventsAndNeverDecreases() {
+  const { scanning } = await startOpenScan();
+  const bar = within(scanning).getByRole("progressbar");
+  const seen: number[] = [];
+  for (const f of [0.1, 0.35, 0.2, 0.6, 1]) {
+    emit(f);
+    await settle();
+    seen.push(Number(bar.getAttribute("aria-valuenow")));
+  }
+  expect(seen).toEqual([10, 35, 35, 60, 99]);
+  expect(screen.getByTestId("scan-progress")).toHaveTextContent(/^99%$/);
+  expect(screen.getByTestId("scan-bar-fill").style.width).toBe("99%");
+}
+
+async function rowsShowSizesOnlyOnceTheirCategoryIsComplete() {
+  const { scanning } = await startOpenScan(engineView({ categories: [] }));
+  // First scan: the prior view has no hits, yet every catalogued category is listed.
+  const rows = within(scanning).getAllByRole("row");
+  expect(rows.map((r) => r.getAttribute("data-category-id"))).toEqual(["engine_cat_a", "engine_cat_b", "engine_cat_c"]);
+  for (const r of rows) {
+    expect(r).toHaveTextContent("Checking…");
+    expect(r).not.toHaveTextContent(/\d+(\.\d+)? [KMG]B/);
+  }
+  emit(0.5, { completed_category_ids: ["engine_cat_a", "engine_cat_c"], completed_category_bytes: { engine_cat_a: 4_200_000_000 } });
+  await settle();
+  expect(rows[0]).toHaveTextContent("4.2 GB");
+  expect(rows[0]).toHaveAttribute("data-status", "found");
+  expect(rows[0].querySelector("svg")).not.toBeNull();
+  expect(rows[1]).toHaveTextContent("Checking…");
+  expect(rows[1].querySelector("svg")).toBeNull();
+  expect(rows[2]).toHaveTextContent("Nothing found");
+  expect(rows[2]).not.toHaveTextContent("GB");
+}
+
+async function completionEntersResultsWithoutAPause() {
+  const { finish } = await startOpenScan();
+  finish(engineView());
+  await settle(); // microtasks only: no timer is allowed to run
+  expect(screen.getByTestId("results")).toBeInTheDocument();
+  expect(screen.queryByTestId("scanning")).toBeNull();
+}
+
+async function stopDiscardsALateResultAndModifiesNothing() {
+  const { scanning, finish } = await startOpenScan();
+  emit(0.4, { current_path: "/Users", completed_category_ids: ["engine_cat_a"], completed_category_bytes: { engine_cat_a: 1 } });
+  fireEvent.click(within(scanning).getByRole("button", { name: "Stop" }));
+  expect(await idle()).toBeInTheDocument();
+  finish(engineView());
+  await settle();
+  expect(screen.queryByTestId("results")).toBeNull();
+  expect(screen.getByTestId("idle")).toBeInTheDocument();
+  expect(invoke.mock.calls.map(([cmd]) => cmd)).toEqual(["load_cleanup_view", "scan", "stop_scan"]);
+  // A new scan starts clean: no stale path, progress or completed rows.
+  fireEvent.click(within(screen.getByTestId("idle")).getByRole("button", { name: "Start scan" }));
+  const again = await screen.findByTestId("scanning");
+  expect(within(again).getByTestId("scan-progress")).toHaveTextContent(/^0%$/);
+  expect(within(again).getByTestId("scan-path")).toHaveTextContent(/^$/);
+  for (const r of within(again).getAllByRole("row")) expect(r).toHaveTextContent("Checking…");
+}
+
+async function slowLoadShowsBusyOnlyAfterTheThreshold() {
+  vi.useFakeTimers();
+  try {
+    engine({ load_cleanup_view: () => new Promise(() => undefined) });
+    renderApp();
+    vi.advanceTimersByTime(199);
+    expect(screen.queryByTestId("busy")).toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(screen.getByTestId("busy")).toHaveAttribute("role", "status");
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+async function fastLoadNeverShowsBusy() {
+  vi.useFakeTimers();
+  try {
+    engine({ load_cleanup_view: () => engineView() });
+    renderApp();
+    vi.advanceTimersByTime(50);
+    await settle();
+    vi.advanceTimersByTime(1_000);
+    expect(screen.getByTestId("idle")).toBeInTheDocument();
+    expect(screen.queryByTestId("busy")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 async function stopReturnsToIdleWithoutResults() {
@@ -267,6 +400,21 @@ describe("Smart Clean idle phase (REQ-DCLEAN-003)", () => {
   it("description is truthful when trash-by-default is off (REQ-DCLEAN-003.A5)", descriptionIsTruthfulWhenTrashIsOff);
   it("Explore disk opens Space Map (REQ-DCLEAN-003)", exploreDiskOpensSpaceMap);
   it("shortcut cards open their screens (REQ-DCLEAN-003)", shortcutsOpenTheirScreens);
+});
+
+describe("Smart Clean scanning phase (REQ-DCLEAN-004)", () => {
+  it("shows the heading, the ellipsised path with its tooltip, and Stop (REQ-DCLEAN-004)", scanningShowsHeadingPathAndTruncatedTooltip);
+  it("the progress bar follows events and never decreases (REQ-DCLEAN-004.A1)", progressBarFollowsEventsAndNeverDecreases);
+  it("rows show a size only once their category is complete (REQ-DCLEAN-004.A4)", rowsShowSizesOnlyOnceTheirCategoryIsComplete);
+  it("completion enters results automatically (REQ-DCLEAN-004.A2)", completionEntersResultsWithoutAPause);
+  it("Stop returns to idle, discards a late result and modifies nothing (REQ-DCLEAN-004.A3)", stopDiscardsALateResultAndModifiesNothing);
+});
+
+describe("loading states (REQ-DCLEAN-017)", () => {
+  it("a slow load shows the busy indicator only after 200 ms (REQ-DCLEAN-017.A2)", slowLoadShowsBusyOnlyAfterTheThreshold);
+  it("a fast load never shows the busy indicator (REQ-DCLEAN-017.A2)", fastLoadNeverShowsBusy);
+  it("scanning shows its phase screen as the loading state (REQ-DCLEAN-017.A1)", startScanEntersScanningAtZero);
+  it("results follow scan completion with no pause (REQ-DCLEAN-017.A3)", completionEntersResultsWithoutAPause);
 });
 
 describe("disk state after a clean (REQ-DCLEAN-002.A4)", () => {

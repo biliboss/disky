@@ -183,6 +183,41 @@ verifies:
 
 The scanning phase shows the heading "Looking around…", the path currently being examined (truncated with an ellipsis on overflow), a percentage, a progress bar, and one row per category. A completed row shows a check and its size; the category in progress shows "Checking…"; pending rows are blank. A secondary "Stop" action is offered.
 
+The rows list every category the engine checks (`CleanupView.catalogue`, built from `cleanup::CATEGORIES`), so a first scan shows them all. A completed category with no hits reads "Nothing found" and shows no size.
+
+**Known limitation.** The engine classifies categories after the walk finishes, so every row stays "Checking…" until the scan's final event and then all rows complete together. Completing categories one at a time while the walk runs is a follow-up.
+
+implementations:
+  - gui/src/screens/smartClean/Scanning.tsx:Scanning
+  - gui/src/screens/smartClean/phase.ts:scanProgress
+  - gui/src/screens/smartClean/phase.ts:scanStopped
+  - gui/src/screens/smartClean/phase.ts:categoryRowStatus
+  - gui/src/screens/SmartClean.tsx:SmartClean
+  - gui/src/lib/contract.ts:parseScanProgress
+  - gui/src/lib/contract.ts:parseCleanupView
+  - src/contract.rs:catalogue
+  - src/contract.rs:scan_progress
+  - src/contract.rs:scan_finished
+  - gui/src-tauri/src/main.rs:scan
+  - gui/src-tauri/src/main.rs:stop_scan
+
+verifies:
+  - gui/src/screens/__tests__/phase.test.ts:scanProgressNeverGoesBackwards
+  - gui/src/screens/__tests__/phase.test.ts:progressReachesOneOnlyWhenTheScanFinishes
+  - gui/src/screens/__tests__/phase.test.ts:completedCategoriesOnlyGrow
+  - gui/src/screens/__tests__/phase.test.ts:currentPathSurvivesAnEmptyPath
+  - gui/src/screens/__tests__/phase.test.ts:stoppedScanIgnoresALateFinish
+  - gui/src/screens/__tests__/phase.test.ts:categoryRowStatusCoversEveryState
+  - gui/src/screens/__tests__/SmartClean.test.tsx:scanningShowsHeadingPathAndTruncatedTooltip
+  - gui/src/screens/__tests__/SmartClean.test.tsx:progressBarFollowsEventsAndNeverDecreases
+  - gui/src/screens/__tests__/SmartClean.test.tsx:rowsShowSizesOnlyOnceTheirCategoryIsComplete
+  - gui/src/screens/__tests__/SmartClean.test.tsx:completionEntersResultsWithoutAPause
+  - gui/src/screens/__tests__/SmartClean.test.tsx:stopDiscardsALateResultAndModifiesNothing
+  - gui/src/lib/contract.test.ts:catalogueAndCompletedBytesAreStrict
+  - src/contract.rs:scan_finished_completes_every_category
+  - src/contract.rs:catalogue_lists_every_engine_category
+  - gui/tests/visual/shell.spec.ts:scanningPhaseMatchesSnapshot
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-004.A1 -->
 - The percentage is monotonically non-decreasing and reaches 100 only when the scan has finished.
@@ -379,6 +414,19 @@ On the idle phase, a notification with "status" semantics appears when all of th
 
 <!-- id: REQ-DCLEAN-017 -->
 ## Asynchronous work MUST show a loading state only when it would otherwise feel stalled
+
+implementations:
+  - gui/src/lib/busy.ts:useDelayedBusy
+  - gui/src/screens/SmartClean.tsx:SmartClean
+  - gui/src/screens/smartClean/Scanning.tsx:Scanning
+
+verifies:
+  - gui/src/lib/busy.test.ts:busyAppearsOnlyAfterTheThreshold
+  - gui/src/lib/busy.test.ts:aShortWaitNeverShowsBusy
+  - gui/src/screens/__tests__/SmartClean.test.tsx:slowLoadShowsBusyOnlyAfterTheThreshold
+  - gui/src/screens/__tests__/SmartClean.test.tsx:fastLoadNeverShowsBusy
+  - gui/src/screens/__tests__/SmartClean.test.tsx:startScanEntersScanningAtZero
+  - gui/src/screens/__tests__/SmartClean.test.tsx:completionEntersResultsWithoutAPause
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-017.A1 -->

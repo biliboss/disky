@@ -40,6 +40,13 @@ export interface CategoryView {
   items: ItemView[];
 }
 
+/** One category the engine checks, hit or not (REQ-DCLEAN-004). */
+export interface CatalogueEntry {
+  id: string;
+  name: string;
+  safety: Safety;
+}
+
 export interface CleanupView {
   disk: Disk;
   goal_bytes: number;
@@ -50,12 +57,16 @@ export interface CleanupView {
   /** Files in the snapshot of at least 2 GB physical (REQ-DCLEAN-003.A4). */
   large_files_count: number;
   categories: CategoryView[];
+  /** Every category the engine checks, in engine order. */
+  catalogue: CatalogueEntry[];
 }
 
 export interface ScanProgress {
   fraction: number;
   current_path: string;
   completed_category_ids: string[];
+  /** Physical bytes per completed category with hits; absent → nothing found. */
+  completed_category_bytes: Record<string, number>;
 }
 
 export interface Failure {
@@ -208,6 +219,14 @@ export function parseCleanupView(raw: unknown): CleanupView {
     },
     large_files_count: count(o.large_files_count, "view.large_files_count"),
     categories: arr(o.categories, "view.categories").map((c, i) => parseCategory(c, `view.categories[${i}]`)),
+    catalogue: arr(o.catalogue, "view.catalogue").map((c, i) => {
+      const e = obj(c, `view.catalogue[${i}]`);
+      return {
+        id: str(e.id, `view.catalogue[${i}].id`),
+        name: str(e.name, `view.catalogue[${i}].name`),
+        safety: safety(e.safety, `view.catalogue[${i}].safety`),
+      };
+    }),
   };
 }
 
@@ -222,6 +241,12 @@ export function parseScanProgress(raw: unknown): ScanProgress {
     current_path: str(o.current_path, "progress.current_path"),
     completed_category_ids: arr(o.completed_category_ids, "progress.completed_category_ids").map((id, i) =>
       str(id, `progress.completed_category_ids[${i}]`),
+    ),
+    completed_category_bytes: Object.fromEntries(
+      Object.entries(obj(o.completed_category_bytes, "progress.completed_category_bytes")).map(([id, b]) => [
+        id,
+        bytes(b, `progress.completed_category_bytes.${id}`),
+      ]),
     ),
   };
 }

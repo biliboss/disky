@@ -4,6 +4,9 @@
 //! * [`CleanupView`] — what the Smart Clean screen renders: disk usage, the
 //!   goal, snapshot age and the reclaimable categories with their items.
 //! * [`ScanProgress`] — one progress event while a scan runs.
+//! * [`CatalogueEntry`] — every category the engine checks, hit or not, so
+//!   the scanning screen lists all of them even on a first scan
+//!   (REQ-DCLEAN-004).
 //! * [`CleanResult`] — what a clean did, with its history entry and the
 //!   volume's disk usage read after the clean, so the meter, ring and goal
 //!   tag update without a manual refresh (REQ-DCLEAN-002.A4).
@@ -15,6 +18,7 @@
 //!
 //! @implements REQ-DCLEAN-002
 //! @implements REQ-DCLEAN-003
+//! @implements REQ-DCLEAN-004
 //! @implements REQ-DCLEAN-027
 //! @implements REQ-DCLEAN-029
 
@@ -22,7 +26,7 @@ use anyhow::Result;
 use chrono::{DateTime, SecondsFormat, Utc};
 use duckdb::Connection;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 use crate::cleanup::{self, ApplyMode, ApplyOutcome, CleanupHit, Failure, Safety, CATEGORIES};
@@ -98,6 +102,28 @@ pub struct CategoryView {
     pub items: Vec<ItemView>,
 }
 
+/// One category the engine checks, whether or not it has hits.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CatalogueEntry {
+    /// Engine slug (`cleanup::Category::name`).
+    pub id: String,
+    /// Display label (`cleanup::Category::label`).
+    pub name: String,
+    pub safety: Safety,
+}
+
+/// Every category in [`CATEGORIES`], in table order.
+pub fn catalogue() -> Vec<CatalogueEntry> {
+    CATEGORIES
+        .iter()
+        .map(|c| CatalogueEntry {
+            id: c.name.to_string(),
+            name: c.label.to_string(),
+            safety: c.safety,
+        })
+        .collect()
+}
+
 /// Everything the Smart Clean screen renders.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CleanupView {
@@ -114,6 +140,8 @@ pub struct CleanupView {
     /// Files in the snapshot of at least [`LARGE_FILE_BYTES`] physical bytes.
     pub large_files_count: u64,
     pub categories: Vec<CategoryView>,
+    /// Every category the engine checks ([`catalogue`]).
+    pub catalogue: Vec<CatalogueEntry>,
 }
 
 /// One scan progress event.
@@ -123,6 +151,10 @@ pub struct ScanProgress {
     pub fraction: f64,
     pub current_path: String,
     pub completed_category_ids: Vec<String>,
+    /// Physical bytes of each completed category that has hits. A completed
+    /// id missing here found nothing. Sizes travel with completion, so the
+    /// GUI never shows one speculatively (REQ-DCLEAN-004.A4).
+    pub completed_category_bytes: BTreeMap<String, u64>,
 }
 
 /// What a clean did.
@@ -239,6 +271,7 @@ pub fn cleanup_view(
         preferences,
         large_files_count,
         categories: categories_from_hits(hits),
+        catalogue: catalogue(),
     }
 }
 
@@ -310,7 +343,7 @@ pub fn load(
 /// Progress event for a running scan. The walk's total is unknown up front,
 /// so `fraction` is physical bytes seen over the volume's used bytes, held
 /// below 1 until [`scan_finished`]. Categories are classified after the
-/// walk, so none are complete yet.
+/// walk, so none are complete yet (REQ-DCLEAN-004 known limitation).
 pub fn scan_progress(tick: &ScanTick, used_bytes: u64) -> ScanProgress {
     let fraction = if used_bytes == 0 {
         0.0
@@ -321,15 +354,22 @@ pub fn scan_progress(tick: &ScanTick, used_bytes: u64) -> ScanProgress {
         fraction,
         current_path: tick.current_path.clone(),
         completed_category_ids: Vec::new(),
+        completed_category_bytes: BTreeMap::new(),
     }
 }
 
-/// Final progress event: every category the view lists is complete.
+/// Final progress event: every catalogued category is complete, and those
+/// the view lists carry their bytes.
 pub fn scan_finished(view: &CleanupView) -> ScanProgress {
     ScanProgress {
         fraction: 1.0,
         current_path: String::new(),
-        completed_category_ids: view.categories.iter().map(|c| c.id.clone()).collect(),
+        completed_category_ids: view.catalogue.iter().map(|c| c.id.clone()).collect(),
+        completed_category_bytes: view
+            .categories
+            .iter()
+            .map(|c| (c.id.clone(), c.bytes))
+            .collect(),
     }
 }
 
@@ -677,6 +717,46 @@ mod tests {
         )
         .unwrap();
         assert_eq!(large_files_count(&conn).unwrap(), 2);
+    }
+
+    #[test]
+    fn scan_finished_completes_every_category() {
+        let view = cleanup_view(
+            None,
+            &sample(),
+            Disk {
+                volume: "Macintosh HD".into(),
+                capacity_bytes: 512_000_000_000,
+                free_bytes: 74_000_000_000,
+            },
+            DEFAULT_GOAL_BYTES,
+            Preferences::default(),
+            0,
+            0,
+        );
+        let done = scan_finished(&view);
+        assert_eq!(done.fraction, 1.0);
+        let ids: Vec<&str> = CATEGORIES.iter().map(|c| c.name).collect();
+        assert_eq!(done.completed_category_ids, ids);
+        for c in &view.categories {
+            assert!(done.completed_category_ids.contains(&c.id));
+            assert_eq!(done.completed_category_bytes.get(&c.id), Some(&c.bytes));
+        }
+        assert_eq!(done.completed_category_bytes.len(), view.categories.len());
+    }
+
+    #[test]
+    fn catalogue_lists_every_engine_category() {
+        let v = empty_view(DEFAULT_GOAL_BYTES, Preferences::default()).unwrap();
+        assert!(v.categories.is_empty());
+        assert_eq!(v.catalogue.len(), CATEGORIES.len());
+        for (entry, c) in v.catalogue.iter().zip(CATEGORIES) {
+            assert_eq!(entry.id, c.name);
+            assert_eq!(entry.name, c.label);
+            assert_eq!(entry.safety, c.safety);
+        }
+        let json = serde_json::to_value(&v).unwrap();
+        assert_eq!(json["catalogue"][0]["id"], CATEGORIES[0].name);
     }
 
     #[test]

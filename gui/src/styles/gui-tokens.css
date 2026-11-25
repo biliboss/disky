@@ -78,6 +78,29 @@
   --idle-rail-gap: 14px;
   --idle-rail-pt: 24px;
 
+  /* ── Smart Clean · scanning (REQ-DCLEAN-004) ───────────────── */
+  --scan-py: var(--idle-py);          /* 48px */
+  --scan-gap: var(--idle-stack-gap);  /* 20px */
+  --scan-max-w: 760px;
+  --fs-scan-title: 40px;
+  --scan-meta-gap: 16px;
+  --fs-scan-meta: var(--fs-nav);      /* 14px */
+  --scan-rows-gap: 2px;
+  --scan-rows-mt: 12px;
+  --scan-row-gap: 14px;
+  --scan-row-py: 9px;
+  --scan-row-px: 4px;
+  --fs-scan-row: var(--fs-body);      /* 15px */
+  --scan-dot: 22px;
+  --scan-check: 12px;
+  --scan-check-stroke: 3.5;
+
+  /* ── Busy indicator (REQ-DCLEAN-017.A2) ─────────────────────── */
+  --busy-size: 18px;
+  --busy-stroke: 2px;
+  --busy-gap: 10px;
+  --motion-busy: 0.8s linear infinite;
+
   /* ── Figures ────────────────────────────────────────────────── */
   --numeric-figures: tabular-nums;    /* sizes align in columns (REQ-DCLEAN-028.A4) */
 

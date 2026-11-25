@@ -25,6 +25,11 @@ function validView(): Record<string, any> {
       },
       { id: "logs", name: "Logs & crash reports", description: "d", safety: "review", bytes: 0, items: [] },
     ],
+    catalogue: [
+      { id: "app_caches", name: "App caches", safety: "safe" },
+      { id: "logs", name: "Logs & crash reports", safety: "review" },
+      { id: "trash", name: "Trash", safety: "safe" },
+    ],
   };
 }
 
@@ -86,12 +91,37 @@ function rejectsMissingFieldsWithoutAPartialList() {
 }
 
 function progressFractionMustBeInZeroToOne() {
-  const ok = { fraction: 0.5, current_path: "/Users/me", completed_category_ids: ["temp"] };
+  const ok = {
+    fraction: 0.5,
+    current_path: "/Users/me",
+    completed_category_ids: ["temp"],
+    completed_category_bytes: { temp: 1_000 },
+  };
   expect(parseScanProgress(ok)).toEqual(ok);
   expect(parseScanProgress({ ...ok, fraction: 1 }).fraction).toBe(1);
   expectContractError(() => parseScanProgress({ ...ok, fraction: 1.01 }), "progress.fraction");
   expectContractError(() => parseScanProgress({ ...ok, fraction: -0.1 }), "progress.fraction");
   expectContractError(() => parseScanProgress({ ...ok, fraction: Number.NaN }), "progress.fraction");
+}
+
+function catalogueAndCompletedBytesAreStrict() {
+  expect(parseCleanupView(validView()).catalogue.map((c) => c.id)).toEqual(["app_caches", "logs", "trash"]);
+  const badSafety = validView();
+  badSafety.catalogue[2].safety = "maybe";
+  expectContractError(() => parseCleanupView(badSafety), "view.catalogue[2].safety");
+  const noCatalogue = validView();
+  delete noCatalogue.catalogue;
+  expectContractError(() => parseCleanupView(noCatalogue), "view.catalogue");
+
+  const ok = { fraction: 1, current_path: "", completed_category_ids: ["temp", "logs"], completed_category_bytes: { temp: 5 } };
+  expect(parseScanProgress(ok).completed_category_bytes).toEqual({ temp: 5 });
+  expectContractError(
+    () => parseScanProgress({ ...ok, completed_category_bytes: { temp: -1 } }),
+    "progress.completed_category_bytes.temp",
+  );
+  const noBytes: Record<string, unknown> = { ...ok };
+  delete noBytes.completed_category_bytes;
+  expectContractError(() => parseScanProgress(noBytes), "progress.completed_category_bytes");
 }
 
 function cleanResultParsesWithAndWithoutEntry() {
@@ -142,6 +172,7 @@ describe("GUI data contract (REQ-DCLEAN-027, REQ-DCLEAN-029)", () => {
   it("category bytes must equal the item sum (REQ-DCLEAN-027.A3)", rejectsCategoryBytesThatAreNotTheItemSum);
   it("missing fields fail the whole payload (REQ-DCLEAN-029.A4)", rejectsMissingFieldsWithoutAPartialList);
   it("scan progress fraction stays in 0..1 (REQ-DCLEAN-027)", progressFractionMustBeInZeroToOne);
+  it("catalogue and completed category bytes are parsed strictly (REQ-DCLEAN-004.A4)", catalogueAndCompletedBytesAreStrict);
   it("clean results parse with or without a history entry (REQ-DCLEAN-027)", cleanResultParsesWithAndWithoutEntry);
   it("a clean result without its post-clean disk is rejected (REQ-DCLEAN-002.A4)", cleanResultWithoutDiskIsRejected);
   it("the large-files count is a whole number from the engine (REQ-DCLEAN-003.A4)", largeFilesCountMustBeAWholeCount);

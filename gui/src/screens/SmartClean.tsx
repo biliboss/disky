@@ -1,9 +1,11 @@
 import { For, Match, Show, Switch, createEffect, createResource, createSignal, onCleanup } from "solid-js";
+import { useDelayedBusy } from "../lib/busy";
 import { loadCleanupView, onScanProgress, scan, stopScan } from "../lib/engine";
 import { NUMERIC_CLASS, formatBytes } from "../lib/format";
 import type { CleanupView } from "../lib/contract";
 import { diskState, setFromView } from "../lib/diskState";
 import { Idle } from "./smartClean/Idle";
+import { Scanning } from "./smartClean/Scanning";
 import {
   INITIAL_STATE,
   scanFinished,
@@ -16,13 +18,19 @@ import "./smartClean/smartClean.css";
 
 /**
  * Smart Clean. Walks the phase machine in `smartClean/phase.ts`: idle
- * (REQ-DCLEAN-003), scanning, results, cleaning, done. Every figure comes
- * from the engine's cleanup view (REQ-DCLEAN-027.A4), parsed at the boundary,
- * and disk usage goes through the shared disk state (REQ-DCLEAN-002).
- * Scanning is a minimal stub until REQ-DCLEAN-004; results reuse the engine
- * category list until REQ-DCLEAN-005.
+ * (REQ-DCLEAN-003), scanning (REQ-DCLEAN-004), results, cleaning, done.
+ * Every figure comes from the engine's cleanup view (REQ-DCLEAN-027.A4),
+ * parsed at the boundary, and disk usage goes through the shared disk state
+ * (REQ-DCLEAN-002). Results reuse the engine category list until
+ * REQ-DCLEAN-005.
+ *
+ * Loading (REQ-DCLEAN-017): the scanning screen is the scan's loading state;
+ * loading the view shows a busy indicator only past the spinner threshold;
+ * a finished scan enters results with no pause.
  *
  * @implements REQ-DCLEAN-003
+ * @implements REQ-DCLEAN-004
+ * @implements REQ-DCLEAN-017
  */
 export function SmartClean() {
   const [loaded, { refetch }] = createResource(() => loadCleanupView());
@@ -32,6 +40,8 @@ export function SmartClean() {
   // Read the resource only once it holds a value: an errored resource throws.
   const ready = () => (loaded.state === "ready" ? loaded() : undefined);
   const view = () => scanned() ?? ready();
+  // REQ-DCLEAN-017.A2: no indicator for a load that finishes within 200 ms.
+  const loadingBusy = useDelayedBusy(() => loaded.loading);
 
   createEffect(() => {
     const v = ready();
@@ -48,7 +58,7 @@ export function SmartClean() {
     setScanError(null);
     setState(next);
     try {
-      unlisten = await onScanProgress((p) => setState((s) => scanProgress(s, p.fraction)));
+      unlisten = await onScanProgress((p) => setState((s) => scanProgress(s, p)));
     } catch {
       unlisten = undefined; // progress is cosmetic; the scan still runs
     }
@@ -56,6 +66,7 @@ export function SmartClean() {
       const v = await scan();
       // REQ-DCLEAN-004.A3: a stopped scan's partial snapshot is never shown.
       if (state().phase !== "scanning") return;
+      // REQ-DCLEAN-004.A2 / REQ-DCLEAN-017.A3: straight to results, no pause.
       setScanned(v);
       setFromView(v);
       setState(scanFinished);
@@ -68,6 +79,7 @@ export function SmartClean() {
     }
   }
 
+  /** "Stop" (REQ-DCLEAN-004.A3): back to idle now; the engine cancels the walk. */
   function endScan() {
     setState(scanStopped);
     void stopScan().catch(() => undefined);
@@ -86,7 +98,7 @@ export function SmartClean() {
           </div>
         </Match>
         <Match when={state().phase === "scanning"}>
-          <ScanningStub progress={state().progress} onStop={endScan} />
+          <Scanning state={state()} catalogue={view()?.catalogue ?? []} onStop={endScan} />
         </Match>
         <Match when={state().phase === "results" && view()}>
           {(v) => <Categories view={v()} />}
@@ -99,25 +111,14 @@ export function SmartClean() {
           </Show>
           <Idle view={view()!} disk={diskState()!} onStartScan={() => void beginScan()} />
         </Match>
+        <Match when={loadingBusy()}>
+          <div class="busy" role="status" aria-busy="true" data-testid="busy">
+            <span class="busy-spinner" aria-hidden="true" />
+            Loading…
+          </div>
+        </Match>
       </Switch>
     </section>
-  );
-}
-
-/** Minimal scanning screen until REQ-DCLEAN-004 implements the full one. */
-function ScanningStub(props: { progress: number; onStop: () => void }) {
-  return (
-    <div class="screen" data-testid="scanning" data-screen-label="Smart clean · scanning">
-      <h1 class="screen-title">Looking around…</h1>
-      <p class={`screen-note ${NUMERIC_CLASS}`} data-testid="scan-progress">
-        {Math.round(props.progress * 100)}%
-      </p>
-      <div>
-        <button type="button" class="btn btn-secondary" onClick={() => props.onStop()}>
-          Stop
-        </button>
-      </div>
-    </div>
   );
 }
 

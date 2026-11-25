@@ -117,20 +117,42 @@ function idleFixtureView() {
     preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
     large_files_count: 8,
     categories: [],
+    catalogue: SNAPSHOT_SCAN_ROWS.map((name, i) => ({ id: `visual_cat_${i}`, name, safety: "safe" })),
   };
 }
 
-/** Answer the app's Tauri `invoke` calls in the browser build with `view`. */
-async function stubEngine(page: Page, view: unknown) {
-  await page.addInitScript((v) => {
-    (window as any).__TAURI_INTERNALS__ = {
-      invoke: async (cmd: string) => {
-        if (cmd === "load_cleanup_view") return v;
-        throw new Error(`visual stub: ${cmd} is not available`);
-      },
-      transformCallback: () => 0,
-    };
-  }, view);
+/** The snapshot prototype's eight scanning rows, as catalogue entries. */
+const SNAPSHOT_SCAN_ROWS = [
+  "System caches",
+  "App caches",
+  "Temporary files",
+  "Logs & crash reports",
+  "Trash",
+  "App leftovers",
+  "Old downloads",
+  "Developer junk",
+];
+
+/**
+ * Answer the app's Tauri `invoke` calls in the browser build with `view`.
+ * With `scanForever`, `scan` never resolves and progress subscriptions are
+ * accepted, so the app holds the scanning phase.
+ */
+async function stubEngine(page: Page, view: unknown, scanForever = false) {
+  await page.addInitScript(
+    ([v, forever]) => {
+      (window as any).__TAURI_INTERNALS__ = {
+        invoke: async (cmd: string) => {
+          if (cmd === "load_cleanup_view") return v;
+          if (forever && cmd === "scan") return new Promise(() => undefined);
+          if (forever && cmd === "plugin:event|listen") return 1;
+          throw new Error(`visual stub: ${cmd} is not available`);
+        },
+        transformCallback: () => 0,
+      };
+    },
+    [view, scanForever] as const,
+  );
 }
 
 /**
@@ -189,10 +211,75 @@ async function idlePhaseMatchesSnapshot({ page }: { page: Page }) {
 
 test("Smart Clean idle phase matches the snapshot within 1% (REQ-DCLEAN-032.A1, REQ-DCLEAN-003)", idlePhaseMatchesSnapshot);
 
+/** The snapshot's scanning screen and its live parts (path line, rows, fill). */
+const SNAPSHOT_SCANNING = '[data-screen-label="Smart clean · scanning"]';
+const SNAPSHOT_SCANNING_LIVE = (page: Page) => {
+  const scr = page.locator(SNAPSHOT_SCANNING);
+  return [
+    scr.locator("> div").nth(0), // path line + percentage
+    scr.locator("> div").nth(1).locator("> div"), // progress fill
+    scr.locator("> div").nth(2), // category rows
+  ];
+};
+const APP_SCANNING_LIVE = ['[data-testid="scan-path"]', ".scan-meta", '[data-testid="scan-bar-fill"]', '[data-testid="scan-rows"]'];
+
+async function scanningPhaseMatchesSnapshot({ page }: { page: Page }) {
+  const at = await openSnapshot(page);
+  await page.getByRole("button", { name: "Later" }).click();
+  await page.locator('[data-screen-label="Smart clean · home"]').waitFor();
+  // Start the prototype's scan and freeze its simulated timer at 0%, so the
+  // screen holds still (the live parts are masked either way).
+  await page.evaluate(() => {
+    const start = [...document.querySelectorAll("main button")].find((b) => b.textContent?.trim() === "Start scan");
+    (start as HTMLButtonElement).click();
+    for (let id = 0; id < 10_000; id++) clearInterval(id);
+  });
+  await page.locator(SNAPSHOT_SCANNING).waitFor();
+  await page.screenshot({
+    path: baselinePath("phase-scanning.png"),
+    clip: offset(WINDOW, at),
+    mask: [page.locator(SNAPSHOT_LIGHTS), ...SNAPSHOT_SCANNING_LIVE(page), page.locator('aside span:has-text("GB free")')],
+    maskColor: MASK_COLOR,
+    animations: "disabled",
+  });
+
+  await page.setViewportSize(WINDOW);
+  await stubEngine(page, idleFixtureView(), true);
+  await openApp(page);
+  await page.getByTestId("idle").getByRole("button", { name: "Start scan" }).click();
+  await page.getByTestId("scanning").waitFor();
+  await expect(page).toHaveScreenshot("phase-scanning.png", {
+    ...SHELL_DIFF,
+    clip: WINDOW,
+    mask: [page.locator(APP_LIGHTS), ...APP_SCANNING_LIVE.map((s) => page.locator(s)), page.locator(".meter-free")],
+  });
+
+  // REQ-DCLEAN-004.A5: accent fill over a surface track (the fill is masked above).
+  const colours = await page.evaluate(() => {
+    const resolve = (token: string) => {
+      const probe = document.createElement("div");
+      probe.style.background = `var(${token})`;
+      document.body.append(probe);
+      const c = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return c;
+    };
+    return {
+      fill: getComputedStyle(document.querySelector(".scan-bar-fill")!).backgroundColor,
+      track: getComputedStyle(document.querySelector(".scan-bar")!).backgroundColor,
+      accent: resolve("--color-accent"),
+      surface: resolve("--color-surface"),
+    };
+  });
+  expect(colours.fill).toBe(colours.accent);
+  expect(colours.track).toBe(colours.surface);
+}
+
+test("Smart Clean scanning phase matches the snapshot within 1% (REQ-DCLEAN-032.A1, REQ-DCLEAN-004)", scanningPhaseMatchesSnapshot);
+
 // Full-phase comparisons (REQ-DCLEAN-032.A1). Parked until each Smart Clean
 // phase REQ is implemented; un-fixme as the phase lands.
 const PHASES = [
-  ["scanning", "REQ-DCLEAN-004"],
   ["results", "REQ-DCLEAN-005"],
   ["cleaning", "REQ-DCLEAN-008"],
   ["done", "REQ-DCLEAN-009"],

@@ -114,3 +114,138 @@
 .idle-error {
   padding: var(--idle-actions-mt) var(--layout-screen-px) 0;
 }
+
+/* ── Scanning (REQ-DCLEAN-004) ────────────────────────────────── */
+.scanning {
+  flex: 1;
+  padding: var(--scan-py) var(--layout-screen-px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--scan-gap);
+  max-width: var(--scan-max-w);
+}
+
+.scanning-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-scan-title);
+  margin: 0;
+}
+
+.scan-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--scan-meta-gap);
+  font-size: var(--fs-scan-meta);
+  color: var(--color-neutral-700);
+}
+
+.scan-path {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A5: accent fill over a surface track. */
+.scan-bar {
+  height: var(--progress-h);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.scan-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  transition: var(--motion-bar);
+}
+
+.scan-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--scan-rows-gap);
+  margin-top: var(--scan-rows-mt);
+  border-collapse: collapse;
+}
+
+.scan-rows tbody {
+  display: contents;
+}
+
+.scan-row {
+  display: flex;
+  align-items: center;
+  gap: var(--scan-row-gap);
+  padding: var(--scan-row-py) var(--scan-row-px);
+  font-size: var(--fs-scan-row);
+}
+
+.scan-row td {
+  padding: 0;
+}
+
+.scan-dot-cell {
+  display: flex;
+}
+
+.scan-dot {
+  width: var(--scan-dot);
+  height: var(--scan-dot);
+  flex: none;
+  border-radius: var(--radius-pill);
+  display: grid;
+  place-items: center;
+  color: var(--color-bg);
+  background: var(--color-surface);
+}
+
+.scan-dot-done {
+  background: var(--color-accent-2);
+}
+
+.scan-check {
+  width: var(--scan-check);
+  height: var(--scan-check);
+  stroke-width: var(--scan-check-stroke);
+}
+
+.scan-name {
+  flex: 1;
+}
+
+.scan-size {
+  color: var(--color-neutral-700);
+}
+
+/* ── Busy indicator (REQ-DCLEAN-017.A2) ───────────────────────── */
+.busy {
+  display: flex;
+  align-items: center;
+  gap: var(--busy-gap);
+  padding: var(--scan-py) var(--layout-screen-px);
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+.busy-spinner {
+  width: var(--busy-size);
+  height: var(--busy-size);
+  border-radius: var(--radius-pill);
+  border: var(--busy-stroke) solid var(--color-surface);
+  border-top-color: var(--color-accent);
+  animation: busy-spin var(--motion-busy);
+}
+
+@keyframes busy-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busy-spinner {
+    animation: none;
+  }
+}
