@@ -8,7 +8,7 @@ use disky::exit::{classify, DiskyError, ExitCode};
 use disky::policy::{apply_policy, Policy, SnapshotMeta};
 use disky::query::SCHEMA_VERSION;
 use disky::render::{resolve_format, Format};
-use disky::{cleanup, db, history, query, render, scan, schema, snapshots};
+use disky::{cleanup, db, history, prefs, query, render, scan, schema, snapshots};
 use serde_json::json;
 use std::process::ExitCode as ProcExit;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -220,7 +220,11 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             } else {
                 target
             };
-            let hits = cleanup::scan(&conn, &targets, limit)?;
+            // Excluded folders and skip-recently-used come from the shared
+            // preferences store, as in the GUI (REQ-DSCR-002).
+            let ctx = cleanup::ScanContext::from_snapshot(&conn)
+                .with_prefs(&prefs::load(&prefs::prefs_path())?);
+            let hits = cleanup::scan_with(&conn, &targets, limit, &ctx)?;
             let outcome = if apply {
                 let mode = if reversible {
                     cleanup::ApplyMode::Trash
@@ -650,6 +654,15 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
         Command::Restore { id } => {
             let report = history::restore(&history::log_path(), &id)?;
             render::restore(&report, format)?;
+        }
+        Command::Prefs { set } => {
+            let path = prefs::prefs_path();
+            let p = if set.is_empty() {
+                prefs::load(&path)?
+            } else {
+                prefs::set_all(&path, &set)?
+            };
+            render::prefs(&p, format)?;
         }
         Command::List => {
             let snaps = snapshots::list_snapshots();

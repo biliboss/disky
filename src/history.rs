@@ -264,11 +264,13 @@ fn save(path: &Path, entries: Vec<Entry>) -> Result<()> {
 }
 
 /// Exclusive `flock` on a sibling lock file; released on drop (and by the
-/// kernel if the process dies).
-struct Lock(#[allow(dead_code)] fs::File);
+/// kernel if the process dies). Shared with the preferences store
+/// (`prefs.lock`), which follows the same read-modify-write discipline.
+pub(crate) struct Lock(#[allow(dead_code)] fs::File);
 
 impl Lock {
-    fn acquire(path: &Path) -> Result<Self> {
+    /// Block until the exclusive lock on `path` (created if missing) is held.
+    pub(crate) fn acquire(path: &Path) -> Result<Self> {
         let file = fs::OpenOptions::new()
             .create(true)
             .truncate(false)

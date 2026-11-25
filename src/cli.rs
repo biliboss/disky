@@ -302,4 +302,18 @@ pub enum Command {
         /// Entry id from `disky history`.
         id: String,
     },
+
+    /// Print every preference, or change some with `--set <key>=<value>`.
+    /// The store (`<data dir>/prefs.json`) is shared with the desktop GUI.
+    /// Keys: trash_by_default, skip_recently_used, safe_only,
+    /// warn_below_goal (true|false), goal_bytes (bytes or e.g. 80GB),
+    /// checks.enabled (true|false), checks.frequency (hourly|daily|weekly),
+    /// agent (claude|codex|gemini), scheduled_scan (off|weekly|monthly),
+    /// excluded (comma list or JSON array of folders; empty clears).
+    /// An unknown key or invalid value exits 2 and changes nothing.
+    Prefs {
+        /// `<key>=<value>`; repeatable. All are applied, or none.
+        #[arg(long, value_name = "KEY=VALUE")]
+        set: Vec<String>,
+    },
 }

@@ -29,6 +29,8 @@
 //! @implements REQ-DCLEAN-018
 //! @implements REQ-DCLEAN-027
 //! @implements REQ-DCLEAN-029
+//! @implements REQ-DSCR-001
+//! @implements REQ-DSCR-002
 
 use anyhow::Result;
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -43,9 +45,9 @@ use crate::scan::ScanTick;
 
 pub use crate::disk::{disk_usage, Disk};
 
-/// Space goal used until a Settings screen stores one: the design
-/// snapshot's value, 80 GB.
-pub const DEFAULT_GOAL_BYTES: u64 = 80_000_000_000;
+/// The space goal used when the store has none: the design snapshot's
+/// 80 GB (REQ-DSCR-001 defaults).
+pub use crate::prefs::DEFAULT_GOAL_BYTES;
 
 /// A snapshot older than this is stale (REQ-DCLEAN-029.A2): 24 hours.
 pub const STALE_AFTER_SECS: i64 = 24 * 60 * 60;
@@ -71,26 +73,9 @@ pub const CLEAN_PROGRESS_EVENT: &str = "clean://progress";
 pub const FULL_DISK_ACCESS_URL: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 
-/// Settings the component reads. Nothing stores them yet, so every value is
-/// its spec default (all on).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Preferences {
-    pub trash_by_default: bool,
-    pub safe_only: bool,
-    pub notifications: bool,
-    pub assistant: bool,
-}
-
-impl Default for Preferences {
-    fn default() -> Self {
-        Preferences {
-            trash_by_default: true,
-            safe_only: true,
-            notifications: true,
-            assistant: true,
-        }
-    }
-}
+/// The preferences the GUI renders and edits: the shared store's record
+/// (REQ-DSCR-001.A5). `Preferences` is kept as the contract's name for it.
+pub use crate::prefs::Prefs as Preferences;
 
 /// One reclaimable path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,6 +134,7 @@ pub fn catalogue() -> Vec<CatalogueEntry> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CleanupView {
     pub disk: Disk,
+    /// The store's space goal ([`Preferences::goal_bytes`]).
     pub goal_bytes: u64,
     /// When the snapshot's scan finished (RFC 3339 UTC), or null.
     pub last_scan_at: Option<String>,
@@ -157,6 +143,7 @@ pub struct CleanupView {
     /// True when the snapshot is older than [`STALE_AFTER_SECS`], or its age
     /// is unknown (fail safe: warn).
     pub is_stale: bool,
+    /// Every preference, read from the store (REQ-DSCR-001.A5).
     pub preferences: Preferences,
     /// Files in the snapshot of at least [`LARGE_FILE_BYTES`] physical bytes.
     pub large_files_count: u64,
@@ -296,21 +283,20 @@ pub fn cleanup_view(
     meta: Option<&crate::db::ScanMeta>,
     hits: &[CleanupHit],
     disk: Disk,
-    goal_bytes: u64,
-    preferences: Preferences,
+    preferences: &Preferences,
     large_files_count: u64,
     now_secs: i64,
 ) -> CleanupView {
     let taken = meta.map(|m| m.started_at);
     CleanupView {
         disk,
-        goal_bytes,
+        goal_bytes: preferences.goal_bytes,
         last_scan_at: meta
             .map(|m| m.ended_at.unwrap_or(m.started_at))
             .and_then(rfc3339),
         snapshot_taken_at: taken.and_then(rfc3339),
         is_stale: is_stale(taken, now_secs),
-        preferences,
+        preferences: preferences.clone(),
         large_files_count,
         categories: categories_from_hits(hits),
         catalogue: catalogue(),
@@ -322,11 +308,34 @@ pub fn cleanup_view(
 /// query. CLI: `disky query "SELECT count(*) FROM files WHERE NOT is_dir AND
 /// physical_size >= 2000000000"`.
 pub fn large_files_count(conn: &Connection) -> Result<u64> {
-    let n: i64 = conn.query_row(
-        "SELECT count(*) FROM files WHERE NOT is_dir AND physical_size >= ?",
-        [LARGE_FILE_BYTES as i64],
-        |r| r.get(0),
-    )?;
+    large_files_count_in(conn, &cleanup::ScanContext::default())
+}
+
+/// [`large_files_count`] leaving out files inside `ctx.excluded` and, with
+/// skip-recently-used on, files modified since `ctx.recent_cutoff`
+/// (REQ-DSCR-002.A1, A2) — the same scope the Large files screen lists.
+pub fn large_files_count_in(conn: &Connection, ctx: &cleanup::ScanContext) -> Result<u64> {
+    use duckdb::types::Value;
+    let mut sql =
+        String::from("SELECT count(*) FROM files WHERE NOT is_dir AND physical_size >= ?");
+    let mut params: Vec<Value> = vec![Value::BigInt(LARGE_FILE_BYTES as i64)];
+    for e in &ctx.excluded {
+        let e = e.trim_end_matches('/');
+        if e.is_empty() {
+            return Ok(0); // excluding `/` excludes everything
+        }
+        sql.push_str(" AND NOT (path = ? OR (path >= ? AND path < ?))");
+        params.push(Value::Text(e.to_string()));
+        params.push(Value::Text(format!("{e}/")));
+        params.push(Value::Text(format!("{e}0")));
+    }
+    if let Some(cutoff) = ctx.recent_cutoff {
+        // NULL mtime → not provably unused → not counted.
+        sql.push_str(" AND mtime < ?");
+        params.push(Value::BigInt(cutoff));
+    }
+    let refs: Vec<&dyn duckdb::ToSql> = params.iter().map(|v| v as &dyn duckdb::ToSql).collect();
+    let n: i64 = conn.query_row(&sql, refs.as_slice(), |r| r.get(0))?;
     Ok(n.max(0) as u64)
 }
 
@@ -341,45 +350,35 @@ pub fn disk_near(path: &Path) -> Result<Disk> {
 
 /// The view when no snapshot exists yet: live disk usage, no categories, and
 /// `last_scan_at` null so the idle kicker reads "No scans yet"
-/// (REQ-DCLEAN-003.A2).
-pub fn empty_view(goal_bytes: u64, preferences: Preferences) -> Result<CleanupView> {
+/// (REQ-DCLEAN-003.A2). Goal and preferences come from `prefs`.
+pub fn empty_view(prefs: &Preferences) -> Result<CleanupView> {
     let disk = disk_usage(Path::new("/"))?;
     Ok(cleanup_view(
         None,
         &[],
         disk,
-        goal_bytes,
-        preferences,
+        prefs,
         0,
         Utc::now().timestamp(),
     ))
 }
 
 /// Open a snapshot and build its view, with disk usage taken from the
-/// volume of the snapshot's scan root (`/` when the root is gone). Returns
+/// volume of the snapshot's scan root (`/` when the root is gone). Goal and
+/// preferences come from the store's `prefs` (REQ-DSCR-001.A5); excluded
+/// folders and skip-recently-used scope the hits (REQ-DSCR-002). Returns
 /// the hits behind the view too: they are what the user reviews, and the
 /// only paths [`clean`] will act on.
-pub fn load(
-    snapshot_path: &str,
-    goal_bytes: u64,
-    preferences: Preferences,
-) -> Result<(CleanupView, Vec<CleanupHit>)> {
+pub fn load(snapshot_path: &str, prefs: &Preferences) -> Result<(CleanupView, Vec<CleanupHit>)> {
     let conn = crate::db::open(snapshot_path)?;
     let meta = crate::db::read_scan_meta(&conn);
     let root = meta.as_ref().map_or("/", |m| m.root.as_str());
     let disk = disk_near(Path::new(root))?;
-    let hits = view_hits(&conn)?;
-    let large = large_files_count(&conn)?;
+    let ctx = cleanup::ScanContext::from_snapshot(&conn).with_prefs(prefs);
+    let hits = view_hits_with(&conn, &ctx)?;
+    let large = large_files_count_in(&conn, &ctx)?;
     let now = Utc::now().timestamp();
-    let mut view = cleanup_view(
-        meta.as_ref(),
-        &hits,
-        disk,
-        goal_bytes,
-        preferences,
-        large,
-        now,
-    );
+    let mut view = cleanup_view(meta.as_ref(), &hits, disk, prefs, large, now);
     view.skipped_paths = crate::db::read_scan_skipped(&conn);
     Ok((view, hits))
 }
@@ -687,8 +686,7 @@ mod tests {
                 capacity_bytes: 512_000_000_000,
                 free_bytes: 74_000_000_000,
             },
-            DEFAULT_GOAL_BYTES,
-            Preferences::default(),
+            &Preferences::default(),
             8,
             0,
         );
@@ -724,8 +722,7 @@ mod tests {
                 Some(&meta),
                 &[],
                 disk.clone(),
-                1,
-                Preferences::default(),
+                &Preferences::default(),
                 0,
                 now,
             )
@@ -738,14 +735,61 @@ mod tests {
         );
         assert_eq!(fresh.last_scan_at.as_deref(), Some("2023-11-14T22:14:20Z"));
         assert!(at(meta.started_at + STALE_AFTER_SECS + 1).is_stale);
-        let unknown = cleanup_view(None, &[], disk, 1, Preferences::default(), 0, 0);
+        let unknown = cleanup_view(None, &[], disk, &Preferences::default(), 0, 0);
         assert!(unknown.is_stale && unknown.last_scan_at.is_none());
     }
 
     #[test]
     fn default_preferences_are_all_on() {
         let p = Preferences::default();
-        assert!(p.trash_by_default && p.safe_only && p.notifications && p.assistant);
+        assert!(p.trash_by_default && p.safe_only && p.warn_below_goal && p.checks.enabled);
+        assert!(p.skip_recently_used);
+    }
+
+    #[test]
+    fn view_goal_and_preferences_come_from_the_store() {
+        let prefs = Preferences {
+            goal_bytes: 123_000_000_000,
+            trash_by_default: false,
+            ..Preferences::default()
+        };
+        let disk = Disk {
+            volume: "v".into(),
+            capacity_bytes: 1,
+            free_bytes: 0,
+        };
+        let v = cleanup_view(None, &[], disk, &prefs, 0, 0);
+        assert_eq!(v.goal_bytes, 123_000_000_000);
+        assert_eq!(v.preferences, prefs);
+        let json = serde_json::to_value(&v).unwrap();
+        assert_eq!(json["preferences"]["checks"]["frequency"], "daily");
+        assert_eq!(json["preferences"]["trash_by_default"], false);
+    }
+
+    #[test]
+    fn large_files_count_honours_exclusions_and_recent_use() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::create_schema(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO files (path, name, ext, size, physical_size, mtime, is_dir, depth) VALUES
+             ('/h/keep/a', 'a', '', 3000000000, 3000000000, 100, false, 2),
+             ('/h/ex/b', 'b', '', 3000000000, 3000000000, 100, false, 2),
+             ('/h/exother/c', 'c', '', 3000000000, 3000000000, 100, false, 2),
+             ('/h/keep/new', 'new', '', 3000000000, 3000000000, 900, false, 2);",
+        )
+        .unwrap();
+        let mut ctx = cleanup::ScanContext {
+            excluded: vec!["/h/ex/".into(), "/h/does-not-exist".into()],
+            ..Default::default()
+        };
+        assert_eq!(
+            large_files_count_in(&conn, &ctx).unwrap(),
+            3,
+            "prefix on components"
+        );
+        ctx.recent_cutoff = Some(500);
+        assert_eq!(large_files_count_in(&conn, &ctx).unwrap(), 2);
+        assert_eq!(large_files_count(&conn).unwrap(), 4);
     }
 
     #[test]
@@ -880,8 +924,7 @@ mod tests {
                 capacity_bytes: 512_000_000_000,
                 free_bytes: 74_000_000_000,
             },
-            DEFAULT_GOAL_BYTES,
-            Preferences::default(),
+            &Preferences::default(),
             0,
             0,
         );
@@ -898,7 +941,7 @@ mod tests {
 
     #[test]
     fn catalogue_lists_every_engine_category() {
-        let v = empty_view(DEFAULT_GOAL_BYTES, Preferences::default()).unwrap();
+        let v = empty_view(&Preferences::default()).unwrap();
         assert!(v.categories.is_empty());
         assert_eq!(v.catalogue.len(), CATEGORIES.len());
         for (entry, c) in v.catalogue.iter().zip(CATEGORIES) {
@@ -913,7 +956,7 @@ mod tests {
 
     #[test]
     fn empty_view_has_no_scan_and_live_disk() {
-        let v = empty_view(DEFAULT_GOAL_BYTES, Preferences::default()).unwrap();
+        let v = empty_view(&Preferences::default()).unwrap();
         assert!(v.last_scan_at.is_none());
         assert!(v.categories.is_empty());
         assert_eq!(v.large_files_count, 0);

@@ -102,6 +102,13 @@ fn commands() -> Value {
             "args": { "id": "string (HistoryEntry.id)" },
             "output": "RestoreReport[] (one record) under kind='restore'. Never overwrites; re-run retries items not yet restored",
             "errors": "not-found (unknown id); generic (delete-mode entry, or already restored)"
+        },
+        {
+            "name": "prefs",
+            "args": { "set": "string[] (repeatable `<key>=<value>`; all applied or none)" },
+            "keys": crate::prefs::KEYS,
+            "output": "Prefs (one record) under kind='prefs'. Store: <data dir>/prefs.json, shared with the desktop GUI",
+            "errors": "usage (unknown key or invalid value; nothing is written); generic (malformed store — never replaced)"
         }
     ])
 }
@@ -178,6 +185,7 @@ fn records() -> Value {
         "HistoryEntry":    { "id": "string (YYYY-MM-DD_HH-MM-SS-xxxx)", "ts": "string (RFC3339 UTC)", "mode": "trash|delete", "categories": "string[]", "bytes": "u64", "items": "HistoryItem[]", "restored_at": "string? (RFC3339 UTC, set once every item is restored)" },
         "HistoryItem":     { "original_path": "string", "trash_path": "string? (null in delete mode)", "bytes": "u64", "status": "in_trash|restored|conflict|missing|deleted" },
         "RestoreReport":   { "id": "string", "restored": "string[]", "conflicts": "string[]", "missing": "string[] (no longer in Trash)" },
+        "Prefs":           { "trash_by_default": "bool", "skip_recently_used": "bool (leave out items modified in the last 30 days)", "safe_only": "bool", "warn_below_goal": "bool", "goal_bytes": "u64", "checks": { "enabled": "bool", "frequency": "hourly|daily|weekly" }, "agent": "claude|codex|gemini", "scheduled_scan": "off|weekly|monthly", "excluded": "string[] (absolute or ~/ folders; never touched by cleanup)" },
         "DiffRow":    { "path": "string", "kind": "added|removed|grew|shrank", "size_a": "u64", "size_b": "u64", "delta": "i64" },
         "GrowthRow":  { "path": "string", "kind": "grew|shrank|added|removed", "size_a": "u64", "size_b": "u64", "delta_bytes": "i64", "rate_bytes_per_day": "f64", "days_between": "f64" },
         "ChurnRow":   { "path": "string", "recent_files": "u64", "recent_bytes": "u64", "total_files": "u64", "total_bytes": "u64", "churn_score": "f64 (0..1)" },
@@ -244,6 +252,24 @@ mod tests {
     }
 
     #[test]
+    fn prefs_command_lists_every_key() {
+        let doc = document();
+        let prefs = doc["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "prefs")
+            .expect("prefs command in schema");
+        let keys: Vec<&str> = prefs["keys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|k| k.as_str().unwrap())
+            .collect();
+        assert_eq!(keys, crate::prefs::KEYS);
+    }
+
+    #[test]
     fn record_shapes_include_core_types() {
         let doc = document();
         let records = &doc["records"];
@@ -257,6 +283,7 @@ mod tests {
             "HistoryEntry",
             "HistoryItem",
             "RestoreReport",
+            "Prefs",
         ] {
             assert!(records[name].is_object(), "missing record {}", name);
         }

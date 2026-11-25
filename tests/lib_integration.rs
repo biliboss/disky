@@ -736,13 +736,8 @@ fn contract_load_builds_view_from_snapshot() {
     let (dir, conn) = small_snapshot(rows, "/h");
     drop(conn);
     let path = dir.path().join("small.db");
-    let goal = disky::contract::DEFAULT_GOAL_BYTES;
-    let (view, hits) = disky::contract::load(
-        path.to_str().unwrap(),
-        goal,
-        disky::contract::Preferences::default(),
-    )
-    .unwrap();
+    let (view, hits) =
+        disky::contract::load(path.to_str().unwrap(), &disky::prefs::Prefs::default()).unwrap();
     assert_eq!(view.goal_bytes, 80_000_000_000);
     assert!(view.disk.capacity_bytes > 0 && view.disk.free_bytes <= view.disk.capacity_bytes);
     assert!(view.is_stale, "a 2023 snapshot is older than 24 h");
@@ -783,11 +778,84 @@ fn scan_counts_permission_skipped_paths() {
     assert_eq!(db::read_scan_skipped(&conn), outcome.skipped);
     let s = query::stats(&conn).unwrap();
     assert!(s.files >= 1, "readable paths are still recorded");
-    let (view, _) = disky::contract::load(
-        db_path.to_str().unwrap(),
-        disky::contract::DEFAULT_GOAL_BYTES,
-        disky::contract::Preferences::default(),
-    )
-    .unwrap();
+    let (view, _) =
+        disky::contract::load(db_path.to_str().unwrap(), &disky::prefs::Prefs::default()).unwrap();
     assert_eq!(view.skipped_paths, outcome.skipped);
+}
+
+/// REQ-DSCR-002.A1–A3: excluded folders (`~` expanded, matched on whole path
+/// components) and skip-recently-used scope cleanup hits; a missing excluded
+/// folder matches nothing.
+#[test]
+fn cleanup_drops_excluded_and_recently_used_hits() {
+    let now = T0 + DAY;
+    let old = T0 - 200 * DAY;
+    let recent = now - 2 * DAY;
+    let rows: &[(&str, bool, i64, i64)] = &[
+        ("/h/src/old/node_modules", true, 0, old),
+        ("/h/src/old/node_modules/x.js", false, 10, old),
+        ("/h/src/fresh/node_modules", true, 0, old),
+        ("/h/src/fresh/node_modules/x.js", false, 20, recent),
+        ("/h/src/private/target", true, 0, old),
+        ("/h/src/private/target/x", false, 30, old),
+        ("/h/src/privateer/target", true, 0, old),
+        ("/h/src/privateer/target/x", false, 40, old),
+    ];
+    let (_d, conn) = small_snapshot(rows, "/h");
+    let paths = |prefs: &disky::prefs::Prefs| {
+        let ctx = synth_ctx("/h", "/h").with_prefs(prefs);
+        let mut p: Vec<String> = cleanup::scan_with(&conn, &all_targets(), 100, &ctx)
+            .unwrap()
+            .into_iter()
+            .map(|h| h.path)
+            .collect();
+        p.sort();
+        p
+    };
+    let mut prefs = disky::prefs::Prefs {
+        excluded: vec!["~/src/private".into(), "/h/does/not/exist".into()],
+        ..Default::default()
+    };
+    // Skip on (default): the fresh node_modules is left out (A2); the
+    // excluded folder is dropped but not its `privateer` sibling (A1); the
+    // missing folder matches nothing (A3).
+    assert_eq!(
+        paths(&prefs),
+        ["/h/src/old/node_modules", "/h/src/privateer/target"]
+    );
+    prefs.skip_recently_used = false;
+    assert_eq!(
+        paths(&prefs),
+        [
+            "/h/src/fresh/node_modules",
+            "/h/src/old/node_modules",
+            "/h/src/privateer/target"
+        ]
+    );
+    assert_eq!(prefs.excluded.len(), 2, "missing folder kept in the list");
+}
+
+/// REQ-DSCR-002 through the GUI path: `contract::load` scopes its view by the
+/// store's preferences.
+#[test]
+fn contract_load_honours_the_preferences_store() {
+    let rows: &[(&str, bool, i64, i64)] = &[
+        ("/h/src/a/node_modules", true, 0, T0),
+        ("/h/src/a/node_modules/x.js", false, 120, T0),
+        ("/h/src/b/node_modules", true, 0, T0),
+        ("/h/src/b/node_modules/x.js", false, 80, T0),
+    ];
+    let (dir, conn) = small_snapshot(rows, "/h");
+    drop(conn);
+    let path = dir.path().join("small.db");
+    let prefs = disky::prefs::Prefs {
+        excluded: vec!["/h/src/b".into()],
+        goal_bytes: 50_000_000_000,
+        ..Default::default()
+    };
+    let (view, hits) = disky::contract::load(path.to_str().unwrap(), &prefs).unwrap();
+    assert_eq!(view.goal_bytes, 50_000_000_000);
+    assert_eq!(view.preferences, prefs);
+    let got: Vec<&str> = hits.iter().map(|h| h.path.as_str()).collect();
+    assert_eq!(got, ["/h/src/a/node_modules"]);
 }

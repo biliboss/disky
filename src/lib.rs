@@ -19,6 +19,7 @@ pub mod ignore;
 pub mod pattern;
 pub mod policy;
 pub mod predict;
+pub mod prefs;
 pub mod query;
 pub mod render;
 pub mod scan;

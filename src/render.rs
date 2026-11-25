@@ -394,6 +394,32 @@ pub fn cleanup(
 }
 
 /// Clean-history log (REQ-DCLEAN-034), newest first.
+/// `disky prefs` (REQ-DSCR-001.A1): one `Prefs` record under kind `prefs`,
+/// or `key = value` lines on a TTY (dotted keys for nested values).
+pub fn prefs(p: &crate::prefs::Prefs, format: Format) -> Result<()> {
+    if format.is_machine() {
+        return emit_records(std::slice::from_ref(p), "prefs", format);
+    }
+    let v = serde_json::to_value(p)?;
+    let show = |v: &serde_json::Value| match v {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(a) => a
+            .iter()
+            .filter_map(|x| x.as_str())
+            .collect::<Vec<_>>()
+            .join(", "),
+        other => other.to_string(),
+    };
+    for key in crate::prefs::KEYS {
+        let mut cur = &v;
+        for part in key.split('.') {
+            cur = &cur[part];
+        }
+        println!("{key:<20} = {}", show(cur));
+    }
+    Ok(())
+}
+
 pub fn history(entries: &[Entry], format: Format) -> Result<()> {
     if format.is_machine() {
         return emit_records(entries, "history", format);

@@ -234,9 +234,37 @@ fn json_in_home(home: &std::path::Path, args: &[&str]) -> Value {
     serde_json::from_str(String::from_utf8(out.stdout).unwrap().trim()).expect("valid JSON")
 }
 
+/// A temp `HOME` whose preferences include recently used items, so cleanup
+/// sees the freshly written test trees (REQ-DSCR-002.A2: with
+/// skip-recently-used on — the default — they would be left out).
+fn home_including_recent() -> PathBuf {
+    let home = temp_dir();
+    json_in_home(
+        &home,
+        &[
+            "prefs",
+            "--set",
+            "skip_recently_used=false",
+            "--format",
+            "json",
+        ],
+    );
+    home
+}
+
 /// Scan `<home>/proj` (holding one `node_modules`) and clean it to the
 /// (temp) Trash. Returns the cleanup envelope.
 fn trash_node_modules(home: &std::path::Path) -> Value {
+    json_in_home(
+        home,
+        &[
+            "prefs",
+            "--set",
+            "skip_recently_used=false",
+            "--format",
+            "json",
+        ],
+    );
     fs::create_dir_all(home.join("proj/node_modules")).unwrap();
     fs::write(home.join("proj/node_modules/big.js"), vec![0u8; 1024]).unwrap();
     let db = home.join("snap.db");
@@ -353,13 +381,17 @@ fn history_is_empty_and_restore_unknown_id_is_not_found() {
 #[test]
 fn cleanup_dry_run_finds_nothing_in_clean_tree() {
     let (_dir, db) = scan_tiny_tree();
-    let v = run_json(&[
-        "cleanup",
-        "--snapshot",
-        db.to_str().unwrap(),
-        "--format",
-        "json",
-    ]);
+    let home = home_including_recent();
+    let v = json_in_home(
+        &home,
+        &[
+            "cleanup",
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
     assert_eq!(v["kind"], "cleanup");
     assert_eq!(v["applied"], false);
     assert!(v["records"].as_array().unwrap().is_empty());
@@ -386,13 +418,17 @@ fn cleanup_summarises_by_category() {
         .unwrap();
     assert!(out.status.success(), "{:?}", out);
 
-    let v = run_json(&[
-        "cleanup",
-        "--snapshot",
-        db.to_str().unwrap(),
-        "--format",
-        "json",
-    ]);
+    let home = home_including_recent();
+    let v = json_in_home(
+        &home,
+        &[
+            "cleanup",
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
     let summary = v["summary"].as_array().unwrap();
     let by_cat: std::collections::HashMap<&str, &Value> = summary
         .iter()
@@ -444,7 +480,7 @@ fn stats_raw_emits_bare_integer() {
 fn gui_categories_match_cli_cleanup_totals() {
     // REQ-DCLEAN-001.A1 — the GUI's category list (`disky::contract`) and
     // `disky cleanup --format json` agree on the same snapshot.
-    let home = temp_dir();
+    let home = home_including_recent();
     let root = home.join("work");
     fs::create_dir_all(root.join("p1/node_modules/deep")).unwrap();
     fs::create_dir_all(root.join("p2/node_modules")).unwrap();
@@ -493,6 +529,8 @@ fn gui_categories_match_cli_cleanup_totals() {
     let conn = disky::db::open(db.to_str().unwrap()).unwrap();
     let mut ctx = disky::cleanup::ScanContext::from_snapshot(&conn);
     ctx.home = Some(home.clone()); // the CLI ran with HOME = `home`
+    let prefs = disky::prefs::load(&prefs_file(&home)).unwrap();
+    let ctx = ctx.with_prefs(&prefs);
     let hits = disky::contract::view_hits_with(&conn, &ctx).unwrap();
     let gui: std::collections::BTreeMap<String, (u64, u64, String)> =
         disky::contract::categories_from_hits(&hits)
@@ -513,4 +551,194 @@ fn gui_categories_match_cli_cleanup_totals() {
     let total: u64 = gui.values().map(|(b, _, _)| b).sum();
     assert_eq!(total, v["total_physical_bytes"].as_u64().unwrap());
     let _ = fs::remove_dir_all(&home);
+}
+
+/// `<data dir>/prefs.json` under a temp `HOME` (what `dirs::data_local_dir`
+/// resolves to there on macOS and Linux).
+fn prefs_file(home: &std::path::Path) -> PathBuf {
+    let data = if cfg!(target_os = "macos") {
+        home.join("Library/Application Support")
+    } else {
+        home.join(".local/share")
+    };
+    data.join("disky/prefs.json")
+}
+
+/// REQ-DSCR-001.A1: `disky prefs` prints every key with its default.
+#[test]
+fn prefs_prints_every_key_with_its_default() {
+    let home = temp_dir();
+    let v = json_in_home(&home, &["prefs", "--format", "json"]);
+    assert_eq!(v["kind"], "prefs");
+    let p = &v["records"][0];
+    for k in [
+        "trash_by_default",
+        "skip_recently_used",
+        "safe_only",
+        "warn_below_goal",
+    ] {
+        assert_eq!(p[k], true, "{k}");
+    }
+    assert_eq!(p["goal_bytes"], 80_000_000_000u64);
+    assert_eq!(p["checks"]["enabled"], true);
+    assert_eq!(p["checks"]["frequency"], "daily");
+    assert_eq!(p["agent"], "claude");
+    assert_eq!(p["scheduled_scan"], "weekly");
+    assert_eq!(p["excluded"], serde_json::json!([]));
+    assert!(!prefs_file(&home).exists(), "reading never writes");
+    let _ = fs::remove_dir_all(&home);
+}
+
+/// REQ-DSCR-001.A1, A2: a `--set` persists, and the library (the GUI's
+/// backend) reads the same store.
+#[test]
+fn prefs_set_persists_and_is_shared_with_the_library() {
+    let home = temp_dir();
+    let v = json_in_home(
+        &home,
+        &[
+            "prefs",
+            "--set",
+            "safe_only=false",
+            "--set",
+            "goal_bytes=100GB",
+        ],
+    );
+    assert_eq!(v["records"][0]["safe_only"], false);
+    let again = json_in_home(&home, &["prefs", "--format", "json"]);
+    assert_eq!(again["records"][0]["safe_only"], false);
+    assert_eq!(again["records"][0]["goal_bytes"], 100_000_000_000u64);
+    let lib = disky::prefs::load(&prefs_file(&home)).unwrap();
+    assert!(!lib.safe_only);
+    // …and the reverse: a library write (the GUI's set_prefs) is what the CLI reads.
+    disky::prefs::set(&prefs_file(&home), "agent", "gemini").unwrap();
+    let cli = json_in_home(&home, &["prefs", "--format", "json"]);
+    assert_eq!(cli["records"][0]["agent"], "gemini");
+    let _ = fs::remove_dir_all(&home);
+}
+
+/// REQ-DSCR-001.A1: an unknown key or invalid value exits 2 (usage) and
+/// leaves the store byte-for-byte unchanged.
+#[test]
+fn prefs_bad_key_or_value_exits_usage_and_changes_nothing() {
+    let home = temp_dir();
+    json_in_home(&home, &["prefs", "--set", "safe_only=false"]);
+    let file = prefs_file(&home);
+    let before = fs::read(&file).unwrap();
+    for bad in [
+        vec!["--set", "bogus=1"],
+        vec!["--set", "checks.frequency=yearly"],
+        vec!["--set", "safe_only=true", "--set", "agent=nope"],
+    ] {
+        let mut args = vec!["prefs"];
+        args.extend(&bad);
+        args.extend(["--format", "json"]);
+        let out = run_in_home(&home, &args);
+        assert_eq!(out.status.code(), Some(2), "{bad:?}: {out:?}");
+        let err: Value =
+            serde_json::from_str(String::from_utf8(out.stderr).unwrap().trim()).unwrap();
+        assert_eq!(err["type"], "https://disky.dev/errors/usage");
+        assert_eq!(
+            fs::read(&file).unwrap(),
+            before,
+            "{bad:?} changed the store"
+        );
+    }
+    let _ = fs::remove_dir_all(&home);
+}
+
+/// REQ-DSCR-001.A3: a malformed store is reported, never replaced.
+#[test]
+fn prefs_malformed_store_is_reported_not_replaced() {
+    let home = temp_dir();
+    let file = prefs_file(&home);
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    fs::write(&file, b"{oops").unwrap();
+    let out = run_in_home(&home, &["prefs", "--format", "json"]);
+    assert_eq!(out.status.code(), Some(1));
+    let out = run_in_home(
+        &home,
+        &["prefs", "--set", "safe_only=false", "--format", "json"],
+    );
+    assert!(!out.status.success());
+    assert_eq!(fs::read(&file).unwrap(), b"{oops");
+    let _ = fs::remove_dir_all(&home);
+}
+
+/// REQ-DSCR-002.A1–A3 through the CLI: `cleanup` drops hits inside an
+/// excluded folder (with `~` expanded), keeps a missing excluded folder in
+/// the list, and with skip-recently-used on leaves out fresh items.
+#[test]
+fn cleanup_honours_excluded_folders_and_skip_recently_used() {
+    let home = temp_dir();
+    let root = home.join("work");
+    for p in ["keep/node_modules", "private/node_modules"] {
+        fs::create_dir_all(root.join(p)).unwrap();
+        fs::write(root.join(p).join("x.js"), vec![1u8; 2048]).unwrap();
+    }
+    let db = home.join("snap.db");
+    let out = run_in_home(
+        &home,
+        &["scan", root.to_str().unwrap(), "--db", db.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "scan: {:?}", out);
+    let cleanup = |home: &std::path::Path| {
+        let v = json_in_home(
+            home,
+            &[
+                "cleanup",
+                "--snapshot",
+                db.to_str().unwrap(),
+                "--format",
+                "json",
+            ],
+        );
+        let mut paths: Vec<String> = v["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["path"].as_str().unwrap().to_string())
+            .collect();
+        paths.sort();
+        paths
+    };
+
+    // Defaults: skip-recently-used on → the fresh tree is left out (A2).
+    assert!(cleanup(&home).is_empty());
+
+    json_in_home(
+        &home,
+        &[
+            "prefs",
+            "--set",
+            "skip_recently_used=false",
+            "--set",
+            "excluded=~/work/private,~/no/such/folder",
+        ],
+    );
+    let keep = root
+        .join("keep/node_modules")
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(cleanup(&home), [keep], "excluded folder dropped (A1)");
+    let p = json_in_home(&home, &["prefs", "--format", "json"]);
+    assert_eq!(
+        p["records"][0]["excluded"],
+        serde_json::json!(["~/work/private", "~/no/such/folder"]),
+        "a missing folder stays listed (A3)"
+    );
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn schema_lists_the_prefs_command() {
+    let v = run_json(&["schema"]);
+    let prefs = v["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "prefs")
+        .expect("prefs in schema");
+    assert!(prefs["keys"].as_array().unwrap().len() >= 10);
+    assert!(v["records"]["Prefs"].is_object());
 }

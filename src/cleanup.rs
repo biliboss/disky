@@ -724,8 +724,13 @@ pub struct ScanContext {
     pub scan_root: Option<String>,
     /// `.diskyignore` patterns (substring match per path segment).
     pub ignore: Vec<String>,
-    /// Absolute folders the user excluded. Hits inside them are dropped.
+    /// Absolute folders the user excluded. Hits inside them are dropped
+    /// (REQ-DSCR-002.A1).
     pub excluded: Vec<String>,
+    /// Skip-recently-used cutoff (unix seconds): a hit whose newest mtime is
+    /// at or after it — or unknown — is dropped (REQ-DSCR-002.A2). `None`
+    /// keeps recent items.
+    pub recent_cutoff: Option<i64>,
     /// "Now" in unix seconds, for age filters.
     pub now_secs: i64,
     /// Installed apps for the leftover check. `None` → read from disk the
@@ -749,9 +754,21 @@ impl ScanContext {
             scan_root,
             ignore,
             excluded: Vec::new(),
+            recent_cutoff: None,
             now_secs,
             installed_apps: None,
         }
+    }
+
+    /// Apply the user's preferences (REQ-DSCR-002): excluded folders, with
+    /// `~` expanded against [`ScanContext::home`], and the skip-recently-used
+    /// cutoff. Folders that don't exist simply match nothing (A3).
+    ///
+    /// @implements REQ-DSCR-002
+    pub fn with_prefs(mut self, prefs: &crate::prefs::Prefs) -> Self {
+        self.excluded = prefs.expanded_excluded(self.home.as_deref());
+        self.recent_cutoff = prefs.recent_cutoff(self.now_secs);
+        self
     }
 
     fn in_scope(&self, path: &str) -> bool {
@@ -1048,17 +1065,25 @@ pub fn scan_with(
         let Some(r) = roots.get(idx as usize) else {
             continue;
         };
+        // Newest mtime of the root and everything beneath it.
+        let newest = match (newest, r.self_mtime) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, b) => a.or(b),
+        };
         if let Matcher::Location {
             filter: LocationFilter::OlderThanDays(days),
             ..
         } = r.category.matcher
         {
             let cutoff = ctx.now_secs - i64::from(days) * 86_400;
-            let newest = match (newest, r.self_mtime) {
-                (Some(a), Some(b)) => Some(a.max(b)),
-                (a, b) => a.or(b),
-            };
             // Unknown age → not provably old → not reported.
+            if !matches!(newest, Some(m) if m < cutoff) {
+                continue;
+            }
+        }
+        // Skip recently used (REQ-DSCR-002.A2): anything touched since the
+        // cutoff stays. Unknown age → not provably unused → not reported.
+        if let Some(cutoff) = ctx.recent_cutoff {
             if !matches!(newest, Some(m) if m < cutoff) {
                 continue;
             }
