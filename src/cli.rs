@@ -312,6 +312,19 @@ pub enum Command {
         snapshot: String,
     },
 
+    /// Groups of regular files with byte-identical contents (size first,
+    /// then a full content hash; never by name), largest reclaimable first —
+    /// the desktop GUI's Duplicates screen. Each file is re-checked on disk;
+    /// hard links count once. Excluded folders and skip-recently-used
+    /// (`disky prefs`) apply.
+    Dupes {
+        /// Smallest file compared: bytes, or e.g. 1MB (decimal) / 1MiB.
+        #[arg(long, value_name = "BYTES", default_value = "1MB", value_parser = parse_min_size)]
+        min_size: u64,
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
+    },
+
     /// Move the named files or folders to the Trash and record one history
     /// entry (restorable with `disky restore <id>`). Paths named here count
     /// as reviewed. A path that is missing or cannot be moved is reported
@@ -354,4 +367,13 @@ pub enum Command {
         #[arg(long, value_name = "KEY=VALUE")]
         set: Vec<String>,
     },
+}
+
+/// `--min-size` for `disky dupes`: a positive byte count with an optional
+/// decimal (`MB` = 10⁶) or binary (`MiB`) suffix, as `disky prefs` parses
+/// sizes. Anything else is a usage error (exit 2).
+fn parse_min_size(v: &str) -> Result<u64, String> {
+    disky::prefs::parse_bytes(v).map_err(|_| {
+        format!("--min-size must be a positive byte count (e.g. 1000000 or 1MB), got '{v}'")
+    })
 }

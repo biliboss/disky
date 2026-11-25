@@ -320,4 +320,22 @@
   --large-error-mb: 12px;             /* gap-fill: engine error above the table */
   --fw-large-name: 600;
   --fw-large-size: 600;
+
+  /* ── Duplicates (REQ-DSCR-014; snapshot Duplicates markup) ── */
+  --dupes-head-pb: 16px;              /* header padding: 36px 56px 16px */
+  --dupes-body-pb: 16px;              /* grid padding: 0 56px 16px */
+  --dupes-grid-gap: 12px;
+  --dupes-card-pad: 18px;
+  --dupes-card-gap: 8px;
+  --dupes-title-gap: 10px;
+  --dupe-copy-py: 8px;
+  --dupe-copy-px: 12px;
+  --dupe-copy-gap: 10px;
+  --fs-dupe-path: var(--fs-small);    /* 13px */
+  --dupe-dot: 14px;
+  --dupe-dot-border: 2px;
+  --dupe-copy-hover: var(--overlay-hover);
+  --dupe-copy-active: var(--overlay-active);
+  --color-dupe-remove: var(--color-accent-700); /* "Remove" text: Organic's accent is < 4.5:1 at 11 px */
+  --dupes-error-mb: 12px;             /* gap-fill: engine error above the grid */
 }

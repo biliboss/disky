@@ -196,6 +196,32 @@ The GUI's Large files screen re-queries `load_large` per filter, and always
 trashes (whatever `trash_by_default` says). Handled rows leave the list, the
 meter follows the result's `disk`, and failed paths stay with their reason.
 
+## Duplicates (REQ-DSCR-005/014)
+
+```
+disky dupes [--min-size 1MB] --snapshot @latest --format json
+```
+
+Envelope `{kind:"dupes", min_size, groups, extra_copies, reclaimable_bytes,
+records:[DupeGroup {name, bytes, copies:[DupeCopy {path, location, mtime}]}]}`.
+`src/dupes.rs` narrows cheapest first: one query keeps files whose logical
+`size` occurs twice (excluded folders + skip-recently-used via the shared
+`large::scope_clause`), each candidate is `lstat`ed (vanished / changed
+size or mtime → dropped; one `(dev, ino)` counts once, so hard links are
+never duplicates), a BLAKE3 hash of the first 64 KiB splits each size
+bucket, and a full streamed BLAKE3 hash decides. Names never take part.
+`bytes` is physical per copy (max across copies); groups sort by
+`bytes × (copies − 1)`; copies oldest mtime first. `--min-size` uses the
+prefs byte parser (`1MB` = 10⁶; bad value exits 2). `blake3` is pinned
+exactly in `Cargo.toml` — the hash is the deciding comparison.
+
+GUI: `load_dupes` hashes on a blocking thread and keeps the groups in
+Engine state; `trash_dupes` → `contract::trash_dupes` refuses any path not
+in those groups and any call that would remove every copy of a group
+(a group's last copy stays guarded after its twins are trashed). The
+Duplicates screen keeps the first copy by default; each card's copies are a
+`role="radiogroup"` (arrow keys move the kept copy).
+
 ## Preferences (REQ-DSCR-001/002)
 
 One store, `<data dir>/prefs.json` (next to the snapshots; the `.json`

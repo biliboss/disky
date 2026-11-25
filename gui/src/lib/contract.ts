@@ -583,3 +583,61 @@ export function parseTrashResult(raw: unknown): TrashResult {
     disk: parseDisk(o.disk, "trashResult.disk"),
   };
 }
+
+/** One copy of a duplicated file (REQ-DSCR-005.A1). */
+export interface DupeCopy {
+  /** Absolute path. */
+  path: string;
+  /** Parent folder for display, home as `~` (engine-derived). */
+  location: string;
+  /** RFC 3339 modification time, or null when unknown. */
+  mtime: string | null;
+}
+
+/** Files with byte-identical contents (REQ-DSCR-005.A1). */
+export interface DupeGroup {
+  /** The first copy's basename. */
+  name: string;
+  /** Physical bytes of each copy. */
+  bytes: number;
+  /** Two or more copies, oldest modification time first. */
+  copies: DupeCopy[];
+}
+
+/** The Duplicates screen's groups: `disky dupes --format json`. */
+export interface DupesView {
+  min_size: number;
+  groups: number;
+  extra_copies: number;
+  /** Physical bytes freed by keeping one copy of every group. */
+  reclaimable_bytes: number;
+  /** Largest reclaimable first. */
+  records: DupeGroup[];
+}
+
+export function parseDupesView(raw: unknown): DupesView {
+  const o = obj(raw, "dupes");
+  return {
+    min_size: bytes(o.min_size, "dupes.min_size"),
+    groups: count(o.groups, "dupes.groups"),
+    extra_copies: count(o.extra_copies, "dupes.extra_copies"),
+    reclaimable_bytes: bytes(o.reclaimable_bytes, "dupes.reclaimable_bytes"),
+    records: arr(o.records, "dupes.records").map((g, i) => {
+      const go = obj(g, `dupes.records[${i}]`);
+      const copies = arr(go.copies, `dupes.records[${i}].copies`).map((c, j) => {
+        const co = obj(c, `dupes.records[${i}].copies[${j}]`);
+        return {
+          path: str(co.path, `dupes.records[${i}].copies[${j}].path`),
+          location: str(co.location, `dupes.records[${i}].copies[${j}].location`),
+          mtime: strOrNull(co.mtime, `dupes.records[${i}].copies[${j}].mtime`),
+        };
+      });
+      if (copies.length < 2) throw new ContractError(`dupes.records[${i}].copies`, "expected two or more copies");
+      return {
+        name: str(go.name, `dupes.records[${i}].name`),
+        bytes: bytes(go.bytes, `dupes.records[${i}].bytes`),
+        copies,
+      };
+    }),
+  };
+}

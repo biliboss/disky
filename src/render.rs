@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::cleanup::CleanupHit;
-use crate::contract::{HistoryView, LargeView, MapView, TrashResult};
+use crate::contract::{DupesView, HistoryView, LargeView, MapView, TrashResult};
 use crate::history::RestoreReport;
 use crate::query::{DiffRow, DirRow, ExtRow, FileRow, Stats, SCHEMA_VERSION};
 
@@ -609,6 +609,47 @@ pub fn large(view: &LargeView, format: Format) -> Result<()> {
         );
     }
     println!("* last opened more than a year ago");
+    Ok(())
+}
+
+/// `disky dupes` (REQ-DSCR-005): one envelope `{kind:"dupes", min_size,
+/// groups, extra_copies, reclaimable_bytes, records:[DupeGroup]}`, one group
+/// per line in ndjson, or a table of groups with their copies.
+pub fn dupes(view: &DupesView, format: Format) -> Result<()> {
+    match format {
+        Format::Json => {
+            let mut payload = serde_json::to_value(view)?;
+            payload["schema_version"] = json!(SCHEMA_VERSION);
+            payload["kind"] = json!("dupes");
+            println!("{}", serde_json::to_string(&payload)?);
+            return Ok(());
+        }
+        Format::Ndjson => return emit_records(&view.records, "dupes", format),
+        Format::Text => {}
+    }
+    if view.records.is_empty() {
+        println!("No duplicates found.");
+        return Ok(());
+    }
+    println!(
+        "{} groups · {} extra copies · {} reclaimable",
+        view.groups,
+        view.extra_copies,
+        format_size(view.reclaimable_bytes, BINARY)
+    );
+    println!("{:>12}  {:>6}  PATH", "EACH", "COPIES");
+    println!("{}", "-".repeat(100));
+    for g in &view.records {
+        println!(
+            "{:>12}  {:>6}  {}",
+            format_size(g.bytes, BINARY),
+            g.copies.len(),
+            truncate(&g.name, 78)
+        );
+        for c in &g.copies {
+            println!("{:>22}{}", "", truncate(&c.path, 78));
+        }
+    }
     Ok(())
 }
 

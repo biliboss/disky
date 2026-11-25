@@ -376,3 +376,59 @@ export async function stubLarge(page: Page, noSnapshot = false) {
     [snapshotLargeFiles(), noSnapshot] as const,
   );
 }
+
+/** The snapshot's DUPES as `disky dupes` reports them: name, bytes per copy, copy folders. */
+const SNAPSHOT_DUPES: [string, number, string[]][] = [
+  ["IMG_2041.HEIC", 6e6, ["~/Pictures/Photos Library", "~/Desktop/to sort", "~/Downloads"]],
+  ["Brand guidelines v3.pdf", 184e6, ["~/Documents/Work", "~/Downloads", "~/Desktop"]],
+  ["Wedding 4K master.mov", 18.4 * GB, ["~/Movies/Exports", "~/Documents/Backups/Video"]],
+  ["Lecture 07.mp4", 1.3 * GB, ["~/Documents/School", "~/Downloads"]],
+];
+
+/** The snapshot's DUPES as a `DupesView`, in the snapshot's order. */
+export function snapshotDupesView() {
+  const records = SNAPSHOT_DUPES.map(([name, bytes, locs]) => ({
+    name,
+    bytes,
+    copies: locs.map((location) => ({ path: `/Users/me/${location.slice(2)}/${name}`, location, mtime: null })),
+  }));
+  return {
+    min_size: 1e6,
+    groups: records.length,
+    extra_copies: records.reduce((a, g) => a + g.copies.length - 1, 0),
+    reclaimable_bytes: records.reduce((a, g) => a + g.bytes * (g.copies.length - 1), 0),
+    records,
+  };
+}
+
+/**
+ * Answer the Duplicates commands from the snapshot's DUPES: `load_dupes`
+ * returns them (null with `noSnapshot`); `trash_dupes` records its paths in
+ * `window.__trashed` and reports them handled on a 74 GB-free disk.
+ */
+export async function stubDupes(page: Page, noSnapshot = false) {
+  await page.addInitScript(
+    ([view, none]) => {
+      const w = window as any;
+      w.__trashed = [];
+      w.__TAURI_INTERNALS__ = {
+        invoke: async (cmd: string, args: any) => {
+          if (cmd === "load_dupes") return none ? null : view;
+          if (cmd === "trash_dupes") {
+            w.__trashed.push(args.paths);
+            return {
+              handled: args.paths,
+              failed: [],
+              freed_physical_bytes: 0,
+              history_id: "visual-dupes",
+              disk: { volume: "Macintosh HD", capacity_bytes: 512e9, free_bytes: 94e9 },
+            };
+          }
+          throw new Error(`visual stub: ${cmd} is not available`);
+        },
+        transformCallback: () => 0,
+      };
+    },
+    [snapshotDupesView(), noSnapshot] as const,
+  );
+}

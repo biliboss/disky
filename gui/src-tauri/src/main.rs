@@ -20,6 +20,8 @@
 //! | `reveal_in_finder`  | `open -R <path>` (a path `load_map` listed)      |
 //! | `load_large`        | `disky large [--filter …] --format json`         |
 //! | `trash_large`       | `disky trash <path>... --title "Large files"`    |
+//! | `load_dupes`        | `disky dupes --format json`                      |
+//! | `trash_dupes`       | `disky trash <path>... --title "Duplicates"`     |
 //!
 //! Preferences live in the engine's one store (`disky::prefs`): every view
 //! reads its goal and toggles from it, and Settings writes it through
@@ -43,6 +45,8 @@
 //! @implements REQ-DSCR-004
 //! @implements REQ-DSCR-006
 //! @implements REQ-DSCR-013
+//! @implements REQ-DSCR-005
+//! @implements REQ-DSCR-014
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -51,8 +55,8 @@ use std::time::{Duration, Instant};
 
 use disky::cleanup::CleanupHit;
 use disky::contract::{
-    self, CleanResult, CleanupView, EngineError, HistoryView, LargeFilter, LargeView, MapView,
-    RestoreResult, TrashResult,
+    self, CleanResult, CleanupView, DupesView, EngineError, HistoryView, LargeFilter, LargeView,
+    MapView, RestoreResult, TrashResult,
 };
 use disky::prefs::{self, Prefs};
 use disky::{history, scan as engine_scan, snapshots};
@@ -76,6 +80,10 @@ struct Engine {
     /// Paths the last Large files list showed. `trash_large` trashes only
     /// these (REQ-DSCR-006.A2).
     large: Mutex<Vec<String>>,
+    /// Copy paths of each group the last Duplicates result showed.
+    /// `trash_dupes` trashes only these, and never every copy of a group
+    /// (REQ-DSCR-006.A2, A3).
+    dupes: Mutex<Vec<Vec<String>>>,
 }
 
 type CmdResult<T> = Result<T, EngineError>;
@@ -317,6 +325,48 @@ async fn trash_large(app: AppHandle, paths: Vec<String>) -> CmdResult<TrashResul
     .await
 }
 
+/// The duplicate groups in the latest snapshot (REQ-DSCR-005,
+/// REQ-DSCR-014), hashed on a blocking thread; null when no snapshot exists
+/// yet. The groups become the only paths `trash_dupes` will move. CLI:
+/// `disky dupes`.
+#[tauri::command]
+async fn load_dupes(app: AppHandle) -> CmdResult<Option<DupesView>> {
+    blocking(move || {
+        let Some(snapshot) = snapshots::latest_snapshot() else {
+            app.state::<Engine>().dupes.lock().unwrap().clear();
+            return Ok(None);
+        };
+        let view =
+            contract::dupes_view(&snapshot, disky::dupes::DEFAULT_MIN_BYTES, &read_prefs()?)?;
+        *app.state::<Engine>().dupes.lock().unwrap() = view.group_paths();
+        Ok(Some(view))
+    })
+    .await
+}
+
+/// Move the non-kept duplicate copies to the Trash with one "Duplicates"
+/// history entry (REQ-DSCR-006, REQ-DSCR-014.A4). The groups come from the
+/// last `load_dupes`, so a call that would remove every copy of a group is
+/// refused and moves nothing. Handled paths leave their groups; a group's
+/// last copy stays guarded. CLI: `disky trash <path>... --title Duplicates`.
+#[tauri::command]
+async fn trash_dupes(app: AppHandle, paths: Vec<String>) -> CmdResult<TrashResult> {
+    blocking(move || {
+        let groups = app.state::<Engine>().dupes.lock().unwrap().clone();
+        let result = contract::trash_dupes(
+            &groups,
+            &paths,
+            &history::log_path(),
+            &contract::user_trash_root()?,
+        )?;
+        for g in app.state::<Engine>().dupes.lock().unwrap().iter_mut() {
+            g.retain(|p| !result.handled.contains(p));
+        }
+        Ok(result)
+    })
+    .await
+}
+
 /// Open System Settings at Full Disk Access (REQ-DCLEAN-018.A2).
 #[tauri::command]
 async fn open_full_disk_access() -> CmdResult<()> {
@@ -348,6 +398,8 @@ fn main() {
             reveal_in_finder,
             load_large,
             trash_large,
+            load_dupes,
+            trash_dupes,
             open_full_disk_access
         ])
         .run(tauri::generate_context!())

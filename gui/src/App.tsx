@@ -2,6 +2,7 @@ import { HashRouter, type RouteDefinition } from "@solidjs/router";
 import type { JSX } from "solid-js";
 import { AppShell } from "./shell/AppShell";
 import { NAV_ITEMS } from "./shell/nav";
+import { Duplicates } from "./screens/Duplicates";
 import { History } from "./screens/History";
 import { LargeFiles } from "./screens/LargeFiles";
 import { Placeholder } from "./screens/Placeholder";
@@ -15,6 +16,7 @@ const SCREENS: Partial<Record<NavId, () => JSX.Element>> = {
   clean: () => <SmartClean />,
   map: () => <SpaceMap />,
   large: () => <LargeFiles />,
+  dupes: () => <Duplicates />,
   history: () => <History />,
   settings: () => <Settings />,
 };

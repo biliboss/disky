@@ -668,6 +668,12 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             let view = contract::large_view(&db, filter, &p)?;
             render::large(&view, format)?;
         }
+        Command::Dupes { min_size, snapshot } => {
+            let db = snapshots::resolve(&snapshot)?;
+            let p = prefs::load(&prefs::prefs_path())?;
+            let view = contract::dupes_view(&db, min_size, &p)?;
+            render::dupes(&view, format)?;
+        }
         Command::Trash { paths, title } => {
             let cwd = std::env::current_dir()?;
             let paths: Vec<String> = paths

@@ -332,21 +332,7 @@ pub fn large_files_count_in(conn: &Connection, ctx: &cleanup::ScanContext) -> Re
     let mut sql =
         String::from("SELECT count(*) FROM files WHERE NOT is_dir AND physical_size >= ?");
     let mut params: Vec<Value> = vec![Value::BigInt(LARGE_FILE_BYTES as i64)];
-    for e in &ctx.excluded {
-        let e = e.trim_end_matches('/');
-        if e.is_empty() {
-            return Ok(0); // excluding `/` excludes everything
-        }
-        sql.push_str(" AND NOT (path = ? OR (path >= ? AND path < ?))");
-        params.push(Value::Text(e.to_string()));
-        params.push(Value::Text(format!("{e}/")));
-        params.push(Value::Text(format!("{e}0")));
-    }
-    if let Some(cutoff) = ctx.recent_cutoff {
-        // NULL mtime → not provably unused → not counted.
-        sql.push_str(" AND mtime < ?");
-        params.push(Value::BigInt(cutoff));
-    }
+    crate::large::scope_clause(ctx, &mut sql, &mut params);
     let refs: Vec<&dyn duckdb::ToSql> = params.iter().map(|v| v as &dyn duckdb::ToSql).collect();
     let n: i64 = conn.query_row(&sql, refs.as_slice(), |r| r.get(0))?;
     Ok(n.max(0) as u64)
@@ -426,6 +412,19 @@ pub fn large_view(
     let conn = crate::db::open(snapshot_path)?;
     let ctx = cleanup::ScanContext::from_snapshot(&conn).with_prefs(prefs);
     crate::large::large(&conn, filter, &ctx, ctx.now_secs)
+}
+
+pub use crate::dupes::{DupeCopy, DupeGroup, DupesView};
+
+/// The Duplicates screen's groups in the snapshot at `snapshot_path`
+/// (REQ-DSCR-005): byte-identical regular files of at least `min_size`
+/// logical bytes, largest reclaimable first. Excluded folders are left out
+/// and, with skip-recently-used on, so are files modified in the last 30
+/// days (REQ-DSCR-002.A1, A2). CLI: `disky dupes [--min-size …]`.
+pub fn dupes_view(snapshot_path: &str, min_size: u64, prefs: &Preferences) -> Result<DupesView> {
+    let conn = crate::db::open(snapshot_path)?;
+    let ctx = cleanup::ScanContext::from_snapshot(&conn).with_prefs(prefs);
+    crate::dupes::dupes(&conn, min_size, &ctx)
 }
 
 /// What moving reviewed files to the Trash did (REQ-DSCR-006.A1).
@@ -566,6 +565,30 @@ pub fn trash_reviewed(
         handled: outcome.handled,
         failed: outcome.failed,
     })
+}
+
+/// Move duplicate copies to the Trash with one "Duplicates" history entry
+/// (REQ-DSCR-014.A4) — [`trash_reviewed`] with the listed paths and groups
+/// taken from `groups`, the duplicates result the user is looking at. A
+/// path outside the groups is refused (REQ-DSCR-006.A2), and so is a call
+/// that would remove every copy of any group (A3); either way nothing
+/// moves. A group whose other copies were already trashed still guards its
+/// last copy. CLI: `disky trash <path>... --title Duplicates`.
+pub fn trash_dupes(
+    groups: &[Vec<String>],
+    paths: &[String],
+    log: &Path,
+    trash_root: &Path,
+) -> Result<TrashResult> {
+    let listed: Vec<String> = groups.concat();
+    trash_reviewed(
+        &listed,
+        paths,
+        Some(groups),
+        history::TITLE_DUPLICATES,
+        log,
+        trash_root,
+    )
 }
 
 /// Progress event for a running scan. The walk's total is unknown up front,
@@ -1266,6 +1289,111 @@ mod tests {
         .unwrap();
         assert_eq!(r.handled, [b]);
         assert!(Path::new(&a).exists());
+    }
+
+    #[test]
+    fn trash_dupes_keeps_one_copy_of_every_group() {
+        let tmp = tempfile::tempdir().unwrap();
+        let trash = tmp.path().join("Trash");
+        let log = tmp.path().join("history.json");
+        let a1 = write_file(&tmp.path().join("x/a.bin"), 10);
+        let a2 = write_file(&tmp.path().join("y/a.bin"), 10);
+        let b1 = write_file(&tmp.path().join("x/b.bin"), 20);
+        let b2 = write_file(&tmp.path().join("y/b.bin"), 20);
+        let b3 = write_file(&tmp.path().join("z/b.bin"), 20);
+        let groups = vec![
+            vec![a1.clone(), a2.clone()],
+            vec![b1.clone(), b2.clone(), b3.clone()],
+        ];
+
+        // Every copy of `b`, even alongside a fine pick from `a`: refused whole.
+        let err = trash_dupes(
+            &groups,
+            &[a2.clone(), b1.clone(), b2.clone(), b3.clone()],
+            &log,
+            &trash,
+        )
+        .unwrap_err();
+        assert_eq!(EngineError::from(err).title, REFUSED_EVERY_COPY);
+        assert!([&a1, &a2, &b1, &b2, &b3]
+            .iter()
+            .all(|p| Path::new(p.as_str()).exists()));
+        assert!(!log.exists(), "nothing moved, no entry");
+
+        // A path outside the groups: refused.
+        let stray = write_file(&tmp.path().join("stray.bin"), 10);
+        let err = trash_dupes(&groups, std::slice::from_ref(&stray), &log, &trash).unwrap_err();
+        assert_eq!(EngineError::from(err).title, REFUSED_NOT_LISTED);
+
+        // One kept per group: moved, one "Duplicates" entry.
+        let r = trash_dupes(&groups, &[a2.clone(), b2.clone(), b3.clone()], &log, &trash).unwrap();
+        assert_eq!(r.handled, [a2.clone(), b2.clone(), b3.clone()]);
+        assert!(Path::new(&a1).exists() && Path::new(&b1).exists());
+        let entries = history::load(&log).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].title, history::TITLE_DUPLICATES);
+
+        // The last copy left in a group stays guarded.
+        let left = vec![vec![a1.clone()], vec![b1.clone()]];
+        let err = trash_dupes(&left, std::slice::from_ref(&a1), &log, &trash).unwrap_err();
+        assert_eq!(EngineError::from(err).title, REFUSED_EVERY_COPY);
+        assert!(Path::new(&a1).exists());
+    }
+
+    #[test]
+    fn dupes_view_reads_the_snapshot_with_prefs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = tmp.path().join("s.db");
+        let db = db.to_str().unwrap();
+        let files: Vec<String> = ["ex/a.bin", "b.bin", "c.bin"]
+            .iter()
+            .map(|r| write_file(&tmp.path().join("u").join(r), 2048))
+            .collect();
+        {
+            let conn = crate::db::open(db).unwrap();
+            crate::db::create_schema(&conn).unwrap();
+            for p in &files {
+                let meta = std::fs::metadata(p).unwrap();
+                let mtime = meta
+                    .modified()
+                    .unwrap()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                conn.execute(
+                    "INSERT INTO files (path, name, size, physical_size, mtime, is_dir, depth)
+                     VALUES (?, ?, 2048, 4096, ?, false, 2)",
+                    duckdb::params![p, basename(p), mtime],
+                )
+                .unwrap();
+            }
+            let root = tmp.path().join("u");
+            crate::db::write_scan_meta(&conn, root.to_str().unwrap(), 0, Some(1), true, 0, 0)
+                .unwrap();
+        }
+        let include_recent = Preferences {
+            skip_recently_used: false,
+            ..Preferences::default()
+        };
+        let v = dupes_view(db, 1, &include_recent).unwrap();
+        assert_eq!(v.groups, 1);
+        assert_eq!(v.records[0].copies.len(), 3);
+        assert_eq!(v.records[0].bytes, 4096, "physical bytes per copy");
+        let excluded = Preferences {
+            excluded: vec![tmp.path().join("u/ex").to_string_lossy().into_owned()],
+            ..include_recent.clone()
+        };
+        assert_eq!(
+            dupes_view(db, 1, &excluded).unwrap().records[0]
+                .copies
+                .len(),
+            2
+        );
+        // Default prefs skip recently used files: these were just written.
+        assert_eq!(
+            dupes_view(db, 1, &Preferences::default()).unwrap().groups,
+            0
+        );
     }
 
     #[test]

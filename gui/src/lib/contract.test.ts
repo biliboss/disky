@@ -6,6 +6,7 @@ import {
   parseCleanProgress,
   parseCleanResult,
   parseCleanupView,
+  parseDupesView,
   parseEngineError,
   parseHistoryView,
   parseLargeView,
@@ -326,4 +327,32 @@ function parsesATrashResult() {
 describe("large files and trash contract (REQ-DSCR-004, REQ-DSCR-006)", () => {
   it("parses a large view and rejects bad fields", parsesALargeViewAndRejectsBadFields);
   it("parses a trash result", parsesATrashResult);
+});
+
+function parsesADupesViewAndRejectsBadGroups() {
+  const dupes = {
+    min_size: 1e6,
+    groups: 1,
+    extra_copies: 1,
+    reclaimable_bytes: 4e6,
+    records: [
+      {
+        name: "a.mov",
+        bytes: 4e6,
+        copies: [
+          { path: "/Users/me/x/a.mov", location: "~/x", mtime: "2024-01-01T00:00:00Z" },
+          { path: "/Users/me/y/a.mov", location: "~/y", mtime: null },
+        ],
+      },
+    ],
+  };
+  expect(parseDupesView(dupes)).toEqual(dupes);
+  const g = dupes.records[0];
+  expect(() => parseDupesView({ ...dupes, records: [{ ...g, copies: [g.copies[0]] }] })).toThrow(ContractError);
+  expect(() => parseDupesView({ ...dupes, records: [{ ...g, bytes: -1 }] })).toThrow(ContractError);
+  expect(() => parseDupesView({ ...dupes, extra_copies: "1" })).toThrow(ContractError);
+}
+
+describe("duplicates contract (REQ-DSCR-005)", () => {
+  it("parses a dupes view and rejects bad groups", parsesADupesViewAndRejectsBadGroups);
 });

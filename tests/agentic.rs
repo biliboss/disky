@@ -1104,3 +1104,108 @@ fn schema_lists_the_large_and_trash_commands() {
     assert!(cmds.iter().any(|c| c["name"] == "trash"));
     assert!(v["records"]["LargeFile"].is_object());
 }
+
+/// A temp HOME with recent files included, and `<home>/pics` holding two
+/// byte-identical photos, a same-named different photo, and a hard link.
+/// Returns `(home, snapshot db)`.
+fn dupes_fixture() -> (PathBuf, PathBuf) {
+    let home = home_including_recent();
+    let pics = home.join("pics");
+    fs::create_dir_all(pics.join("a")).unwrap();
+    fs::create_dir_all(pics.join("b")).unwrap();
+    fs::write(pics.join("a/IMG_1.HEIC"), vec![5u8; 2048]).unwrap();
+    fs::write(pics.join("b/IMG_1 copy.HEIC"), vec![5u8; 2048]).unwrap();
+    fs::write(pics.join("b/IMG_1.HEIC"), vec![6u8; 2048]).unwrap();
+    fs::hard_link(pics.join("a/IMG_1.HEIC"), pics.join("a/link.HEIC")).unwrap();
+    let db = home.join("snap.db");
+    let out = run_in_home(
+        &home,
+        &["scan", pics.to_str().unwrap(), "--db", db.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "scan: {:?}", out);
+    (home, db)
+}
+
+#[test]
+fn dupes_cli_json_envelope() {
+    let (home, db) = dupes_fixture();
+    let v = json_in_home(
+        &home,
+        &[
+            "dupes",
+            "--min-size",
+            "1",
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(v["kind"], "dupes");
+    assert_eq!(v["min_size"], 1);
+    assert_eq!(v["groups"], 1, "{v}");
+    assert_eq!(v["extra_copies"], 1, "the hard link counts once");
+    let g = &v["records"][0];
+    assert!(g["bytes"].as_u64().unwrap() >= 2048);
+    assert_eq!(v["reclaimable_bytes"], g["bytes"]);
+    let copies: Vec<&str> = g["copies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(copies.len(), 2);
+    assert!(
+        copies.iter().any(|p| p.ends_with("b/IMG_1 copy.HEIC")),
+        "same bytes, different name: {copies:?}"
+    );
+    assert!(
+        !copies.iter().any(|p| p.ends_with("b/IMG_1.HEIC")),
+        "same name, different bytes is not a duplicate"
+    );
+    // Default minimum (1 MB) leaves these 2 KB files out.
+    let d = json_in_home(
+        &home,
+        &[
+            "dupes",
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(
+        (d["groups"].as_u64(), d["min_size"].as_u64()),
+        (Some(0), Some(1_000_000))
+    );
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn dupes_bad_min_size_exits_2() {
+    let home = temp_dir();
+    for bad in ["0", "lots", "-5"] {
+        let out = run_in_home(&home, &["dupes", "--min-size", bad, "--format", "json"]);
+        assert_eq!(out.status.code(), Some(2), "{bad}: {out:?}");
+    }
+    let out = run_in_home(
+        &home,
+        &[
+            "dupes",
+            "--snapshot",
+            "1999-01-01_00-00",
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(4));
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn schema_lists_the_dupes_command() {
+    let v = run_json(&["schema"]);
+    let cmds = v["commands"].as_array().unwrap();
+    assert!(cmds.iter().any(|c| c["name"] == "dupes"));
+    assert!(v["records"]["DupeGroup"].is_object());
+}

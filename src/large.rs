@@ -115,6 +115,40 @@ pub fn is_unused(atime: Option<i64>, now: i64) -> bool {
     atime.is_some_and(|a| now - a > UNUSED_DAYS * 86_400)
 }
 
+/// Append ` AND …` conditions on `files.path` that leave out everything
+/// inside `ctx.excluded` (whole path components; excluding `/` excludes
+/// everything) — REQ-DSCR-002.A1. Shared by the Large files list, its
+/// Smart Clean count and the duplicates finder, so they scope alike.
+pub(crate) fn excluded_clause(ctx: &ScanContext, sql: &mut String, params: &mut Vec<Value>) {
+    for e in &ctx.excluded {
+        let e = e.trim_end_matches('/');
+        if e.is_empty() {
+            sql.push_str(" AND false");
+            return;
+        }
+        sql.push_str(" AND NOT (path = ? OR (path >= ? AND path < ?))");
+        params.push(Value::Text(e.to_string()));
+        params.push(Value::Text(format!("{e}/")));
+        params.push(Value::Text(format!("{e}0")));
+    }
+}
+
+/// With skip-recently-used on, append ` AND mtime < cutoff`: a file
+/// modified since the cutoff — or of unknown mtime, not provably unused —
+/// is left out (REQ-DSCR-002.A2).
+pub(crate) fn recent_clause(ctx: &ScanContext, sql: &mut String, params: &mut Vec<Value>) {
+    if let Some(cutoff) = ctx.recent_cutoff {
+        sql.push_str(" AND mtime < ?");
+        params.push(Value::BigInt(cutoff));
+    }
+}
+
+/// [`excluded_clause`] then [`recent_clause`]: the preferences' whole scope.
+pub(crate) fn scope_clause(ctx: &ScanContext, sql: &mut String, params: &mut Vec<Value>) {
+    excluded_clause(ctx, sql, params);
+    recent_clause(ctx, sql, params);
+}
+
 /// The large files in the snapshot on `conn` for `filter`, scoped by `ctx`:
 /// excluded folders are left out, and with skip-recently-used on so is any
 /// file modified at or after `ctx.recent_cutoff` (or of unknown mtime)
@@ -139,22 +173,7 @@ pub fn large(
          WHERE NOT is_dir AND physical_size >= ?"
     );
     let mut params: Vec<Value> = vec![Value::BigInt(min as i64)];
-    for e in &ctx.excluded {
-        let e = e.trim_end_matches('/');
-        if e.is_empty() {
-            sql.push_str(" AND false"); // excluding `/` excludes everything
-            break;
-        }
-        sql.push_str(" AND NOT (path = ? OR (path >= ? AND path < ?))");
-        params.push(Value::Text(e.to_string()));
-        params.push(Value::Text(format!("{e}/")));
-        params.push(Value::Text(format!("{e}0")));
-    }
-    if let Some(cutoff) = ctx.recent_cutoff {
-        // NULL mtime → not provably unused → left out, as in the count.
-        sql.push_str(" AND mtime < ?");
-        params.push(Value::BigInt(cutoff));
-    }
+    scope_clause(ctx, &mut sql, &mut params);
     sql.push_str(" ORDER BY physical_size DESC, path");
 
     let refs: Vec<&dyn duckdb::ToSql> = params.iter().map(|v| v as &dyn duckdb::ToSql).collect();

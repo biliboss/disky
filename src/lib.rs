@@ -10,6 +10,7 @@ pub mod config;
 pub mod contract;
 pub mod db;
 pub mod disk;
+pub mod dupes;
 pub mod duration;
 pub mod envelope;
 pub mod exit;

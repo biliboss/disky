@@ -21,6 +21,7 @@ export const THEMED_EXCEPTIONS = [
   { cls: "switch", css: "src/screens/settings/settings.css" },
   { cls: "chip-remove", css: "src/screens/settings/settings.css" },
   { cls: "map-tile", css: "src/screens/spaceMap/spaceMap.css" },
+  { cls: "dupe-copy", css: "src/screens/duplicates/duplicates.css" },
 ];
 
 export const THEMED_EXCEPTION_CLASSES = THEMED_EXCEPTIONS.map((e) => e.cls);

@@ -228,6 +228,46 @@ verifies:
 <!-- id: REQ-DSCR-005 -->
 ## The engine MUST find duplicate files by content
 
+implementations:
+  - src/dupes.rs:DupeCopy
+  - src/dupes.rs:DupeGroup
+  - src/dupes.rs:DupesView
+  - src/dupes.rs:dupes
+  - src/dupes.rs:candidates
+  - src/dupes.rs:recheck
+  - src/dupes.rs:prefix_hash
+  - src/dupes.rs:full_hash
+  - src/dupes.rs:group
+  - src/large.rs:scope_clause
+  - src/contract.rs:dupes_view
+  - src/render.rs:dupes
+  - src/cli.rs:Command
+  - src/cli.rs:parse_min_size
+  - src/schema.rs:commands
+  - gui/src-tauri/src/main.rs:load_dupes
+  - gui/src/lib/contract.ts:parseDupesView
+  - gui/src/lib/engine.ts:loadDupes
+
+verifies:
+  - src/dupes.rs:same_content_groups_name_alone_never_does
+  - src/dupes.rs:below_min_size_ignored
+  - src/dupes.rs:copies_ordered_oldest_mtime_first
+  - src/dupes.rs:groups_sorted_by_reclaimable_with_totals
+  - src/dupes.rs:changed_or_vanished_file_dropped_and_group_below_two_omitted
+  - src/dupes.rs:hard_links_count_once
+  - src/dupes.rs:excluded_folder_left_out
+  - src/dupes.rs:recently_modified_left_out_when_skip_recently_used
+  - src/dupes.rs:prefix_prefilter_spares_the_full_hash
+  - src/dupes.rs:full_hash_decides_past_the_prefix
+  - src/dupes.rs:unreadable_file_is_dropped
+  - src/dupes.rs:home_shown_as_tilde_in_location
+  - src/contract.rs:dupes_view_reads_the_snapshot_with_prefs
+  - src/schema.rs:dupes_command_is_listed_with_its_record
+  - tests/agentic.rs:dupes_cli_json_envelope
+  - tests/agentic.rs:dupes_bad_min_size_exits_2
+  - tests/agentic.rs:schema_lists_the_dupes_command
+  - gui/src/lib/contract.test.ts:parsesADupesViewAndRejectsBadGroups
+
 **Acceptance**
 <!-- id: REQ-DSCR-005.A1 -->
 - `disky dupes --snapshot <ref> --format json [--min-size <bytes>]` groups regular files whose contents are byte-identical. It compares sizes first, then a full content hash, and never decides by name alone. Each group has:
@@ -251,6 +291,7 @@ implementations:
   - src/contract.rs:trash_reviewed
   - src/contract.rs:user_trash_root
   - src/contract.rs:physical_bytes_on_disk
+  - src/contract.rs:trash_dupes
   - src/cleanup.rs:apply_observed
   - src/render.rs:trash
   - src/cli.rs:Command
@@ -258,11 +299,14 @@ implementations:
   - gui/src-tauri/src/main.rs:trash_large
   - gui/src/lib/contract.ts:parseTrashResult
   - gui/src/lib/engine.ts:trashLarge
+  - gui/src-tauri/src/main.rs:trash_dupes
+  - gui/src/lib/engine.ts:trashDupes
 
 verifies:
   - src/contract.rs:trash_reviewed_moves_listed_files_and_writes_one_titled_entry
   - src/contract.rs:trash_reviewed_refuses_a_path_not_listed
   - src/contract.rs:trash_reviewed_refuses_every_copy_of_a_group
+  - src/contract.rs:trash_dupes_keeps_one_copy_of_every_group
   - tests/agentic.rs:trash_moves_named_paths_and_records_one_titled_entry
   - tests/agentic.rs:schema_lists_the_large_and_trash_commands
   - gui/src/lib/contract.test.ts:parsesATrashResult
@@ -474,6 +518,34 @@ verifies:
 
 <!-- id: REQ-DSCR-014 -->
 ## The Duplicates screen MUST let the user choose which copy to keep and remove the rest to the Trash
+
+implementations:
+  - gui/src/screens/Duplicates.tsx:Duplicates
+  - gui/src/screens/duplicates/dupesCopy.ts:kicker
+  - gui/src/screens/duplicates/dupesCopy.ts:eachLabel
+  - gui/src/screens/duplicates/dupesCopy.ts:extraCopies
+  - gui/src/screens/duplicates/dupesCopy.ts:freedBytes
+  - gui/src/screens/duplicates/dupesCopy.ts:footNote
+  - gui/src/screens/duplicates/dupesCopy.ts:removeLabel
+  - gui/src/screens/duplicates/dupesCopy.ts:failureMessage
+  - gui/src/lib/engine.ts:trashDupes
+  - gui/src-tauri/src/main.rs:trash_dupes
+  - src/contract.rs:trash_dupes
+  - gui/src/App.tsx:SCREENS
+
+verifies:
+  - gui/src/screens/__tests__/Duplicates.test.tsx:listsGroupsAsCardsWithKickerAndEachTag
+  - gui/src/screens/__tests__/Duplicates.test.tsx:firstCopyIsKeptAndClickingChoosesAnother
+  - gui/src/screens/__tests__/Duplicates.test.tsx:arrowKeysMoveTheKeptCopyWithinAGroup
+  - gui/src/screens/__tests__/Duplicates.test.tsx:removeTrashesEveryNonKeptCopyThenHandledVanish
+  - gui/src/screens/__tests__/Duplicates.test.tsx:aRefusalIsShownAndNothingVanishes
+  - gui/src/screens/__tests__/Duplicates.test.tsx:emptyNoSnapshotAndBusyStates
+  - gui/src/screens/__tests__/Duplicates.test.tsx:copyIsWordedFromEngineFigures
+  - gui/tests/visual/duplicates.spec.ts:duplicatesMatchesSnapshot
+  - gui/tests/visual/duplicates.spec.ts:duplicatesPassesAxe
+  - gui/tests/visual/duplicates.spec.ts:keyboardChoosesACopyThenRemovesExtras
+  - gui/tests/visual/duplicates.spec.ts:noSnapshotOffersStartScan
+  - src/contract.rs:trash_dupes_keeps_one_copy_of_every_group
 
 **Acceptance**
 <!-- id: REQ-DSCR-014.A1 -->

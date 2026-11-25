@@ -36,6 +36,8 @@ const COMMANDS = [
   "reveal_in_finder",
   "load_large",
   "trash_large",
+  "load_dupes",
+  "trash_dupes",
 ];
 
 /** Category ids, read from the engine's single table. */

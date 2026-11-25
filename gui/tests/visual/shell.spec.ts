@@ -50,9 +50,9 @@ async function trafficLightSlotSitsWhereSnapshotDrawsDots({ page }: { page: Page
 
 async function placeholderScreensKeepTheShell({ page }: { page: Page }) {
   for (const [hash, title] of [
+    // History, Space map, Large files and Duplicates are real screens now
+    // (REQ-DSCR-012, -013, -014, -015).
     ["#/assistant", "Assistant"],
-    // History and Space map are real screens now (REQ-DSCR-012, -015).
-    ["#/duplicates", "Duplicates"],
   ]) {
     await openApp(page, hash);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);

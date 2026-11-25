@@ -11,6 +11,7 @@ import {
   parseCleanProgress,
   parseCleanResult,
   parseCleanupView,
+  parseDupesView,
   parseEngineError,
   parseHistoryView,
   parseLargeView,
@@ -23,6 +24,7 @@ import {
   type CleanProgress,
   type CleanResult,
   type CleanupView,
+  type DupesView,
   type HistoryView,
   type LargeFilter,
   type LargeView,
@@ -185,6 +187,29 @@ export async function loadLarge(filter: LargeFilter): Promise<LargeView | null> 
  */
 export async function trashLarge(paths: string[]): Promise<TrashResult> {
   const result = parseTrashResult(await call("trash_large", { paths }));
+  setDisk(result.disk);
+  return result;
+}
+
+/**
+ * The duplicate groups in the latest snapshot (REQ-DSCR-005), computed on a
+ * blocking thread in the backend. The backend remembers the groups: their
+ * copies are the only paths `trashDupes` may move, and never every copy of
+ * a group (REQ-DSCR-006.A2, A3). Resolves null when there is no snapshot
+ * yet. CLI: `disky dupes --format json`.
+ */
+export async function loadDupes(): Promise<DupesView | null> {
+  const raw = await call("load_dupes");
+  return raw === null ? null : parseDupesView(raw);
+}
+
+/**
+ * Move exactly `paths` — the copies not kept — to the Trash with one
+ * "Duplicates" history entry (REQ-DSCR-006, REQ-DSCR-014.A4). The meter
+ * follows the post-move disk. CLI: `disky trash <path>... --title Duplicates`.
+ */
+export async function trashDupes(paths: string[]): Promise<TrashResult> {
+  const result = parseTrashResult(await call("trash_dupes", { paths }));
   setDisk(result.disk);
   return result;
 }

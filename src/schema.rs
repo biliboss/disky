@@ -104,6 +104,12 @@ fn commands() -> Value {
             "errors": "not-found (snapshot)"
         },
         {
+            "name": "dupes",
+            "args": { "min_size": "bytes (default 1MB = 1000000; KB/MB/GB decimal, KiB/MiB/GiB binary)", "snapshot": "@latest|<id>|<path>" },
+            "output": "dupes envelope: {kind:'dupes', min_size:u64, groups:u64, extra_copies:u64, reclaimable_bytes:u64 (physical), records:[DupeGroup]} — regular files with byte-identical contents (size, then a full BLAKE3 hash; never by name), largest reclaimable (bytes x (copies - 1)) first; each file re-checked on disk, hard links count once; excluded folders and skip_recently_used (prefs) apply",
+            "errors": "usage (bad --min-size), not-found (snapshot)"
+        },
+        {
             "name": "trash",
             "args": { "paths": "string[] (required; named paths count as reviewed)", "title": "string (history entry title, default 'Cleanup')" },
             "output": "trash envelope: {kind:'trash', handled:[string], failed:[{path, reason}], freed_physical_bytes:u64, history_id:string?, disk:{volume, capacity_bytes, free_bytes}} — one history entry with the given title; restorable via `disky restore <id>`"
@@ -203,6 +209,8 @@ fn records() -> Value {
         "HistoryRow":      { "...": "every HistoryEntry field", "detail": "string (category names, or file names for 'Large files' / 'Duplicates'; '<n> files' past three)", "state": "restorable|restored|emptied|deleted (emptied: trash entry 30+ days old)" },
         "LargeFile":       { "name": "string", "path": "string (absolute)", "location": "string (parent folder, home as ~)", "bytes": "u64 (physical)", "last_opened": "string? (RFC3339 UTC access time; null for snapshots taken before access times were recorded)", "unused_1y": "bool (last opened more than 365 days ago)" },
         "MapChild":        { "name": "string", "path": "string (absolute)", "bytes": "u64 (physical, recursive)", "has_children": "bool" },
+        "DupeGroup":       { "name": "string (first copy's basename)", "bytes": "u64 (physical, per copy)", "copies": "DupeCopy[] (2+, oldest mtime first)" },
+        "DupeCopy":        { "path": "string (absolute)", "location": "string (parent folder, home as ~)", "mtime": "string? (RFC3339 UTC)" },
         "HistoryItem":     { "original_path": "string", "trash_path": "string? (null in delete mode)", "bytes": "u64", "status": "in_trash|restored|conflict|missing|deleted" },
         "RestoreReport":   { "id": "string", "restored": "string[]", "conflicts": "string[]", "missing": "string[] (no longer in Trash)" },
         "Prefs":           { "trash_by_default": "bool", "skip_recently_used": "bool (leave out items modified in the last 30 days)", "safe_only": "bool", "warn_below_goal": "bool", "goal_bytes": "u64", "checks": { "enabled": "bool", "frequency": "hourly|daily|weekly" }, "agent": "claude|codex|gemini", "scheduled_scan": "off|weekly|monthly", "excluded": "string[] (absolute or ~/ folders; never touched by cleanup)" },
@@ -272,6 +280,20 @@ mod tests {
     }
 
     #[test]
+    fn dupes_command_is_listed_with_its_record() {
+        let doc = document();
+        let dupes = doc["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "dupes")
+            .expect("dupes command in schema");
+        assert!(dupes["args"]["min_size"].is_string());
+        assert!(dupes["output"].as_str().unwrap().contains("kind:'dupes'"));
+        assert!(doc["records"]["DupeGroup"]["copies"].is_string());
+    }
+
+    #[test]
     fn prefs_command_lists_every_key() {
         let doc = document();
         let prefs = doc["commands"]
@@ -305,6 +327,8 @@ mod tests {
             "HistoryRow",
             "MapChild",
             "LargeFile",
+            "DupeGroup",
+            "DupeCopy",
             "RestoreReport",
             "Prefs",
         ] {
