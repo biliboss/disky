@@ -83,6 +83,11 @@
   background: var(--color-neutral-200);
 }
 
+/* REQ-DCLEAN-015: pressed shortcut card. */
+.shortcut:active {
+  background: var(--color-shortcut-active);
+}
+
 .shortcut-icon {
   width: var(--shortcut-icon);
   height: var(--shortcut-icon);
@@ -322,7 +327,8 @@
   background: var(--overlay-row-hover);
 }
 
-/* REQ-DCLEAN-012.A2: round selection control. */
+/* REQ-DCLEAN-012.A2: round selection control. The unchecked border is
+   --color-check-border (REQ-DCLEAN-024.A4: 3:1 against the row surface). */
 .result-check {
   width: var(--checkbox-size);
   height: var(--checkbox-size);
@@ -332,14 +338,32 @@
   display: inline-grid;
   place-items: center;
   cursor: pointer;
-  border: var(--check-border) solid var(--color-neutral-400);
+  border: var(--check-border) solid var(--color-check-border);
   background: transparent;
   color: var(--color-bg);
 }
 
+/* REQ-DCLEAN-013 / 015: hover and pressed, unchecked. */
+.result-check:hover {
+  border-color: var(--color-check-hover);
+}
+
+.result-check:active {
+  background: var(--overlay-active);
+}
+
 .result-check[aria-checked="true"] {
-  border-color: var(--color-accent);
+  border-color: var(--color-check-border-checked);
   background: var(--color-accent);
+}
+
+/* Hover and pressed, checked. */
+.result-check[aria-checked="true"]:hover {
+  background: var(--color-check-checked-hover);
+}
+
+.result-check[aria-checked="true"]:active {
+  background: var(--color-check-checked-active);
 }
 
 .result-check-glyph {
@@ -459,6 +483,13 @@
   text-align: right;
 }
 
+.result-more {
+  margin: 0;
+  padding: var(--more-items-py) 0 0;
+  font-size: var(--fs-item);
+  color: var(--color-neutral-700);
+}
+
 .result-no-items {
   margin: 0;
   padding: var(--item-py) 0;
@@ -500,9 +531,6 @@
   gap: var(--results-empty-gap);
 }
 
-.results-title:focus {
-  outline: none; /* programmatic focus target only (REQ-DCLEAN-022.A4) */
-}
 
 /* ── Confirm clean (REQ-DCLEAN-007/022) ───────────────────────── */
 /* Geometry from snapshot.html's confirm dialog; the .dialog* classes come
@@ -551,6 +579,7 @@
 
 /* Destructive primary (REQ-DCLEAN-007.A6): outranks .btn-primary's states. */
 .btn.btn-danger {
+  color: var(--color-bg);
   background: var(--color-danger);
 }
 
@@ -709,6 +738,15 @@
   color: var(--color-accent-700);
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* REQ-DCLEAN-013 / 015: as a link (app.css `a`). */
+.notice-link:hover {
+  color: var(--color-link-hover);
+}
+
+.notice-link:active {
+  color: var(--color-link-active);
 }
 
 .skipped-note {

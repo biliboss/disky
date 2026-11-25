@@ -177,6 +177,35 @@
   /* ── Disabled treatment (REQ-DCLEAN-016.A2) ─────────────────── */
   --opacity-disabled: 0.45;           /* organic.css .btn:disabled */
 
+  /* ── Control states (REQ-DCLEAN-012 … 015, contrast per REQ-DCLEAN-024) ──
+     Each aliases an Organic ramp step. Where the snapshot's pairing misses
+     WCAG 2.2 AA, the next ramp step that passes is used (ratios measured by
+     src/styles/contrast.test.ts). */
+  --color-on-accent: var(--color-text);          /* label on an accent fill: 4.6:1 (--color-bg is 3.0:1) */
+  --color-primary-hover: var(--color-accent-500); /* lighter, so the ink label keeps 4.5:1 */
+  --color-primary-active: var(--color-accent-400);
+  --color-ghost-text: var(--color-accent-700);   /* accent text at body size (REQ-DCLEAN-024.A2) */
+  --color-check-border: var(--color-neutral-600); /* unchecked border: 3.2:1 on surface (-400 is 1.5:1) */
+  --color-check-border-checked: var(--color-accent-700); /* checked edge: 5.1:1 on surface */
+  --color-check-hover: var(--color-accent-700);
+  --color-check-checked-hover: var(--color-accent-600);
+  --color-check-checked-active: var(--color-accent-700);
+  --color-link-hover: var(--color-accent-800);
+  --color-link-active: var(--color-accent-900);
+  --color-shortcut-active: var(--color-neutral-300);
+  --focus-ring-color: var(--color-accent-700);   /* 5.1:1 on surface (--color-accent is 2.7:1) */
+  --focus-ring-inset-color: var(--color-text);   /* inset ring that may sit on an accent fill */
+  --focus-ring-width: 2px;                       /* organic.css :focus-visible */
+  --focus-ring-offset: 2px;
+  --focus-ring-inset-offset: -2px;               /* organic.css .seg-opt focus ring */
+
+  /* ── Screen-reader-only text (REQ-DCLEAN-023) ───────────────── */
+  --sr-only-size: 1px;
+  --sr-only-offset: -1px;
+
+  /* ── Results item cap (REQ-DCLEAN-030.A3) ───────────────────── */
+  --more-items-py: var(--item-py);
+
   /* ── Below-goal notification (REQ-DCLEAN-010) ───────────────── */
   --notify-inset: 16px;               /* snapshot: top:16px; right:16px */
   --notify-w: 360px;

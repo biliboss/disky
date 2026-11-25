@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createResource, createSignal, onCleanup } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createResource, createSignal, on, onCleanup } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { useDelayedBusy } from "../lib/busy";
 import {
@@ -19,7 +19,9 @@ import { Done } from "./smartClean/Done";
 import { Idle } from "./smartClean/Idle";
 import { Results } from "./smartClean/Results";
 import { Scanning } from "./smartClean/Scanning";
-import { cleanFailedMessage, undoNotices } from "./smartClean/doneCopy";
+import { announcement } from "./smartClean/announce";
+import { stepLabel } from "./smartClean/cleaningCopy";
+import { cleanFailedMessage, doneHeading, undoNotices } from "./smartClean/doneCopy";
 import { canRetry, scanErrorMessage } from "./smartClean/errorCopy";
 import {
   backHome,
@@ -47,7 +49,7 @@ import {
 } from "./smartClean/phase";
 import { notificationText } from "./smartClean/idleCopy";
 import { setSmartCleanState as setState, smartCleanState as state } from "./smartClean/store";
-import { selectedBytes } from "./smartClean/resultsCopy";
+import { resultsHeading, selectedBytes } from "./smartClean/resultsCopy";
 import "./smartClean/smartClean.css";
 
 /**
@@ -89,9 +91,18 @@ import "./smartClean/smartClean.css";
  * so the shell's navigation can block itself while a scan or clean runs
  * (REQ-DCLEAN-011); leaving the screen from results or done resets it to idle.
  *
+ * Keyboard and assistive tech: on every phase change focus moves to the new
+ * phase's heading (REQ-DCLEAN-020.A4), except when the confirm dialog opens
+ * with it, which takes focus itself (REQ-DCLEAN-022.A2). A polite live
+ * region announces scan start, each finished category, the results total,
+ * clean start, each category cleaned and the freed total, without moving
+ * focus (REQ-DCLEAN-023).
+ *
  * @implements REQ-DCLEAN-019
  * @implements REQ-DCLEAN-010
  * @implements REQ-DCLEAN-011
+ * @implements REQ-DCLEAN-020
+ * @implements REQ-DCLEAN-023
  */
 export function SmartClean(props: { showNotification?: boolean } = {}) {
   const navigate = useNavigate();
@@ -110,6 +121,8 @@ export function SmartClean(props: { showNotification?: boolean } = {}) {
   const view = () => scanned() ?? ready();
   // REQ-DCLEAN-017.A2: no indicator for a load that finishes within 200 ms.
   const loadingBusy = useDelayedBusy(() => loaded.loading);
+  const [announced, setAnnounced] = createSignal("");
+  let root!: HTMLElement;
 
   createEffect(() => {
     const v = ready();
@@ -246,6 +259,33 @@ export function SmartClean(props: { showNotification?: boolean } = {}) {
   const cleaningName = () =>
     view()?.categories.find((c) => c.id === state().cleaningCategory)?.name ?? "files";
 
+  const categoryName = (id: string) => view()?.catalogue.find((c) => c.id === id)?.name ?? id;
+
+  // REQ-DCLEAN-023 announcements and REQ-DCLEAN-020.A4 heading focus, per transition.
+  createEffect(
+    on(
+      state,
+      (next, prev) => {
+        if (!prev) return;
+        const msg = announcement(prev, next, {
+          categoryName,
+          found: () => resultsHeading(listedCategories(view()?.categories ?? [])),
+          cleared: () => {
+            const r = cleanResult();
+            return r ? doneHeading(r.freed_bytes) : null;
+          },
+          step: () => (next.cleanMode ? stepLabel(next.cleanMode, cleaningName()) : ""),
+        });
+        if (msg) setAnnounced(msg);
+        if (prev.phase !== next.phase && !next.confirming) {
+          queueMicrotask(() => root?.querySelector<HTMLElement>("[data-phase-heading]")?.focus());
+        }
+      },
+      // Not deferred: `on` records the previous state only on runs it does not defer,
+      // and the first run (no previous state) returns early above.
+    ),
+  );
+
   /** "Stop" (REQ-DCLEAN-004.A3): back to idle now; the engine cancels the walk. */
   function endScan() {
     setState(scanStopped);
@@ -253,7 +293,16 @@ export function SmartClean(props: { showNotification?: boolean } = {}) {
   }
 
   return (
-    <section class="smart-clean" data-screen-label="Smart clean" aria-label="Smart Clean" data-phase={state().phase}>
+    <section
+      ref={root}
+      class="smart-clean"
+      data-screen-label="Smart clean"
+      aria-label="Smart Clean"
+      data-phase={state().phase}
+    >
+      <div class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="announcer">
+        {announced()}
+      </div>
       <Switch>
         <Match when={loaded.error}>
           {/* REQ-DCLEAN-029.A4: malformed data → error state, never a partial list. */}

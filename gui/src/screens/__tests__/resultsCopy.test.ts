@@ -16,6 +16,8 @@ import {
   safetyTag,
   selectedBytes,
   totalBytes,
+  moreItemsLabel,
+  visibleItems,
 } from "../smartClean/resultsCopy";
 import { snapshotReviewCategories } from "../../../tests/fixtures/snapshotReview";
 
@@ -134,4 +136,20 @@ describe("results copy (REQ-DCLEAN-005, REQ-DCLEAN-006, REQ-DCLEAN-019)", () => 
   it("Clean label follows the selected total (REQ-DCLEAN-006.A4)", cleanLabelFollowsTheSelectedTotal);
   it("footer note follows trash-by-default (REQ-DCLEAN-006.A5)", safetyNoteFollowsTrashByDefault);
   it("empty and no-items copy (REQ-DCLEAN-019.A1, A3)", emptyCopyMatchesTheSpec);
+});
+
+function visibleItemsKeepsAllUpToTheCap() {
+  const items = [{ bytes: 1 }, { bytes: 3 }, { bytes: 2 }];
+  expect(visibleItems(items, 3)).toEqual({ shown: items, more: 0 }); // engine order kept
+}
+
+function visibleItemsShowsTheLargestBeyondTheCap() {
+  const items = [{ bytes: 1 }, { bytes: 4 }, { bytes: 2 }, { bytes: 3 }];
+  expect(visibleItems(items, 2)).toEqual({ shown: [{ bytes: 4 }, { bytes: 3 }], more: 2 });
+  expect(moreItemsLabel(2)).toBe("+2 more");
+}
+
+describe("item cap (REQ-DCLEAN-030.A3)", () => {
+  it("lists every item up to the cap, in engine order", visibleItemsKeepsAllUpToTheCap);
+  it("beyond the cap lists the largest, then +N more", visibleItemsShowsTheLargestBeyondTheCap);
 });

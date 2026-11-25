@@ -24,7 +24,7 @@ export function Cleaning(props: CleaningProps) {
   const pct = () => Math.round(props.state.progress * 100);
   return (
     <div class="cleaning" data-testid="cleaning" data-screen-label="Smart clean · cleaning">
-      <h1 class="cleaning-title">{CLEANING_HEADING}</h1>
+      <h1 class="cleaning-title" tabIndex={-1} data-phase-heading>{CLEANING_HEADING}</h1>
       <div class="scan-meta" data-testid="clean-meta">
         <span class="scan-path" data-testid="clean-step">
           {stepLabel(props.mode, props.categoryName)}

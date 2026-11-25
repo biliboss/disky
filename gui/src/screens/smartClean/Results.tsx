@@ -13,11 +13,13 @@ import {
   NO_ITEMS,
   cleanLabel,
   disclosureLabel,
+  moreItemsLabel,
   resultsHeading,
   resultsKicker,
   safetyNote,
   safetyTag,
   selectedBytes,
+  visibleItems,
 } from "./resultsCopy";
 
 export interface ResultsProps {
@@ -53,8 +55,17 @@ export interface ResultsProps {
  *
  * @implements REQ-DCLEAN-005
  * @implements REQ-DCLEAN-006
+ * Controls (REQ-DCLEAN-012): the buttons use the design-system classes; the
+ * selection control is the themed round `.result-check`. Each checkbox is
+ * named by its category and described by its safety tag (REQ-DCLEAN-021.A1,
+ * A5). An expanded category lists at most its 200 largest items, then
+ * "+N more" (REQ-DCLEAN-030.A3).
+ *
  * @implements REQ-DCLEAN-018
  * @implements REQ-DCLEAN-019
+ * @implements REQ-DCLEAN-012
+ * @implements REQ-DCLEAN-021
+ * @implements REQ-DCLEAN-030
  */
 export function Results(props: ResultsProps) {
   const listed = () => listedCategories(props.view.categories);
@@ -87,8 +98,9 @@ export function Results(props: ResultsProps) {
             <div class="results-kicker" data-testid="results-kicker">
               {resultsKicker(listed().length, props.state.openedBy)}
             </div>
-            {/* tabindex -1: the confirm dialog's fallback focus target (REQ-DCLEAN-022.A4). */}
-            <h1 class="results-title" tabIndex={-1} data-testid="results-heading">
+            {/* tabindex -1: focus lands here on entering results (REQ-DCLEAN-020.A4) and
+                when the confirm dialog has no opener to return to (REQ-DCLEAN-022.A4). */}
+            <h1 class="results-title" tabIndex={-1} data-phase-heading data-testid="results-heading">
               {resultsHeading(listed())}
             </h1>
           </div>
@@ -148,6 +160,8 @@ function CategoryRow(props: CategoryRowProps) {
   const c = () => props.category;
   const tag = () => safetyTag(c().safety);
   const itemsId = () => `items-${c().id}`;
+  const tagId = () => `safety-${c().id}`;
+  const items = () => visibleItems(c().items);
   return (
     <li class="result" data-category-id={c().id} data-selected={String(props.selected)}>
       <div class="result-row">
@@ -157,6 +171,7 @@ function CategoryRow(props: CategoryRowProps) {
           class="result-check"
           aria-checked={props.selected}
           aria-label={c().name}
+          aria-describedby={tagId()}
           data-checked={String(props.selected)}
           onClick={() => props.onToggleSelect()}
         >
@@ -170,7 +185,7 @@ function CategoryRow(props: CategoryRowProps) {
         <div class="result-text">
           <div class="result-title">
             <span class="result-name">{c().name}</span>
-            <span class={tag().class} data-testid="safety-tag">
+            <span id={tagId()} class={tag().class} data-testid="safety-tag">
               {tag().label}
             </span>
           </div>
@@ -195,7 +210,7 @@ function CategoryRow(props: CategoryRowProps) {
         <Show when={c().items.length > 0} fallback={<p class="result-no-items">{NO_ITEMS}</p>}>
           <table class="result-items-table">
             <tbody>
-              <For each={c().items}>
+              <For each={items().shown}>
                 {(it) => (
                   <tr class="result-item">
                     <td class="item-name">{it.name}</td>
@@ -209,6 +224,11 @@ function CategoryRow(props: CategoryRowProps) {
               </For>
             </tbody>
           </table>
+          <Show when={items().more > 0}>
+            <p class="result-more" data-testid="more-items">
+              {moreItemsLabel(items().more)}
+            </p>
+          </Show>
         </Show>
       </div>
     </li>
@@ -219,7 +239,9 @@ function CategoryRow(props: CategoryRowProps) {
 function EmptyResults(props: { onBack: () => void }) {
   return (
     <div class="results-empty" data-testid="results-empty">
-      <h1 class="results-title">{EMPTY_RESULTS}</h1>
+      <h1 class="results-title" tabIndex={-1} data-phase-heading>
+        {EMPTY_RESULTS}
+      </h1>
       <div>
         <button type="button" class="btn btn-primary" onClick={() => props.onBack()}>
           Back to home

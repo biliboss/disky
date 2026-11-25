@@ -5,9 +5,9 @@
  * cleaning never use this: their phase screens are the loading state (A1).
  */
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
+import { SPINNER_THRESHOLD_MS } from "./budgets";
 
-/** AGENTS.md § Design Feel: a spinner appears only when work crosses 200 ms. */
-export const SPINNER_THRESHOLD_MS = 200;
+export { SPINNER_THRESHOLD_MS };
 
 /**
  * True once `active` has stayed true for `delayMs`; false again the moment it

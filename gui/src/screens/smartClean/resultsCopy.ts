@@ -5,6 +5,7 @@
  * see or has selected, and formats at the end (REQ-DCLEAN-028).
  */
 import type { CategoryView, CleanMode, Safety } from "../../lib/contract";
+import { RESULTS_ITEM_CAP } from "../../lib/budgets";
 import { formatBytes } from "../../lib/format";
 
 type Sized = Pick<CategoryView, "id" | "bytes">;
@@ -114,3 +115,24 @@ export const EMPTY_RESULTS = "Nothing worth clearing right now.";
 
 /** An expanded category with no items (REQ-DCLEAN-019.A3). */
 export const NO_ITEMS = "No items";
+
+/**
+ * The items an expanded category lists (REQ-DCLEAN-030.A3): all of them up
+ * to the cap, else the `cap` largest, largest first, and how many are left
+ * out for the "+N more" line.
+ *
+ * @implements REQ-DCLEAN-030
+ */
+export function visibleItems<T extends { bytes: number }>(
+  items: readonly T[],
+  cap: number = RESULTS_ITEM_CAP,
+): { shown: readonly T[]; more: number } {
+  if (items.length <= cap) return { shown: items, more: 0 };
+  const shown = [...items].sort((a, b) => b.bytes - a.bytes).slice(0, cap);
+  return { shown, more: items.length - cap };
+}
+
+/** The line under a capped item list (REQ-DCLEAN-030.A3). */
+export function moreItemsLabel(more: number): string {
+  return `+${more} more`;
+}

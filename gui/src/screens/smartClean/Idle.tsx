@@ -1,9 +1,10 @@
-import { For, Show, type Component } from "solid-js";
+import { For, Show, onMount, type Component } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { useNavigate } from "@solidjs/router";
 import type { LucideProps } from "lucide-solid";
 import Bot from "lucide-solid/icons/bot";
 import File from "lucide-solid/icons/file";
+import { IDLE_INTERACTIVE_MARK } from "../../lib/budgets";
 import type { CleanupView } from "../../lib/contract";
 import type { DiskState } from "../../lib/diskState";
 import { GoalTag } from "../../shell/GoalTag";
@@ -51,11 +52,18 @@ interface Shortcut {
  * top-right corner when the parent passes one; it comes last in the markup,
  * as in the snapshot, so it paints above the ring.
  *
+ * The first idle render sets the {@link IDLE_INTERACTIVE_MARK} performance
+ * mark that the latency budget is measured against (REQ-DCLEAN-030.A1).
+ *
  * @implements REQ-DCLEAN-003
  * @implements REQ-DCLEAN-010
+ * @implements REQ-DCLEAN-030
  */
 export function Idle(props: IdleProps) {
   const navigate = useNavigate();
+  onMount(() => {
+    if (performance.getEntriesByName(IDLE_INTERACTIVE_MARK).length === 0) performance.mark(IDLE_INTERACTIVE_MARK);
+  });
   const shortcuts = (): Shortcut[] => [
     { id: "assistant", label: "Assistant", desc: assistantShortcut(ASSISTANT_SUGGESTIONS), icon: Bot, route: "/assistant" },
     { id: "map", label: "Space Map", desc: SPACE_MAP_SHORTCUT, icon: SpaceMapIcon, route: SPACE_MAP_ROUTE },
@@ -74,7 +82,7 @@ export function Idle(props: IdleProps) {
         <div class="idle-kicker" data-testid="last-scan">
           {lastScanKicker(props.view.last_scan_at)}
         </div>
-        <h1 class="idle-title">{IDLE_HEADING}</h1>
+        <h1 class="idle-title" tabIndex={-1} data-phase-heading>{IDLE_HEADING}</h1>
         <p class="idle-desc" data-testid="idle-description">
           {idleDescription(props.view.preferences.trash_by_default)}
         </p>

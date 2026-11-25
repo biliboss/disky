@@ -561,27 +561,52 @@ verifies:
 <!-- id: REQ-DCLEAN-011.A2 -->
 - While blocked, navigation entries are exposed as disabled to assistive tech and use the disabled treatment (REQ-DCLEAN-016). The snapshot ignores clicks silently; this is a gap-fill.
 <!-- id: REQ-DCLEAN-011.A3 -->
-- The current screen's entry is marked as current (accent fill per `--color-accent`, text in `--color-bg`) and exposed as the current page.
+- The current screen's entry is marked as current (accent fill per `--color-accent`, text in `--color-on-accent`) and exposed as the current page. The snapshot's `--color-bg` label is 3.0:1 on the accent; `--color-on-accent` (alias of `--color-text`) reaches 4.5:1 (REQ-DCLEAN-024).
 <!-- id: REQ-DCLEAN-011.A4 -->
 - Leaving the done phase via navigation resets Smart Clean to idle.
 
 <!-- id: REQ-DCLEAN-012 -->
 ## Every interactive control MUST render a themed default state from design-system classes
 
+implementations:
+  - gui/scripts/controlClasses.mjs:buttonClassProblem
+  - gui/scripts/controlClasses.mjs:THEMED_EXCEPTIONS
+  - gui/scripts/lint-controls.mjs:openingTags
+  - gui/scripts/lint-controls.mjs:classesOf
+  - gui/src/screens/smartClean/Results.tsx:Results
+  - gui/src/screens/smartClean/Results.tsx:CategoryRow
+  - gui/src/screens/smartClean/Idle.tsx:Idle
+
+verifies:
+  - gui/src/screens/__tests__/controls.test.tsx:everyButtonUsesDesignSystemClasses
+  - gui/src/screens/__tests__/controls.test.tsx:checkboxIsThemedAndFlipsChecked
+  - gui/src/screens/__tests__/controls.test.tsx:rowsAndCardsUseSurfaceTokens
+  - gui/src/styles/lints.test.ts:lintControlsFindsNoUnthemedControl
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-012.A1 -->
 - Buttons use the design-system button classes (primary, secondary, ghost, icon); no control relies on browser-default styling.
 <!-- id: REQ-DCLEAN-012.A2 -->
-- Selection controls render unchecked with a `--color-neutral-400` border and checked with a `--color-accent` fill and a `--color-bg` check, sized by `--checkbox-size`.
+- Selection controls render unchecked with a `--color-check-border` border (alias of `--color-neutral-600`), and checked with a `--color-accent` fill, a `--color-check-border-checked` edge (alias of `--color-accent-700`) and a `--color-bg` check, sized by `--checkbox-size`. The snapshot's `--color-neutral-400` border is 1.5:1 on the row surface, below REQ-DCLEAN-024.A4.
 <!-- id: REQ-DCLEAN-012.A3 -->
 - Category rows and cards use `--color-surface` on `--color-bg`, with radius from `--radius-md` / `--radius-card`.
 
 <!-- id: REQ-DCLEAN-013 -->
 ## Interactive controls MUST show a hover state
 
+implementations:
+  - gui/scripts/controlClasses.mjs:STATEFUL_CLASSES
+  - gui/scripts/lint-controls.mjs:rules
+  - gui/src/shell/NavItem.tsx:NavItem
+  - gui/src/screens/smartClean/Results.tsx:CategoryRow
+
+verifies:
+  - gui/tests/visual/a11y.spec.ts:controlsShowHoverAndPressedStates
+  - gui/src/styles/lints.test.ts:lintControlsFindsNoUnthemedControl
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-013.A1 -->
-- The primary button hover uses `--color-accent-600`.
+- The primary button hover uses `--color-primary-hover` (alias of `--color-accent-500`). Its label is `--color-on-accent`, which keeps 4.5:1 only on lighter steps, so hover lightens rather than darkens (REQ-DCLEAN-024).
 <!-- id: REQ-DCLEAN-013.A2 -->
 - The secondary button hover uses `--overlay-hover`, and the ghost button hover uses `--overlay-ghost-hover`.
 <!-- id: REQ-DCLEAN-013.A3 -->
@@ -594,27 +619,58 @@ verifies:
 <!-- id: REQ-DCLEAN-014 -->
 ## Interactive controls MUST show a visible keyboard-focus state
 
+implementations:
+  - gui/scripts/lint-controls.mjs:rules
+  - gui/src/screens/smartClean/ConfirmClean.tsx:ConfirmClean
+  - gui/src/screens/SmartClean.tsx:SmartClean
+
+verifies:
+  - gui/tests/visual/a11y.spec.ts:everyControlShowsTheRingOnTab
+  - gui/tests/visual/a11y.spec.ts:pointerFocusShowsNoRing
+  - gui/src/styles/lints.test.ts:lintControlsFindsNoUnthemedControl
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-014.A1 -->
-- Every focusable control shows the design-system focus-visible ring in `--color-accent` when focused via keyboard, and no ring when focused by pointer.
+- Every focusable control shows the design-system focus-visible ring in `--focus-ring-color` (alias of `--color-accent-700`) when focused via keyboard, and no ring when focused by pointer. `--color-accent` is 2.7:1 on `--color-surface`, below REQ-DCLEAN-024.A4.
 <!-- id: REQ-DCLEAN-014.A2 -->
-- Segmented-control options show the ring on the option wrapper when their hidden radio has keyboard focus.
+- Segmented-control options show the ring on the option wrapper when their hidden radio has keyboard focus. The ring is inset over the option's fill, so it uses `--focus-ring-inset-color` (alias of `--color-text`).
 <!-- id: REQ-DCLEAN-014.A3 -->
 - No control shows the browser-default focus ring.
 
 <!-- id: REQ-DCLEAN-015 -->
 ## Interactive controls MUST show a pressed state
 
+implementations:
+  - gui/scripts/controlClasses.mjs:STATEFUL_CLASSES
+  - gui/src/screens/smartClean/ConfirmClean.tsx:ConfirmClean
+
+verifies:
+  - gui/tests/visual/a11y.spec.ts:controlsShowHoverAndPressedStates
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-015.A1 -->
-- The primary button pressed state uses `--color-accent-700`.
+- The primary button pressed state uses `--color-primary-active` (alias of `--color-accent-400`), for the reason in REQ-DCLEAN-013.A1.
 <!-- id: REQ-DCLEAN-015.A2 -->
 - The secondary button pressed state uses `--overlay-active`, and the ghost button uses `--overlay-ghost-active`.
 <!-- id: REQ-DCLEAN-015.A3 -->
-- The selected segmented option uses `--color-accent` fill with `--color-bg` text.
+- The selected segmented option uses `--color-accent` fill with `--color-on-accent` text.
 
 <!-- id: REQ-DCLEAN-016 -->
 ## Unavailable actions MUST render disabled and MUST NOT activate
+
+implementations:
+  - gui/src/screens/smartClean/Results.tsx:Results
+  - gui/src/screens/smartClean/Done.tsx:Done
+  - gui/src/shell/NavItem.tsx:NavItem
+  - gui/src/screens/smartClean/store.ts:isNavBlocked
+
+verifies:
+  - gui/src/screens/__tests__/controls.test.tsx:cleanIsDisabledAtZeroAndNeverFires
+  - gui/src/screens/__tests__/controls.test.tsx:doneActionsAreDisabledWhileUndoing
+  - gui/src/screens/__tests__/controls.test.tsx:disabledTreatmentIsTheDesignSystems
+  - gui/tests/visual/a11y.spec.ts:disabledCleanIgnoresPointerAndKeyboard
+  - gui/src/screens/__tests__/SmartClean.test.tsx:navIsBlockedAndDisabledWhileScanning
+  - gui/tests/visual/shell.spec.ts:blockedNavIgnoresTheKeyboard
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-016.A1 -->
@@ -738,6 +794,17 @@ verifies:
 <!-- id: REQ-DCLEAN-020 -->
 ## The component MUST be fully operable by keyboard in a predictable focus order
 
+implementations:
+  - gui/src/screens/SmartClean.tsx:SmartClean
+  - gui/src/screens/smartClean/ConfirmClean.tsx:ConfirmClean
+  - gui/src/screens/smartClean/Results.tsx:Results
+
+verifies:
+  - gui/tests/visual/keyboard.spec.ts:fullFlowByKeyboardOnly
+  - gui/src/screens/__tests__/controls.test.tsx:focusMovesToEachPhaseHeading
+  - gui/src/screens/__tests__/controls.test.tsx:firstRenderLeavesFocusAlone
+  - gui/src/screens/__tests__/SmartClean.test.tsx:modeSwitchIsARadiogroupWithArrowKeys
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-020.A1 -->
 - Tab order follows visual order: navigation, then the phase heading region's actions, then the list rows (selection control, then disclosure), then the footer actions.
@@ -750,6 +817,21 @@ verifies:
 
 <!-- id: REQ-DCLEAN-021 -->
 ## Controls MUST expose correct roles, names and states to assistive tech
+
+implementations:
+  - gui/src/screens/smartClean/Results.tsx:CategoryRow
+  - gui/src/screens/smartClean/resultsCopy.ts:disclosureLabel
+  - gui/src/screens/smartClean/Scanning.tsx:Scanning
+  - gui/src/screens/smartClean/Cleaning.tsx:Cleaning
+  - gui/src/shell/UsageRing.tsx:UsageRing
+  - gui/src/shell/DiskMeter.tsx:DiskMeter
+
+verifies:
+  - gui/src/screens/__tests__/controls.test.tsx:checkboxIsNamedByCategoryAndDescribedBySafety
+  - gui/src/screens/__tests__/controls.test.tsx:disclosureExposesStateAndRegion
+  - gui/src/screens/__tests__/controls.test.tsx:progressBarsExposeValueAndRange
+  - gui/src/screens/__tests__/controls.test.tsx:meterAndRingHaveTextEquivalents
+  - gui/tests/visual/a11y.spec.ts:everyPhasePassesAxe
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-021.A1 -->
@@ -790,6 +872,23 @@ verifies:
 <!-- id: REQ-DCLEAN-023 -->
 ## Status changes MUST be announced to screen readers without stealing focus
 
+implementations:
+  - gui/src/screens/smartClean/announce.ts:announcement
+  - gui/src/screens/SmartClean.tsx:SmartClean
+  - gui/src/screens/smartClean/GoalNotification.tsx:GoalNotification
+
+verifies:
+  - gui/src/screens/__tests__/announce.test.ts:scanAnnouncesStartAndEachFinishedCategoryOnly
+  - gui/src/screens/__tests__/announce.test.ts:completionAnnouncesThePhaseHeading
+  - gui/src/screens/__tests__/announce.test.ts:cleanAnnouncesStartAndEachCategory
+  - gui/src/screens/__tests__/announce.test.ts:selectionAndDialogChangesAreSilent
+  - gui/src/screens/__tests__/controls.test.tsx:announcesScanStartCategoriesAndTotal
+  - gui/src/screens/__tests__/controls.test.tsx:announcesCleanStartAndFreedTotal
+  - gui/src/screens/__tests__/controls.test.tsx:errorsAreAnnouncedInAnAlert
+  - gui/src/screens/__tests__/SmartClean.test.tsx:notificationShowsOnIdleBelowGoal
+  - gui/tests/visual/a11y.spec.ts:statusIsAnnouncedPolitelyWithoutStealingFocus
+  - gui/tests/visual/a11y.spec.ts:everyPhasePassesAxe
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-023.A1 -->
 - Scan and clean progress is announced politely at coarse intervals (for example, per category completed), not on every tick.
@@ -800,6 +899,22 @@ verifies:
 
 <!-- id: REQ-DCLEAN-024 -->
 ## Text and interface elements MUST meet WCAG 2.2 AA contrast using tokens only
+
+implementations:
+  - gui/src/lib/contrast.ts:parseTokens
+  - gui/src/lib/contrast.ts:resolveColor
+  - gui/src/lib/contrast.ts:contrastRatio
+  - gui/src/lib/contrast.ts:pairRatio
+
+verifies:
+  - gui/src/styles/contrast.test.ts:textPairsMeetAA
+  - gui/src/styles/contrast.test.ts:uiPairsMeetAA
+  - gui/src/styles/contrast.test.ts:bodyAndSecondaryTextOnBothGrounds
+  - gui/src/styles/contrast.test.ts:accentTextUsesADeepStep
+  - gui/src/styles/contrast.test.ts:mutedTextIsUnused
+  - gui/src/styles/contrast.test.ts:newColourTokensAliasOrganicSteps
+  - gui/src/styles/contrast.test.ts:everyForegroundInUseIsMeasured
+  - gui/tests/visual/a11y.spec.ts:everyPhasePassesAxe
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-024.A1 -->
@@ -816,6 +931,17 @@ verifies:
 <!-- id: REQ-DCLEAN-025 -->
 ## Motion MUST respect the user's reduced-motion preference
 
+implementations:
+  - gui/src/shell/UsageRing.tsx:UsageRing
+  - gui/src/shell/DiskMeter.tsx:DiskMeter
+  - gui/src/screens/smartClean/Scanning.tsx:Scanning
+  - gui/src/screens/smartClean/Results.tsx:CategoryRow
+
+verifies:
+  - gui/tests/visual/motion.spec.ts:transitionsUseTheMotionTokens
+  - gui/tests/visual/motion.spec.ts:reducedMotionDisablesTransitionsAndAnimations
+  - gui/src/screens/__tests__/SmartClean.test.tsx:chevronRotatesWithTheMotionToken
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-025.A1 -->
 - Ring, bar and chevron transitions use `--motion-ring`, `--motion-bar` and `--motion-chevron` respectively.
@@ -826,6 +952,16 @@ verifies:
 ## The window MUST open at the design size and MUST NOT shrink below it
 
 The snapshot is a fixed 1200 × 780 window with no breakpoints, so the GUI is a fixed-layout desktop window.
+
+implementations:
+  - gui/src/shell/AppShell.tsx:AppShell
+  - gui/src/screens/smartClean/Results.tsx:Results
+
+verifies:
+  - gui/src/shell/__tests__/window.test.ts:windowOpensAtTheDesignSize
+  - gui/src/shell/__tests__/window.test.ts:windowMinimumIsTheDesignSize
+  - gui/tests/visual/window.spec.ts:extraSpaceGoesToTheMainArea
+  - gui/tests/visual/window.spec.ts:resultsListScrollsIndependently
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-026.A1 -->
@@ -969,6 +1105,25 @@ verifies:
 <!-- id: REQ-DCLEAN-030 -->
 ## The component MUST meet render and interaction latency budgets
 
+implementations:
+  - gui/src/lib/budgets.ts:IDLE_INTERACTIVE_BUDGET_MS
+  - gui/src/lib/budgets.ts:INTERACTION_BUDGET_MS
+  - gui/src/lib/budgets.ts:RESULTS_ITEM_CAP
+  - gui/src/lib/budgets.ts:IDLE_INTERACTIVE_MARK
+  - gui/src/screens/smartClean/resultsCopy.ts:visibleItems
+  - gui/src/screens/smartClean/resultsCopy.ts:moreItemsLabel
+  - gui/src/screens/smartClean/Idle.tsx:Idle
+  - gui/src/screens/smartClean/Results.tsx:CategoryRow
+  - src/cleanup.rs:scan_with
+
+verifies:
+  - gui/tests/visual/perf.spec.ts:idleIsInteractiveWithinBudget
+  - gui/tests/visual/perf.spec.ts:interactionsRespondWithinBudget
+  - gui/src/screens/__tests__/controls.test.tsx:capsItemsAtTheLargest200WithMore
+  - gui/src/screens/__tests__/resultsCopy.test.ts:visibleItemsKeepsAllUpToTheCap
+  - gui/src/screens/__tests__/resultsCopy.test.ts:visibleItemsShowsTheLargestBeyondTheCap
+  - tests/lib_integration.rs:cleanup_is_fast_on_large_snapshot
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-030.A1 -->
 - The idle phase is interactive within the initial-render budget after launch, using the newest existing snapshot without re-scanning, within 1 s.
@@ -984,6 +1139,15 @@ verifies:
 <!-- id: REQ-DCLEAN-031 -->
 ## Visual styling MUST reference design tokens by name only
 
+implementations:
+  - gui/scripts/lint-tokens.mjs:stripComments
+  - gui/src/lib/contrast.ts:parseTokens
+
+verifies:
+  - gui/src/styles/lints.test.ts:lintTokensFindsNoLiterals
+  - gui/src/screens/__tests__/SmartClean.test.tsx:dangerAndBackdropUseTheirTokens
+  - gui/src/styles/contrast.test.ts:newColourTokensAliasOrganicSteps
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-031.A1 -->
 - Component code contains no literal colour, font family, pixel size or duration that a token in `tokens.css` already carries.
@@ -992,7 +1156,7 @@ verifies:
 <!-- id: REQ-DCLEAN-031.A3 -->
 - Elevation uses the `--shadow-*` tokens exactly where the snapshot uses them (window, dialog, notification, cards), and nowhere else.
 <!-- id: REQ-DCLEAN-031.A4 -->
-- The only token this spec adds is `--color-danger` (alias of `--color-accent-800`). It is defined before the components that use it.
+- New tokens live only in `gui-tokens.css`, never in the vendored `tokens.css` or `organic.css`, and alias an Organic token wherever one exists (`--color-danger` is `--color-accent-800`). They are defined before the components that use them.
 
 <!-- id: REQ-DCLEAN-032 -->
 ## The app shell MUST reproduce the snapshot's window chrome, sidebar and screen frame

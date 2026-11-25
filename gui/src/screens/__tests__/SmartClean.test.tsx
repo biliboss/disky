@@ -1451,9 +1451,11 @@ async function navIsBlockedAndDisabledWhileCleaning() {
 function disabledAndCurrentEntriesUseTheirTokens() {
   const css = readFileSync(resolve(__dirname, "../../shell/shell.css"), "utf8");
   expect(css).toMatch(/\.nav-item\[aria-disabled="true"\]\s*\{[^}]*opacity:\s*var\(--opacity-disabled\);[^}]*cursor:\s*not-allowed;/);
-  expect(css).toMatch(/\.nav-item\[aria-current="page"\]\s*\{[^}]*color:\s*var\(--color-bg\);[^}]*background:\s*var\(--color-accent\);/);
+  // The label on the accent fill is --color-on-accent (ink), which reaches 4.5:1 (REQ-DCLEAN-024).
+  expect(css).toMatch(/\.nav-item\[aria-current="page"\]\s*\{[^}]*color:\s*var\(--color-on-accent\);[^}]*background:\s*var\(--color-accent\);/);
   const tokens = readFileSync(resolve(__dirname, "../../styles/gui-tokens.css"), "utf8");
   expect(tokens).toMatch(/--opacity-disabled:\s*0\.45;/);
+  expect(tokens).toMatch(/--color-on-accent:\s*var\(--color-text\);/);
 }
 
 async function currentEntryIsExposedAsTheCurrentPage() {

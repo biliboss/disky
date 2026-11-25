@@ -105,8 +105,19 @@
   font-weight: 400;
 }
 
+/* REQ-DCLEAN-013 / 015: hover and pressed, as the secondary button's overlays. */
+.nav-item:hover {
+  background: var(--overlay-hover);
+}
+
+.nav-item:active {
+  background: var(--overlay-active);
+}
+
+/* REQ-DCLEAN-011.A3: accent fill; the label is --color-on-accent for 4.5:1
+   (REQ-DCLEAN-024). Listed after hover/active so the current entry keeps it. */
 .nav-item[aria-current="page"] {
-  color: var(--color-bg);
+  color: var(--color-on-accent);
   background: var(--color-accent);
   font-weight: var(--fw-nav-active);
 }
@@ -116,6 +127,11 @@
 .nav-item[aria-disabled="true"] {
   opacity: var(--opacity-disabled);
   cursor: not-allowed;
+}
+
+.nav-item[aria-disabled="true"]:not([aria-current="page"]):hover,
+.nav-item[aria-disabled="true"]:not([aria-current="page"]):active {
+  background: transparent;
 }
 
 .nav-icon {
@@ -140,7 +156,7 @@
   display: grid;
   place-items: center;
   background: var(--color-accent);
-  color: var(--color-bg);
+  color: var(--color-on-accent);
 }
 
 .nav-item[aria-current="page"] .nav-badge {

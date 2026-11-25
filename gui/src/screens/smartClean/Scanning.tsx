@@ -26,7 +26,7 @@ export function Scanning(props: ScanningProps) {
   const pct = () => Math.round(props.state.progress * 100);
   return (
     <div class="scanning" data-testid="scanning" data-screen-label="Smart clean · scanning">
-      <h1 class="scanning-title">Looking around…</h1>
+      <h1 class="scanning-title" tabIndex={-1} data-phase-heading>Looking around…</h1>
       <div class="scan-meta">
         <span class="scan-path" data-testid="scan-path" title={props.state.currentPath}>
           {props.state.currentPath}

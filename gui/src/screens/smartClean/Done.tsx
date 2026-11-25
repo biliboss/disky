@@ -35,7 +35,7 @@ export function Done(props: DoneProps) {
     <div class="done" data-testid="done" data-screen-label="Smart clean · done">
       <div class="done-main">
         <span class="tag tag-accent-2 done-tag">Done</span>
-        <h1 class="done-title" tabIndex={-1} data-testid="done-heading" aria-live="polite">
+        <h1 class="done-title" tabIndex={-1} data-phase-heading data-testid="done-heading">
           {doneHeading(r().freed_bytes)}
         </h1>
         <p class="done-note" data-testid="done-note">
