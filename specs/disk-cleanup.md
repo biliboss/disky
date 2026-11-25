@@ -571,7 +571,7 @@ verifies:
 implementations:
   - gui/scripts/controlClasses.mjs:buttonClassProblem
   - gui/scripts/controlClasses.mjs:THEMED_EXCEPTIONS
-  - gui/scripts/lint-controls.mjs:openingTags
+  - gui/scripts/lint-controls.mjs:classesOf
   - gui/scripts/lint-controls.mjs:classesOf
   - gui/src/screens/smartClean/Results.tsx:Results
   - gui/src/screens/smartClean/Results.tsx:CategoryRow
