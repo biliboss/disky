@@ -100,6 +100,20 @@ impl Config {
 mod tests {
     use super::*;
     use std::io::Write;
+    use std::sync::{Mutex, MutexGuard};
+
+    /// `load_from` applies `DISKY_*` env overrides and env vars are
+    /// process-global, while `cargo test` runs tests as threads of one
+    /// process. Every test that reads or mutates those vars holds this lock,
+    /// so `env_overrides_file_values` can't leak `DISKY_FORMAT=json` into a
+    /// concurrently running file-only test.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn env_lock() -> MutexGuard<'static, ()> {
+        ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     #[test]
     fn empty_config_returns_defaults() {
@@ -110,6 +124,7 @@ mod tests {
 
     #[test]
     fn parses_minimal_toml() {
+        let _env = env_lock();
         let tmp = tempfile::NamedTempFile::new().unwrap();
         writeln!(
             tmp.as_file(),
@@ -123,6 +138,7 @@ mod tests {
 
     #[test]
     fn ignores_unknown_sections() {
+        let _env = env_lock();
         let tmp = tempfile::NamedTempFile::new().unwrap();
         writeln!(
             tmp.as_file(),
@@ -135,6 +151,7 @@ mod tests {
 
     #[test]
     fn malformed_toml_returns_error_with_path() {
+        let _env = env_lock();
         let tmp = tempfile::NamedTempFile::new().unwrap();
         writeln!(tmp.as_file(), "this is not toml = =").unwrap();
         let err = Config::load_from(tmp.path()).unwrap_err();
@@ -144,13 +161,10 @@ mod tests {
 
     #[test]
     fn env_overrides_file_values() {
-        // Run in serial via a guard — env vars are process-global.
+        // Env vars are process-global; hold the lock while DISKY_FORMAT is set.
+        let _env = env_lock();
         let tmp = tempfile::NamedTempFile::new().unwrap();
         writeln!(tmp.as_file(), "[defaults]\nformat = \"text\"").unwrap();
-        // SAFETY: tests are single-threaded for env mutation via nextest's
-        // per-test process model when run with `--test-threads=1`. nextest
-        // runs each test in its own process by default, so env mutation is
-        // isolated. If this becomes flaky, gate with `#[serial]`.
         std::env::set_var("DISKY_FORMAT", "json");
         let cfg = Config::load_from(tmp.path()).unwrap();
         std::env::remove_var("DISKY_FORMAT");
@@ -159,6 +173,7 @@ mod tests {
 
     #[test]
     fn default_path_honours_env_override() {
+        let _env = env_lock();
         std::env::set_var("DISKY_CONFIG_PATH", "/tmp/custom-disky.toml");
         let p = Config::default_path().unwrap();
         std::env::remove_var("DISKY_CONFIG_PATH");
