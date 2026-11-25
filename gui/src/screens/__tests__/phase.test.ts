@@ -29,6 +29,7 @@ import {
   navBlocked,
   notificationVisible,
   reviewFromNotification,
+  reviewSuggestion,
   safeTotal,
   type NotificationInputs,
   type SmartCleanState,
@@ -428,4 +429,50 @@ function leavingDoneViaNavResetsToIdle() {
 describe("navigation and the Smart Clean phase (REQ-DCLEAN-011)", () => {
   it("navigation is blocked while scanning or cleaning (REQ-DCLEAN-011.A1)", navIsBlockedWhileScanningOrCleaning);
   it("leaving done via navigation resets to idle (REQ-DCLEAN-011.A4)", leavingDoneViaNavResetsToIdle);
+});
+
+/** The engine's categories as the results list sees them, one empty. */
+const ASSISTANT_CATS = [
+  { id: "a", safety: "safe" as const, bytes: 10 },
+  { id: "b", safety: "review" as const, bytes: 20 },
+  { id: "c", safety: "safe" as const, bytes: 5 },
+  { id: "d", safety: "review" as const, bytes: 0 },
+];
+
+function reviewSuggestionSelectsExactlyItsCategoriesAndExpandsTheFirst() {
+  const s = reviewSuggestion(INITIAL_STATE, ASSISTANT_CATS, ["b", "d", "missing"], "Claude Code");
+  expect(s.phase).toBe("results");
+  // Exactly the suggestion's ids the list shows: empty or unknown ones drop out.
+  expect(s.selected).toEqual(["b"]);
+  expect(s.expanded).toBe("b");
+  expect(s.openedBy).toBe("Claude Code");
+  expect(s.confirming).toBe(false); // nothing cleans before "Clean now"
+  expect(s.cleanMode).toBeNull();
+  const two = reviewSuggestion(INITIAL_STATE, ASSISTANT_CATS, ["c", "a"], "Codex CLI");
+  expect(two.selected).toEqual(["a", "c"]); // list order
+  expect(two.expanded).toBe("a");
+}
+
+function reviewAndConfirmOpensTheDialogPreparedByTheAgent() {
+  const s = reviewFromNotification(INITIAL_STATE, ASSISTANT_CATS, "Claude Code");
+  expect(s.selected).toEqual(["a", "c"]);
+  expect(s.confirming).toBe(true);
+  expect(s.openedBy).toBe("Claude Code");
+  expect(s.expanded).toBeNull();
+  // The notification itself is not the Assistant: no agent.
+  expect(reviewFromNotification(INITIAL_STATE, ASSISTANT_CATS).openedBy).toBeNull();
+}
+
+function assistantReviewsChangeNothingUnlessIdle() {
+  for (const phase of ["scanning", "results", "cleaning", "done"] as const) {
+    const from: SmartCleanState = { ...INITIAL_STATE, phase };
+    expect(reviewSuggestion(from, ASSISTANT_CATS, ["b"], "Claude Code")).toBe(from);
+    expect(reviewFromNotification(from, ASSISTANT_CATS, "Claude Code")).toBe(from);
+  }
+}
+
+describe("Assistant reviews (REQ-DSCR-009.A3)", () => {
+  it("Review selects exactly the card's categories and expands the first", reviewSuggestionSelectsExactlyItsCategoriesAndExpandsTheFirst);
+  it("Review & confirm opens the dialog over the Safe categories, prepared by the agent", reviewAndConfirmOpensTheDialogPreparedByTheAgent);
+  it("nothing changes unless Smart Clean is idle", assistantReviewsChangeNothingUnlessIdle);
 });

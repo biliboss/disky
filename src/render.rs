@@ -686,3 +686,36 @@ pub fn trash(r: &TrashResult, format: Format) -> Result<()> {
     );
     Ok(())
 }
+
+/// `disky agents` (REQ-DSCR-007): `{kind:"agents", records:[Agent]}`, one
+/// agent per line in ndjson, or a table.
+pub fn agents(list: &[crate::agents::Agent], format: Format) -> Result<()> {
+    if format.is_machine() {
+        return emit_records(list, "agents", format);
+    }
+    for a in list {
+        let status = match &a.display_path {
+            Some(p) => format!("Found · {p}"),
+            None => "Not installed".to_string(),
+        };
+        println!("{:<8} {:<12} {status}", a.id, a.name);
+    }
+    Ok(())
+}
+
+/// `disky suggest` (REQ-DSCR-008): `{kind:"suggestions",
+/// records:[Suggestion]}` in feed order, one per line in ndjson, or the
+/// feed as text.
+pub fn suggestions(list: &[crate::assistant::Suggestion], format: Format) -> Result<()> {
+    if format.is_machine() {
+        return emit_records(list, "suggestions", format);
+    }
+    for s in list {
+        let size = s
+            .bytes
+            .map(|b| format!(" · {}", crate::assistant::format_bytes(b)))
+            .unwrap_or_default();
+        println!("[{}] {}{size}", s.kind, s.text);
+    }
+    Ok(())
+}

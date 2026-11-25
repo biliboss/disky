@@ -21,6 +21,9 @@ anyhow = "1"
 # Native folder picker for Settings → "Add folder" (REQ-DSCR-016.A3). Called
 # from the backend only; the frontend gets no dialog capability.
 tauri-plugin-dialog = "=2.7.3"
+# The below-goal macOS notification (REQ-DSCR-011.A3), posted from the
+# backend's checks thread only; the frontend gets no notification capability.
+tauri-plugin-notification = "=2.8.1"
 # The engine. Scan / query / cleanup / history come from here and are never
 # reimplemented in the GUI (REQ-DCLEAN-001).
 disky = { path = "../.." }

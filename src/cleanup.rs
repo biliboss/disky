@@ -454,6 +454,11 @@ pub struct CleanupHit {
     pub files: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// Newest mtime (unix seconds) of the hit and everything beneath it, when
+    /// known. Engine-internal: the Assistant words "since <month>" from it
+    /// (REQ-DSCR-008.A2). Not part of the `cleanup` envelope.
+    #[serde(skip)]
+    pub newest_mtime: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1099,6 +1104,7 @@ pub fn scan_with(
             physical_bytes: physical as u64,
             files: files as u64,
             note: r.category.note.map(String::from),
+            newest_mtime: newest,
         });
     }
     drop(grouped);
@@ -1366,6 +1372,7 @@ mod tests {
             physical_bytes: bytes,
             files,
             note: None,
+            newest_mtime: None,
         }
     }
 

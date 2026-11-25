@@ -427,6 +427,103 @@ pub fn dupes_view(snapshot_path: &str, min_size: u64, prefs: &Preferences) -> Re
     crate::dupes::dupes(&conn, min_size, &ctx)
 }
 
+pub use crate::agents::Agent;
+pub use crate::assistant::{Suggestion, SuggestionKey};
+
+/// Everything the Assistant screen renders (REQ-DSCR-009, REQ-DSCR-010):
+/// the selected agent, the proactive-check settings, the goal and disk the
+/// side panel shows, the three agents (REQ-DSCR-007) and the feed
+/// (REQ-DSCR-008).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssistantView {
+    /// Store id of the selected agent (`prefs.agent`).
+    pub agent: String,
+    /// Its display name ("Claude Code"), from [`crate::agents::AGENTS`].
+    pub agent_name: String,
+    pub checks: crate::prefs::Checks,
+    pub goal_bytes: u64,
+    pub disk: Disk,
+    /// Every agent the Assistant knows, in display order, found or not.
+    pub agents: Vec<Agent>,
+    /// The feed. Empty when proactive checks are off (REQ-DSCR-009.A4).
+    pub suggestions: Vec<Suggestion>,
+}
+
+/// The suggestions for a loaded view and its hits at `now_secs`
+/// (REQ-DSCR-008). Hits whose path is gone since the scan (cleaned, moved)
+/// are left out, and the categories are rebuilt from the rest, so a
+/// suggestion never offers bytes that are no longer there (A2).
+pub fn suggestions_for(
+    view: &CleanupView,
+    hits: &[CleanupHit],
+    home: Option<&Path>,
+    now_secs: i64,
+) -> Vec<Suggestion> {
+    let present: Vec<CleanupHit> = hits
+        .iter()
+        .filter(|h| Path::new(&h.path).symlink_metadata().is_ok())
+        .cloned()
+        .collect();
+    let mut live = view.clone();
+    live.categories = categories_from_hits(&present);
+    crate::assistant::suggestions(&live, &present, home, now_secs)
+}
+
+/// [`AssistantView`] from a loaded view, its hits and the detected agents.
+/// With checks off the feed is empty (REQ-DSCR-009.A4); `disky suggest`
+/// reports regardless.
+pub fn assistant_view_of(
+    view: &CleanupView,
+    hits: &[CleanupHit],
+    agents: Vec<Agent>,
+    home: Option<&Path>,
+    now_secs: i64,
+) -> AssistantView {
+    let p = &view.preferences;
+    let suggestions = if p.checks.enabled {
+        suggestions_for(view, hits, home, now_secs)
+    } else {
+        Vec::new()
+    };
+    AssistantView {
+        agent: p.agent.clone(),
+        agent_name: crate::agents::display_name(&p.agent),
+        checks: p.checks,
+        goal_bytes: view.goal_bytes,
+        disk: view.disk.clone(),
+        agents,
+        suggestions,
+    }
+}
+
+/// The view and hits behind the Assistant: the snapshot at `snapshot_path`
+/// (scoped by `prefs`, as Smart Clean's), or the empty view when there is
+/// none.
+pub fn assistant_inputs(
+    snapshot_path: Option<&str>,
+    prefs: &Preferences,
+) -> Result<(CleanupView, Vec<CleanupHit>)> {
+    match snapshot_path {
+        Some(p) => load(p, prefs),
+        None => Ok((empty_view(prefs)?, Vec::new())),
+    }
+}
+
+/// The Assistant screen's data for the snapshot at `snapshot_path` (none:
+/// goal/ok only), read with the store's `prefs` and this machine's agents.
+/// The GUI's `load_assistant` returns exactly this.
+pub fn assistant_view(snapshot_path: Option<&str>, prefs: &Preferences) -> Result<AssistantView> {
+    let (view, hits) = assistant_inputs(snapshot_path, prefs)?;
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    Ok(assistant_view_of(
+        &view,
+        &hits,
+        crate::agents::detect(),
+        home.as_deref(),
+        Utc::now().timestamp(),
+    ))
+}
+
 /// What moving reviewed files to the Trash did (REQ-DSCR-006.A1).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrashResult {
@@ -541,6 +638,7 @@ pub fn trash_reviewed(
                 physical_bytes: physical,
                 files: 1,
                 note: None,
+                newest_mtime: None,
             }
         })
         .collect();
@@ -938,6 +1036,7 @@ mod tests {
             physical_bytes: physical,
             files: 1,
             note: None,
+            newest_mtime: None,
         }
     }
 
@@ -1861,5 +1960,97 @@ mod tests {
     fn full_disk_access_url_opens_the_privacy_pane() {
         assert!(FULL_DISK_ACCESS_URL.starts_with("x-apple.systempreferences:"));
         assert!(FULL_DISK_ACCESS_URL.ends_with("Privacy_AllFiles"));
+    }
+}
+
+#[cfg(test)]
+mod assistant_tests {
+    use super::*;
+    use crate::cleanup::Safety;
+
+    fn present_hit(category: &str, path: &Path, bytes: u64, safety: Safety) -> CleanupHit {
+        CleanupHit {
+            category: category.into(),
+            safety,
+            path: path.to_string_lossy().into_owned(),
+            bytes,
+            physical_bytes: bytes,
+            files: 1,
+            note: None,
+            newest_mtime: None,
+        }
+    }
+
+    fn agents() -> Vec<Agent> {
+        crate::agents::detect_in(&[], None)
+    }
+
+    fn view_with(hits: &[CleanupHit], prefs: &Preferences, free: u64) -> CleanupView {
+        let mut v = cleanup_view(
+            None,
+            hits,
+            Disk {
+                volume: "Macintosh HD".into(),
+                capacity_bytes: 512_000_000_000,
+                free_bytes: free,
+            },
+            prefs,
+            0,
+            0,
+        );
+        v.last_scan_at = Some("2026-11-24T22:00:00Z".into());
+        v
+    }
+
+    /// REQ-DSCR-009.A4 / REQ-DSCR-010: the view names the selected agent and
+    /// empties the feed when proactive checks are off.
+    #[test]
+    fn assistant_view_names_the_agent_and_checks_off_empties_the_feed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = tmp.path().join("Caches/x");
+        std::fs::create_dir_all(&cache).unwrap();
+        let hits = vec![present_hit(
+            "app_caches",
+            &cache,
+            5_000_000_000,
+            Safety::Safe,
+        )];
+        let mut prefs = Preferences {
+            agent: "codex".into(),
+            ..Default::default()
+        };
+        let v = view_with(&hits, &prefs, 10_000_000_000);
+        let a = assistant_view_of(&v, &hits, agents(), None, 0);
+        assert_eq!(a.agent, "codex");
+        assert_eq!(a.agent_name, "Codex CLI");
+        assert_eq!(a.agents.len(), 3);
+        assert_eq!(a.goal_bytes, prefs.goal_bytes);
+        assert_eq!(a.suggestions.len(), 1);
+        assert_eq!(a.suggestions[0].key, SuggestionKey::Goal);
+        assert_eq!(a.suggestions[0].categories, ["app_caches"]);
+
+        prefs.checks.enabled = false;
+        let v = view_with(&hits, &prefs, 10_000_000_000);
+        let a = assistant_view_of(&v, &hits, agents(), None, 0);
+        assert!(a.suggestions.is_empty());
+        assert!(!a.checks.enabled);
+    }
+
+    /// REQ-DSCR-008.A2: bytes a clean already removed are never offered.
+    #[test]
+    fn suggestions_leave_out_hits_gone_since_the_scan() {
+        let tmp = tempfile::tempdir().unwrap();
+        let kept = tmp.path().join("a/node_modules");
+        std::fs::create_dir_all(&kept).unwrap();
+        let gone = tmp.path().join("b/node_modules");
+        let hits = vec![
+            present_hit("node_modules", &kept, 2_000_000_000, Safety::Review),
+            present_hit("node_modules", &gone, 5_000_000_000, Safety::Review),
+        ];
+        let prefs = Preferences::default();
+        let v = view_with(&hits, &prefs, 100_000_000_000);
+        let s = suggestions_for(&v, &hits, None, 0);
+        let dev = s.iter().find(|s| s.key == SuggestionKey::Dev).unwrap();
+        assert_eq!(dev.bytes, Some(2_000_000_000));
     }
 }

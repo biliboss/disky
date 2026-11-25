@@ -338,4 +338,56 @@
   --dupe-copy-active: var(--overlay-active);
   --color-dupe-remove: var(--color-accent-700); /* "Remove" text: Organic's accent is < 4.5:1 at 11 px */
   --dupes-error-mb: 12px;             /* gap-fill: engine error above the grid */
+
+  /* ── Assistant (REQ-DSCR-009/010; snapshot Assistant markup) ── */
+  --assistant-side-w: 320px;          /* grid-template-columns: minmax(0,1fr) 320px */
+  --assistant-feed-pt: var(--screen-py); /* feed padding: 36px 32px 32px 56px */
+  --assistant-feed-pr: 32px;
+  --assistant-feed-pb: 32px;
+  --assistant-feed-pl: var(--layout-screen-px); /* 56px */
+  --assistant-feed-gap: 14px;
+  --assistant-head-gap: var(--screen-gap); /* status ↔ heading, 6px */
+  --assistant-head-mb: 6px;
+  --fs-assistant-title: 36px;
+  --assistant-card-gap: 12px;
+  --assistant-card-py: 18px;
+  --assistant-card-px: 20px;
+  --assistant-card-head-gap: 10px;
+  --assistant-card-icon: 28px;
+  --assistant-card-glyph: 15px;
+  --fw-assistant-agent: 600;
+  --fs-assistant-text: var(--fs-body); /* 15px */
+  --lh-assistant-text: 1.5;
+  --assistant-actions-gap: 8px;
+  --fs-assistant-size: var(--fs-nav); /* 14px */
+  --fw-assistant-size: 600;
+  --color-assistant-outline: var(--color-accent-700); /* "Heads-up" outline tag: Organic's accent is < 4.5:1 at 11 px */
+  --assistant-empty-py: 12px;
+  --fs-assistant-empty: var(--fs-nav); /* 14px */
+  --assistant-side-gap: 12px;         /* side padding: 36px 32px 32px 0 */
+  --assistant-panel-pad: 20px;
+  --assistant-goal-gap: 12px;
+  --assistant-checks-gap: 10px;
+  --assistant-agents-gap: 8px;
+  --assistant-goal-line-gap: 8px;
+  --fs-assistant-goal-line: var(--fs-nav); /* 14px */
+  --fs-assistant-goal: 28px;
+  --assistant-fill-h: 8px;
+  --motion-assistant-fill: width 0.6s ease;
+  --agent-row-gap: 12px;
+  --agent-row-py: 10px;
+  --agent-row-px: 12px;
+  --agent-text-gap: 1px;
+  --agent-dot: 16px;
+  --agent-dot-border: 2px;
+  --agent-dot-inset: inset 0 0 0 3px var(--color-bg); /* selected dot */
+  --fs-agent-name: var(--fs-nav);     /* 14px */
+  --fw-agent-name: 600;
+  --fs-agent-status: var(--fs-xs);    /* 12px */
+  --opacity-agent-missing: 0.55;
+  --agent-row-hover: var(--overlay-hover);
+  --agent-row-active: var(--overlay-active);
+  --fs-assistant-privacy: var(--fs-xs); /* 12px */
+  --assistant-privacy-mt: 4px;
+  --assistant-error-mb: 12px;         /* gap-fill: engine error above the feed */
 }

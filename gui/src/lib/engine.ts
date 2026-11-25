@@ -8,6 +8,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
+  parseAssistantView,
   parseCleanProgress,
   parseCleanResult,
   parseCleanupView,
@@ -20,6 +21,7 @@ import {
   parseRestoreResult,
   parseScanProgress,
   parseTrashResult,
+  type AssistantView,
   type CleanMode,
   type CleanProgress,
   type CleanResult,
@@ -212,4 +214,38 @@ export async function trashDupes(paths: string[]): Promise<TrashResult> {
   const result = parseTrashResult(await call("trash_dupes", { paths }));
   setDisk(result.disk);
   return result;
+}
+
+/** Event the backend's proactive checks send a fresh Assistant view on (REQ-DSCR-011.A1). */
+export const ASSISTANT_VIEW_EVENT = "assistant://view";
+
+/** Event sent when a scheduled background scan finished (REQ-DSCR-011.A2). */
+export const BACKGROUND_SCANNED_EVENT = "assistant://scanned";
+
+/** Event sent when the below-goal notification was clicked (REQ-DSCR-011.A3). */
+export const FOCUS_HOME_EVENT = "assistant://focus-home";
+
+/**
+ * The Assistant screen's data: the selected agent and its display name, the
+ * proactive checks, the goal and disk, the three agents and the engine's
+ * suggestions (REQ-DSCR-007 … 010). CLI: `disky suggest`, `disky agents`,
+ * `disky prefs`.
+ */
+export async function loadAssistant(): Promise<AssistantView> {
+  return parseAssistantView(await call("load_assistant"));
+}
+
+/** Subscribe to the Assistant views the proactive checks reload (REQ-DSCR-011.A1). */
+export function onAssistantView(cb: (v: AssistantView) => void, onError?: (e: unknown) => void): Promise<UnlistenFn> {
+  return subscribe(ASSISTANT_VIEW_EVENT, parseAssistantView, cb, onError);
+}
+
+/** Subscribe to finished background scans (REQ-DSCR-011.A2). */
+export function onBackgroundScanned(cb: () => void): Promise<UnlistenFn> {
+  return listen(BACKGROUND_SCANNED_EVENT, () => cb());
+}
+
+/** Subscribe to clicks on the below-goal notification (REQ-DSCR-011.A3). */
+export function onFocusHome(cb: () => void): Promise<UnlistenFn> {
+  return listen(FOCUS_HOME_EVENT, () => cb());
 }

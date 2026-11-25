@@ -1209,3 +1209,105 @@ fn schema_lists_the_dupes_command() {
     assert!(cmds.iter().any(|c| c["name"] == "dupes"));
     assert!(v["records"]["DupeGroup"].is_object());
 }
+
+/// REQ-DSCR-007.A1, A2: `disky agents` lists claude, codex and gemini in that
+/// order, finds an executable on PATH, and never runs it.
+#[test]
+fn agents_lists_three_in_order_and_never_runs_them() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = temp_dir();
+    let bin = home.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let marker = home.join("codex-ran");
+    let exe = bin.join("codex");
+    fs::write(&exe, format!("#!/bin/sh\ntouch '{}'\n", marker.display())).unwrap();
+    fs::set_permissions(&exe, fs::Permissions::from_mode(0o755)).unwrap();
+    let out = Command::new(disky_bin())
+        .env("HOME", &home)
+        .env("PATH", &bin)
+        .env_remove("DISKY_CONFIG_PATH")
+        .env_remove("DISKY_FORMAT")
+        .args(["agents", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "agents: {out:?}");
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["kind"], "agents");
+    let recs = v["records"].as_array().unwrap();
+    let ids: Vec<&str> = recs.iter().map(|r| r["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, ["claude", "codex", "gemini"]);
+    let names: Vec<&str> = recs.iter().map(|r| r["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["Claude Code", "Codex CLI", "Gemini CLI"]);
+    assert_eq!(recs[1]["found"], true);
+    assert_eq!(recs[1]["path"], exe.to_str().unwrap());
+    assert_eq!(recs[1]["display_path"], "~/bin/codex");
+    assert!(!marker.exists(), "detection ran the CLI");
+}
+
+/// REQ-DSCR-008.A1, A3: `disky suggest` reports `ok` (free at or above a tiny
+/// goal) and `dev` for a scanned node_modules — with checks off too — and
+/// only goal/ok with no snapshot.
+#[test]
+fn suggest_reports_goal_or_ok_then_category_suggestions() {
+    let home = home_including_recent();
+    // No snapshot yet: goal or ok only.
+    let v = json_in_home(&home, &["suggest", "--format", "json"]);
+    assert_eq!(v["kind"], "suggestions");
+    let recs = v["records"].as_array().unwrap();
+    assert_eq!(recs.len(), 1);
+    assert!(recs[0]["key"] == "goal" || recs[0]["key"] == "ok");
+
+    json_in_home(
+        &home,
+        &[
+            "prefs",
+            "--set",
+            "goal_bytes=1",
+            "--set",
+            "checks.enabled=false",
+            "--format",
+            "json",
+        ],
+    );
+    fs::create_dir_all(home.join("proj/app/node_modules")).unwrap();
+    fs::write(home.join("proj/app/node_modules/big.js"), vec![1u8; 4096]).unwrap();
+    let db = home.join("snap.db");
+    let proj = home.join("proj");
+    let out = run_in_home(
+        &home,
+        &["scan", proj.to_str().unwrap(), "--db", db.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "scan: {out:?}");
+    let v = json_in_home(
+        &home,
+        &[
+            "suggest",
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    let recs = v["records"].as_array().unwrap();
+    let keys: Vec<&str> = recs.iter().map(|r| r["key"].as_str().unwrap()).collect();
+    assert_eq!(keys, ["ok", "dev"]);
+    assert_eq!(recs[0]["actionable"], false);
+    assert!(recs[0]["bytes"].is_null());
+    assert_eq!(recs[1]["kind"], "Suggestion");
+    assert_eq!(recs[1]["categories"], serde_json::json!(["node_modules"]));
+    assert!(recs[1]["bytes"].as_u64().unwrap() > 0);
+    assert!(recs[1]["text"]
+        .as_str()
+        .unwrap()
+        .starts_with("One project in ~/proj"));
+}
+
+#[test]
+fn schema_lists_the_agents_and_suggest_commands() {
+    let v = run_json(&["schema"]);
+    let cmds = v["commands"].as_array().unwrap();
+    assert!(cmds.iter().any(|c| c["name"] == "agents"));
+    assert!(cmds.iter().any(|c| c["name"] == "suggest"));
+    assert!(v["records"]["Suggestion"].is_object());
+    assert!(v["records"]["Agent"].is_object());
+}

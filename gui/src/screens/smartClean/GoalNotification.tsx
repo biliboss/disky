@@ -8,7 +8,7 @@ import {
 
 export interface GoalNotificationProps {
   text: string;
-  /** The agent watching the goal, once the Assistant spec supplies it. */
+  /** The selected agent's display name, from the engine (REQ-DSCR-009.A5); null until it loads. */
   agentName: string | null;
   onLater: () => void;
   onReview: () => void;

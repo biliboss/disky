@@ -333,6 +333,28 @@ verifies:
 <!-- id: REQ-DSCR-007 -->
 ## The engine MUST detect which agent CLIs are installed
 
+implementations:
+  - src/agents.rs:AGENTS
+  - src/agents.rs:Agent
+  - src/agents.rs:display_name
+  - src/agents.rs:search_dirs
+  - src/agents.rs:detect_in
+  - src/agents.rs:detect
+  - src/render.rs:agents
+  - src/cli.rs:Command
+  - src/schema.rs:commands
+  - gui/src/lib/contract.ts:parseAgent
+
+verifies:
+  - src/agents.rs:agents_are_listed_in_order_with_display_names
+  - src/agents.rs:search_covers_path_then_the_extra_folders
+  - src/agents.rs:detect_finds_executables_and_never_runs_them
+  - src/agents.rs:the_first_folder_holding_the_cli_wins_and_folders_are_skipped
+  - src/agents.rs:json_shape_is_snake_case
+  - tests/agentic.rs:agents_lists_three_in_order_and_never_runs_them
+  - tests/agentic.rs:schema_lists_the_agents_and_suggest_commands
+  - src/schema.rs:agents_and_suggest_commands_are_listed_with_their_records
+
 **Acceptance**
 <!-- id: REQ-DSCR-007.A1 -->
 - `disky agents --format json` lists Claude Code (`claude`), Codex CLI (`codex`) and Gemini CLI (`gemini`), in that order. Each has `found` and, when found, the resolved path. Lookup covers `PATH` plus `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`.
@@ -341,6 +363,34 @@ verifies:
 
 <!-- id: REQ-DSCR-008 -->
 ## The engine MUST produce the Assistant's suggestions from the latest snapshot and the preferences
+
+implementations:
+  - src/assistant.rs:Suggestion
+  - src/assistant.rs:SuggestionKey
+  - src/assistant.rs:suggestions
+  - src/assistant.rs:format_bytes
+  - src/contract.rs:suggestions_for
+  - src/contract.rs:assistant_inputs
+  - src/cleanup.rs:CleanupHit
+  - src/render.rs:suggestions
+  - src/cli.rs:Command
+  - src/schema.rs:commands
+  - gui/src/lib/contract.ts:parseSuggestion
+
+verifies:
+  - src/assistant.rs:goal_triggers_below_the_goal_and_offers_the_safe_categories
+  - src/assistant.rs:ok_triggers_at_or_above_the_goal_with_no_action
+  - src/assistant.rs:dev_names_the_projects_their_folder_and_month
+  - src/assistant.rs:dev_without_known_age_or_shared_folder_still_states_real_figures
+  - src/assistant.rs:dl_lists_downloads_untouched_for_three_months
+  - src/assistant.rs:left_names_the_uninstalled_apps
+  - src/assistant.rs:a_category_with_no_hits_produces_no_suggestion
+  - src/assistant.rs:no_snapshot_returns_only_goal_or_ok_and_goal_has_no_action
+  - src/assistant.rs:every_category_id_comes_from_the_engine_table
+  - src/assistant.rs:json_shape_uses_snake_case_keys
+  - src/assistant.rs:bytes_are_formatted_as_the_gui_does
+  - src/contract.rs:suggestions_leave_out_hits_gone_since_the_scan
+  - tests/agentic.rs:suggest_reports_goal_or_ok_then_category_suggestions
 
 **Acceptance**
 <!-- id: REQ-DSCR-008.A1 -->
@@ -357,6 +407,46 @@ verifies:
 
 <!-- id: REQ-DSCR-009 -->
 ## The Assistant screen MUST show the suggestion feed and MUST only ever open a review
+
+implementations:
+  - gui/src/screens/Assistant.tsx:Assistant
+  - gui/src/screens/assistant/store.ts:visibleSuggestions
+  - gui/src/screens/assistant/store.ts:actionableCount
+  - gui/src/screens/assistant/store.ts:dismiss
+  - gui/src/screens/assistant/assistantCopy.ts:statusLine
+  - gui/src/screens/assistant/assistantCopy.ts:actionLabels
+  - gui/src/screens/smartClean/phase.ts:reviewSuggestion
+  - gui/src/screens/smartClean/phase.ts:reviewFromNotification
+  - gui/src/lib/contract.ts:parseAssistantView
+  - gui/src/lib/engine.ts:loadAssistant
+  - gui/src-tauri/src/main.rs:load_assistant
+  - src/contract.rs:AssistantView
+  - src/contract.rs:assistant_view_of
+  - src/contract.rs:assistant_view
+  - gui/src/shell/AppShell.tsx:AppShell
+  - gui/src/App.tsx:SCREENS
+
+verifies:
+  - gui/src/screens/__tests__/Assistant.test.tsx:feedRendersTheEngineCardsWithTheAgentName
+  - gui/src/screens/__tests__/Assistant.test.tsx:dismissingACardHidesIt
+  - gui/src/screens/__tests__/Assistant.test.tsx:checksOffShowsTheEmptyFeedAndPaused
+  - gui/src/screens/__tests__/Assistant.test.tsx:badgeAndShortcutCountTheActionableCards
+  - gui/src/screens/__tests__/Assistant.test.tsx:reviewLandsOnResultsWithTheCardsCategories
+  - gui/src/screens/__tests__/Assistant.test.tsx:reviewAndConfirmOpensTheDialogAndCleansAsTheAgent
+  - gui/src/screens/__tests__/Assistant.test.tsx:belowGoalNotificationNamesTheAgent
+  - gui/src/screens/__tests__/assistantCopy.test.ts:statusLineNamesTheAgentAndFrequencyOrPaused
+  - gui/src/screens/__tests__/assistantCopy.test.ts:emptyFeedAndPrivacyCopyAreTheSnapshots
+  - gui/src/screens/__tests__/assistantCopy.test.ts:buttonsAndTagsFollowTheCardKind
+  - gui/src/screens/__tests__/assistantCopy.test.ts:whenReadsLikeTheSnapshot
+  - gui/src/screens/__tests__/phase.test.ts:reviewSuggestionSelectsExactlyItsCategoriesAndExpandsTheFirst
+  - gui/src/screens/__tests__/phase.test.ts:reviewAndConfirmOpensTheDialogPreparedByTheAgent
+  - gui/src/screens/__tests__/phase.test.ts:assistantReviewsChangeNothingUnlessIdle
+  - gui/src/lib/contract.test.ts:parsesAnAssistantViewAndRejectsBadSuggestions
+  - gui/src/shell/__tests__/Shell.test.tsx:everyNavRouteRendersARealScreen
+  - src/contract.rs:assistant_view_names_the_agent_and_checks_off_empties_the_feed
+  - gui/tests/visual/assistant.spec.ts:assistantMatchesSnapshot
+  - gui/tests/visual/assistant.spec.ts:assistantPassesAxe
+  - gui/tests/visual/assistant.spec.ts:keyboardReviewLandsOnResultsWithTheKicker
 
 **Acceptance**
 <!-- id: REQ-DSCR-009.A1 -->
@@ -381,6 +471,26 @@ verifies:
 
 <!-- id: REQ-DSCR-010 -->
 ## The Assistant side panel MUST edit the space goal, proactive checks and agent
+
+implementations:
+  - gui/src/screens/Assistant.tsx:Assistant
+  - gui/src/screens/assistant/assistantCopy.ts:goalToSlider
+  - gui/src/screens/assistant/assistantCopy.ts:sliderToGoal
+  - gui/src/screens/assistant/assistantCopy.ts:goalFill
+  - gui/src/screens/assistant/assistantCopy.ts:goalNote
+  - gui/src/screens/assistant/assistantCopy.ts:agentStatus
+  - gui/src/screens/assistant/store.ts:restoreGoalCard
+  - gui/src/screens/assistant/store.ts:setAssistantView
+  - gui/src/lib/diskState.ts:setGoal
+  - gui/src/lib/diskState.ts:setFromView
+
+verifies:
+  - gui/src/screens/__tests__/Assistant.test.tsx:changingTheGoalSavesItAndBringsTheGoalCardBack
+  - gui/src/screens/__tests__/Assistant.test.tsx:checksOffShowsTheEmptyFeedAndPaused
+  - gui/src/screens/__tests__/Assistant.test.tsx:frequencySaves
+  - gui/src/screens/__tests__/Assistant.test.tsx:pickingAnAgentSavesItAndAMissingOneIsDisabled
+  - gui/src/screens/__tests__/assistantCopy.test.ts:goalCardFiguresComeFromTheEngine
+  - gui/src/screens/__tests__/assistantCopy.test.ts:agentRowsSayFoundInUseOrNotInstalled
 
 **Acceptance**
 <!-- id: REQ-DSCR-010.A1 -->
@@ -407,6 +517,36 @@ verifies:
 
 <!-- id: REQ-DSCR-011 -->
 ## Proactive checks and scheduled scans MUST run only while the app runs and MUST never clean
+
+implementations:
+  - gui/src-tauri/src/scheduler.rs:Scheduler
+  - gui/src-tauri/src/scheduler.rs:Action
+  - gui/src-tauri/src/scheduler.rs:Clock
+  - gui/src-tauri/src/scheduler.rs:notification_text
+  - gui/src-tauri/src/scheduler.rs:notification_title
+  - gui/src-tauri/src/checks.rs:spawn
+  - gui/src-tauri/src/checks.rs:run
+  - gui/src-tauri/src/checks.rs:perform
+  - gui/src-tauri/src/checks.rs:start_background_scan
+  - gui/src-tauri/src/checks.rs:notify
+  - gui/src-tauri/src/main.rs:focus_smart_clean
+  - src/assistant.rs:check_period_secs
+  - src/assistant.rs:scan_period_secs
+  - src/assistant.rs:scan_due
+  - src/assistant.rs:latest_scan_secs
+  - gui/src/lib/engine.ts:onAssistantView
+  - gui/src/lib/engine.ts:onBackgroundScanned
+  - gui/src/lib/engine.ts:onFocusHome
+
+verifies:
+  - gui/src-tauri/src/scheduler.rs:checks_reload_once_per_period_and_not_when_paused
+  - gui/src-tauri/src/scheduler.rs:scheduled_scan_starts_at_launch_and_at_checks_when_the_snapshot_is_old
+  - gui/src-tauri/src/scheduler.rs:no_background_scan_while_smart_clean_scans_or_cleans
+  - gui/src-tauri/src/scheduler.rs:below_goal_notifies_once_per_episode
+  - gui/src-tauri/src/scheduler.rs:notification_is_worded_from_engine_figures
+  - gui/src-tauri/src/scheduler.rs:scheduler_actions_never_clean_trash_or_delete
+  - gui/src-tauri/src/scheduler.rs:scheduler_has_no_path_to_clean_or_trash
+  - src/assistant.rs:check_and_scan_periods_follow_the_preferences
 
 **Acceptance**
 <!-- id: REQ-DSCR-011.A1 -->

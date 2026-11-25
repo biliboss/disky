@@ -359,6 +359,21 @@ pub enum Command {
         id: String,
     },
 
+    /// Which agent CLIs are installed: Claude Code (claude), Codex CLI
+    /// (codex), Gemini CLI (gemini), in that order, each with its path when
+    /// found. Looks in PATH, ~/.local/bin, /opt/homebrew/bin and
+    /// /usr/local/bin; only checks for an executable file, never runs it.
+    Agents,
+
+    /// The Assistant's suggestions from the latest snapshot, the disk and
+    /// `disky prefs`: goal (below the goal) or ok, then dev, dl and left
+    /// when those categories have hits. Reported whatever checks.enabled
+    /// says. Never cleans anything.
+    Suggest {
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
+    },
+
     /// Print every preference, or change some with `--set <key>=<value>`.
     /// The store (`<data dir>/prefs.json`) is shared with the desktop GUI.
     /// Keys: trash_by_default, skip_recently_used, safe_only,

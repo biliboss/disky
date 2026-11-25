@@ -127,6 +127,17 @@ fn commands() -> Value {
             "errors": "not-found (unknown id); generic (delete-mode entry, or already restored)"
         },
         {
+            "name": "agents",
+            "args": {},
+            "output": "Agent[] under kind='agents' — claude (Claude Code), codex (Codex CLI), gemini (Gemini CLI), in that order; looked up in PATH, ~/.local/bin, /opt/homebrew/bin, /usr/local/bin; executable bit only, never run"
+        },
+        {
+            "name": "suggest",
+            "args": { "snapshot": "@latest|<id>|<path>" },
+            "output": "Suggestion[] under kind='suggestions', in feed order: goal (free < goal; offers the safe categories) or ok (no action), then dev (developer categories), dl (old_downloads), left (app_leftovers) when they have hits. No snapshot: goal/ok only, goal without action. Reported whatever checks.enabled says; never cleans",
+            "errors": "not-found (snapshot)"
+        },
+        {
             "name": "prefs",
             "args": { "set": "string[] (repeatable `<key>=<value>`; all applied or none)" },
             "keys": crate::prefs::KEYS,
@@ -213,6 +224,8 @@ fn records() -> Value {
         "DupeCopy":        { "path": "string (absolute)", "location": "string (parent folder, home as ~)", "mtime": "string? (RFC3339 UTC)" },
         "HistoryItem":     { "original_path": "string", "trash_path": "string? (null in delete mode)", "bytes": "u64", "status": "in_trash|restored|conflict|missing|deleted" },
         "RestoreReport":   { "id": "string", "restored": "string[]", "conflicts": "string[]", "missing": "string[] (no longer in Trash)" },
+        "Agent":           { "id": "claude|codex|gemini", "name": "string (display name)", "found": "bool", "path": "string? (absolute executable path)", "display_path": "string? (path with home as ~)" },
+        "Suggestion":      { "key": "goal|ok|dev|dl|left", "kind": "Goal|On track|Suggestion|Heads-up", "text": "string (every figure from the snapshot or the disk)", "bytes": "u64? (physical; null when nothing is offered)", "categories": "string[] (cleanup category ids the review selects)", "actionable": "bool", "at": "string? (RFC3339 UTC: now for goal/ok, the scan for the others)" },
         "Prefs":           { "trash_by_default": "bool", "skip_recently_used": "bool (leave out items modified in the last 30 days)", "safe_only": "bool", "warn_below_goal": "bool", "goal_bytes": "u64", "checks": { "enabled": "bool", "frequency": "hourly|daily|weekly" }, "agent": "claude|codex|gemini", "scheduled_scan": "off|weekly|monthly", "excluded": "string[] (absolute or ~/ folders; never touched by cleanup)" },
         "DiffRow":    { "path": "string", "kind": "added|removed|grew|shrank", "size_a": "u64", "size_b": "u64", "delta": "i64" },
         "GrowthRow":  { "path": "string", "kind": "grew|shrank|added|removed", "size_a": "u64", "size_b": "u64", "delta_bytes": "i64", "rate_bytes_per_day": "f64", "days_between": "f64" },
@@ -291,6 +304,22 @@ mod tests {
         assert!(dupes["args"]["min_size"].is_string());
         assert!(dupes["output"].as_str().unwrap().contains("kind:'dupes'"));
         assert!(doc["records"]["DupeGroup"]["copies"].is_string());
+    }
+
+    #[test]
+    fn agents_and_suggest_commands_are_listed_with_their_records() {
+        let doc = document();
+        let cmds = doc["commands"].as_array().unwrap();
+        for name in ["agents", "suggest"] {
+            assert!(cmds.iter().any(|c| c["name"] == name), "{name} missing");
+        }
+        let suggest = cmds.iter().find(|c| c["name"] == "suggest").unwrap();
+        assert!(suggest["output"]
+            .as_str()
+            .unwrap()
+            .contains("kind='suggestions'"));
+        assert!(doc["records"]["Agent"]["found"].is_string());
+        assert!(doc["records"]["Suggestion"]["key"].is_string());
     }
 
     #[test]

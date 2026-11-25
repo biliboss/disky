@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
-import { App } from "../../App";
+import { App, ROUTES, SCREENS } from "../../App";
 import { NAV_ITEMS, type NavId } from "../nav";
 import { resetDiskState, setFromClean, setFromView } from "../../lib/diskState";
 import { goalPos } from "../../lib/meter";
@@ -11,8 +11,16 @@ import type { CleanResult, CleanupView } from "../../lib/contract";
 // vitest runs with gui/ as its root.
 const guiFile = (rel: string) => resolve(process.cwd(), rel);
 
-/** Nav entries whose own screen is implemented, by the screen's test id. */
-const REAL_SCREENS: Partial<Record<NavId, string>> = { map: "space-map", large: "large-files", dupes: "duplicates", history: "history", settings: "settings" };
+/** Every nav entry's real screen, by the screen's test id (REQ-DSCR-017.A3). */
+const REAL_SCREENS: Record<NavId, string> = {
+  clean: "idle",
+  assistant: "assistant",
+  map: "space-map",
+  large: "large-files",
+  dupes: "duplicates",
+  history: "history",
+  settings: "settings",
+};
 
 function renderApp() {
   render(() => <App />);
@@ -39,21 +47,17 @@ function windowTitleIsDisky() {
   expect(JSON.stringify(conf)).not.toMatch(/diskee/i);
 }
 
-async function secondaryEntriesOpenComingSoonPlaceholders() {
+async function everyNavRouteRendersARealScreen() {
+  // Each entry has its own screen in the route table; none is a placeholder.
+  expect(Object.keys(SCREENS).sort()).toEqual(NAV_ITEMS.map((i) => i.id).sort());
+  expect(ROUTES.map((r) => r.path)).toEqual(NAV_ITEMS.map((i) => i.route));
   renderApp();
   for (const item of NAV_ITEMS.slice(1)) {
     fireEvent.click(navButton(item.label));
     const main = screen.getByRole("main");
     // Router navigation commits in a transition, so wait for the new screen.
-    const real = REAL_SCREENS[item.id];
-    if (real) {
-      // A real screen (REQ-DSCR-012, -013, -014, -015, -016), not a placeholder.
-      expect(await within(main).findByTestId(real)).toBeInTheDocument();
-      expect(within(main).queryByText("Coming soon")).toBeNull();
-    } else {
-      expect(await within(main).findByRole("heading", { level: 1, name: item.label })).toBeInTheDocument();
-      expect(within(main).getByText("Coming soon")).toBeInTheDocument();
-    }
+    expect(await within(main).findByTestId(REAL_SCREENS[item.id], {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(within(main).queryByText("Coming soon")).toBeNull();
     await waitFor(() => expect(navButton(item.label)).toHaveAttribute("aria-current", "page"));
   }
   fireEvent.click(navButton("Smart Clean"));
@@ -144,7 +148,7 @@ describe("app shell", () => {
 
   it("brand and title bar read disky, never Diskee (REQ-DCLEAN-032.A2)", brandAndTitleBarReadDisky);
   it("window title is disky (REQ-DCLEAN-032.A2)", windowTitleIsDisky);
-  it("secondary entries open a Coming soon placeholder (REQ-DCLEAN-032.A3)", secondaryEntriesOpenComingSoonPlaceholders);
+  it("every sidebar entry renders its real screen, no placeholder (REQ-DSCR-017.A3)", everyNavRouteRendersARealScreen);
   it("sidebar shows seven entries and the assistant badge (REQ-DCLEAN-032)", sidebarShowsSevenEntriesAndAssistantBadge);
   it("meter shows fixture free space and goal (REQ-DCLEAN-032)", meterShowsFixtureFreeSpaceAndGoal);
   it("meter shows the live volume and free space (REQ-DCLEAN-002.A1)", meterShowsLiveVolumeAndFreeSpace);

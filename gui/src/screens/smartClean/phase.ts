@@ -25,8 +25,8 @@ export interface SmartCleanState {
   /** Physical bytes of each completed category that has hits. */
   completedBytes: Readonly<Record<string, number>>;
   /**
-   * The agent that opened the review ("Prepared by <agent>"), or null for a
-   * scan the user ran. Nothing sets it until the Assistant spec.
+   * The agent that opened the review ("Prepared by <agent>", REQ-DSCR-009.A3),
+   * or null for a scan the user ran or the below-goal notification.
    */
   openedBy: string | null;
   /** Category ids selected for cleaning on the results list (REQ-DCLEAN-006). */
@@ -391,14 +391,22 @@ export function dismissNotification(s: SmartCleanState): SmartCleanState {
 }
 
 /**
- * "Review cleanup" on the below-goal notification (REQ-DCLEAN-010.A3): open
+ * "Review cleanup" on the below-goal notification (REQ-DCLEAN-010.A3), or
+ * "Review & confirm" on the Assistant's goal card (REQ-DSCR-009.A3): open
  * the results with exactly the Safe categories selected and the confirm
- * dialog open. Nothing is cleaned: only {@link confirmClean} enters
- * cleaning.
+ * dialog open. `openedBy` names the agent when the Assistant opened it, so
+ * the kicker reads "Prepared by <agent>" and the history title is
+ * "Assistant cleanup"; the notification passes null. Nothing is cleaned:
+ * only {@link confirmClean} enters cleaning.
  *
  * @implements REQ-DCLEAN-010
+ * @implements REQ-DSCR-009
  */
-export function reviewFromNotification(s: SmartCleanState, categories: readonly Selectable[]): SmartCleanState {
+export function reviewFromNotification(
+  s: SmartCleanState,
+  categories: readonly Selectable[],
+  openedBy: string | null = null,
+): SmartCleanState {
   if (s.phase !== "idle") return s;
   const selected = preselect(categories, true);
   return {
@@ -408,9 +416,42 @@ export function reviewFromNotification(s: SmartCleanState, categories: readonly 
     progress: 1,
     expanded: null,
     notificationDismissed: true,
-    openedBy: null,
+    openedBy,
     selected,
     confirming: selected.length > 0,
+    cleanMode: null,
+    cleaningCategory: null,
+  };
+}
+
+/**
+ * "Review" on an Assistant suggestion (REQ-DSCR-009.A3): open the results
+ * with exactly that suggestion's categories selected (those the list shows)
+ * and the first one expanded, prepared by `agent`. The confirm dialog stays
+ * closed: nothing is cleaned until "Clean now". Only from idle.
+ *
+ * @implements REQ-DSCR-009
+ */
+export function reviewSuggestion(
+  s: SmartCleanState,
+  categories: readonly Selectable[],
+  ids: readonly string[],
+  agent: string,
+): SmartCleanState {
+  if (s.phase !== "idle") return s;
+  const selected = listedCategories(categories)
+    .filter((c) => ids.includes(c.id))
+    .map((c) => c.id);
+  return {
+    ...s,
+    ...NO_SCAN,
+    phase: "results",
+    progress: 1,
+    expanded: selected[0] ?? null,
+    notificationDismissed: true,
+    openedBy: agent,
+    selected,
+    confirming: false,
     cleanMode: null,
     cleaningCategory: null,
   };

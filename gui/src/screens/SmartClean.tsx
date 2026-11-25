@@ -4,6 +4,7 @@ import { useDelayedBusy } from "../lib/busy";
 import {
   clean,
   loadCleanupView,
+  onBackgroundScanned,
   onCleanProgress,
   onScanProgress,
   openFullDiskAccess,
@@ -49,6 +50,7 @@ import {
 } from "./smartClean/phase";
 import { notificationText } from "./smartClean/idleCopy";
 import { setSmartCleanState as setState, smartCleanState as state } from "./smartClean/store";
+import { agentName } from "./assistant/store";
 import { resultsHeading, selectedBytes } from "./smartClean/resultsCopy";
 import "./smartClean/smartClean.css";
 
@@ -103,6 +105,8 @@ import "./smartClean/smartClean.css";
  * @implements REQ-DCLEAN-011
  * @implements REQ-DCLEAN-020
  * @implements REQ-DCLEAN-023
+ * @implements REQ-DSCR-009
+ * @implements REQ-DSCR-011
  */
 export function SmartClean(props: { showNotification?: boolean } = {}) {
   const navigate = useNavigate();
@@ -131,9 +135,17 @@ export function SmartClean(props: { showNotification?: boolean } = {}) {
 
   let unlisten: (() => void) | undefined;
   let unlistenClean: (() => void) | undefined;
+  let unlistenBackground: (() => void) | undefined;
+  // REQ-DSCR-011.A2: a finished background scan refreshes idle, never a review.
+  void onBackgroundScanned(() => {
+    if (state().phase === "idle" && !scanned()) void refetch();
+  })
+    .then((u) => (unlistenBackground = u))
+    .catch(() => undefined);
   onCleanup(() => {
     unlisten?.();
     unlistenClean?.();
+    unlistenBackground?.();
     // REQ-DCLEAN-011.A4: results and done do not survive leaving the screen.
     setState((s) => leaveViaNav(s, false));
   });
@@ -154,7 +166,8 @@ export function SmartClean(props: { showNotification?: boolean } = {}) {
       safeTotal: safe,
       hasScan: v.last_scan_at !== null,
     });
-    return show ? { text: notificationText(d.disk.free_bytes, d.goalBytes, safe), agentName: null } : undefined;
+    // REQ-DSCR-009.A5: the header names the selected agent, as the engine names it.
+    return show ? { text: notificationText(d.disk.free_bytes, d.goalBytes, safe), agentName: agentName() } : undefined;
   };
 
   async function beginScan() {

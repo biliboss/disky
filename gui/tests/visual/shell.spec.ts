@@ -48,16 +48,23 @@ async function trafficLightSlotSitsWhereSnapshotDrawsDots({ page }: { page: Page
   expect(await page.locator(APP_LIGHTS).boundingBox()).toEqual({ x: 16, y: 14, width: 52, height: 12 });
 }
 
-async function placeholderScreensKeepTheShell({ page }: { page: Page }) {
-  for (const [hash, title] of [
-    // History, Space map, Large files and Duplicates are real screens now
-    // (REQ-DSCR-012, -013, -014, -015).
+async function everyScreenKeepsTheShell({ page }: { page: Page }) {
+  // Every sidebar entry is a real screen now (REQ-DSCR-017.A3): none reads
+  // "Coming soon", and each keeps the title bar and sidebar with its own
+  // entry current.
+  for (const [hash, label] of [
     ["#/assistant", "Assistant"],
+    ["#/space-map", "Space Map"],
+    ["#/large-files", "Large files"],
+    ["#/duplicates", "Duplicates"],
+    ["#/history", "History"],
+    ["#/settings", "Settings"],
   ]) {
     await openApp(page, hash);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
-    await expect(page.getByText("Coming soon")).toBeVisible();
     await expect(page.locator(".sidebar")).toBeVisible();
+    await expect(page.locator(APP_LIGHTS)).toBeVisible();
+    await expect(page.locator('.nav-item[aria-current="page"] .nav-label')).toHaveText(label);
+    await expect(page.getByText("Coming soon")).toHaveCount(0);
   }
 }
 
@@ -94,13 +101,13 @@ test("snapshot baseline renders with the disky brand (REQ-DCLEAN-032.A1)", snaps
 test("title bar matches the snapshot within 1% (REQ-DCLEAN-032.A1)", titleBarMatchesSnapshot);
 test("sidebar matches the snapshot within 1% (REQ-DCLEAN-032.A1, A3)", sidebarMatchesSnapshot);
 test("traffic-light slot sits where the snapshot draws its dots (REQ-DCLEAN-032.A1)", trafficLightSlotSitsWhereSnapshotDrawsDots);
-test("placeholder screens keep the shell (REQ-DCLEAN-032.A3)", placeholderScreensKeepTheShell);
+test("every screen keeps the shell, none is a placeholder (REQ-DCLEAN-032.A3, REQ-DSCR-017.A3)", everyScreenKeepsTheShell);
 test("renders offline with bundled fonts and icons (REQ-DCLEAN-032.A4)", rendersOfflineWithBundledFontsAndIcons);
 
 /**
  * Live-data text on the idle screen (numbers and data-driven copy), masked on
- * both sides. The snapshot's Assistant line shows its 4 fixture suggestions;
- * the app shows "Watching your space goal" until the Assistant spec lands.
+ * both sides. The Assistant line counts the engine's actionable suggestions
+ * (REQ-DSCR-009.A5), which the idle stub does not load.
  */
 const SNAPSHOT_IDLE_LIVE = (page: Page) => {
   // The prototype renders each `{{ value }}` in an inner inline wrapper; mask

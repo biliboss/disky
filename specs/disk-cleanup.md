@@ -990,7 +990,7 @@ implementations:
   - src/contract.rs:CleanupView
   - src/contract.rs:CategoryView
   - src/contract.rs:ItemView
-  - src/contract.rs:Preferences
+  - src/prefs.rs:Prefs
   - src/contract.rs:ScanProgress
   - src/contract.rs:CleanResult
   - src/contract.rs:categories_from_hits
@@ -1172,7 +1172,6 @@ implementations:
   - gui/src/shell/NavItem.tsx:NavItem
   - gui/src/shell/DiskMeter.tsx:DiskMeter
   - gui/src/lib/meter.ts:goalPos
-  - gui/src/screens/Placeholder.tsx:Placeholder
   - gui/src/App.tsx:ROUTES
   - gui/src-tauri/src/main.rs:main
 
@@ -1182,7 +1181,7 @@ verifies:
   - gui/src/shell/__tests__/nav.test.ts:navRoutesAreUniqueAndSmartCleanIsHome
   - gui/src/shell/__tests__/Shell.test.tsx:brandAndTitleBarReadDisky
   - gui/src/shell/__tests__/Shell.test.tsx:windowTitleIsDisky
-  - gui/src/shell/__tests__/Shell.test.tsx:secondaryEntriesOpenComingSoonPlaceholders
+  - gui/src/shell/__tests__/Shell.test.tsx:everyNavRouteRendersARealScreen
   - gui/src/shell/__tests__/Shell.test.tsx:sidebarShowsSevenEntriesAndAssistantBadge
   - gui/src/shell/__tests__/Shell.test.tsx:meterShowsFixtureFreeSpaceAndGoal
   - gui/src/shell/__tests__/meter.test.ts:goalPosMatchesSnapshotFixture
@@ -1192,7 +1191,7 @@ verifies:
   - gui/tests/visual/shell.spec.ts:titleBarMatchesSnapshot
   - gui/tests/visual/shell.spec.ts:sidebarMatchesSnapshot
   - gui/tests/visual/shell.spec.ts:trafficLightSlotSitsWhereSnapshotDrawsDots
-  - gui/tests/visual/shell.spec.ts:placeholderScreensKeepTheShell
+  - gui/tests/visual/shell.spec.ts:everyScreenKeepsTheShell
   - gui/tests/visual/shell.spec.ts:rendersOfflineWithBundledFontsAndIcons
 
 **Acceptance**

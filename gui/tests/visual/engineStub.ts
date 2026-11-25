@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { snapshotReviewCategories } from "../fixtures/snapshotReview";
+import { snapshotAssistantView } from "../fixtures/snapshotAssistant";
 
 /**
  * The browser build's stand-in for the Tauri engine, and the snapshot
@@ -457,5 +458,36 @@ export async function stubDupes(page: Page, noSnapshot = false) {
       };
     },
     [snapshotDupesView(), noSnapshot] as const,
+  );
+}
+
+/**
+ * Answer the Assistant commands from the snapshot's feed and AGENTS:
+ * `load_assistant` returns `snapshotAssistantView`, `load_cleanup_view`
+ * the snapshot's review rows (so "Review" lands on real results),
+ * `set_prefs` is recorded in `window.__prefsSet`, and event subscriptions
+ * are accepted.
+ */
+export async function stubAssistant(page: Page) {
+  await page.addInitScript(
+    ([assistant, review]) => {
+      const w = window as any;
+      w.__prefsSet = [];
+      w.__TAURI_INTERNALS__ = {
+        invoke: async (cmd: string, args: any) => {
+          if (cmd === "load_assistant") return assistant;
+          if (cmd === "load_cleanup_view") return review;
+          if (cmd === "set_prefs") {
+            w.__prefsSet.push(args);
+            return review.preferences;
+          }
+          if (cmd === "plugin:event|listen") return 1;
+          if (cmd === "plugin:event|unlisten") return null;
+          throw new Error(`visual stub: ${cmd} is not available`);
+        },
+        transformCallback: () => 0,
+      };
+    },
+    [snapshotAssistantView(), reviewFixtureView()] as const,
   );
 }

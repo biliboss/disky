@@ -578,6 +578,7 @@ fn cleanup_trash_is_refused_in_reversible_mode() {
         physical_bytes: 1,
         files: 1,
         note: None,
+        newest_mtime: None,
     };
     let out = cleanup::apply(std::slice::from_ref(&hit), cleanup::ApplyMode::Trash, None).unwrap();
     assert!(out.handled.is_empty() && out.entry.is_none());

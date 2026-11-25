@@ -38,6 +38,7 @@ const COMMANDS = [
   "trash_large",
   "load_dupes",
   "trash_dupes",
+  "load_assistant",
 ];
 
 /** Category ids, read from the engine's single table. */

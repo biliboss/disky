@@ -10,6 +10,7 @@ import type { DiskState } from "../../lib/diskState";
 import { GoalTag } from "../../shell/GoalTag";
 import { UsageRing } from "../../shell/UsageRing";
 import { SpaceMapIcon } from "../../shell/icons";
+import { actionableCount } from "../assistant/store";
 import { GoalNotification } from "./GoalNotification";
 import {
   IDLE_HEADING,
@@ -19,9 +20,6 @@ import {
   largeFilesShortcut,
   lastScanKicker,
 } from "./idleCopy";
-
-/** Pending Assistant suggestions: none until the Assistant spec lands (REQ-DCLEAN-003.A3). */
-export const ASSISTANT_SUGGESTIONS = 0;
 
 export const SPACE_MAP_ROUTE = "/space-map";
 
@@ -58,6 +56,7 @@ interface Shortcut {
  * @implements REQ-DCLEAN-003
  * @implements REQ-DCLEAN-010
  * @implements REQ-DCLEAN-030
+ * @implements REQ-DSCR-009
  */
 export function Idle(props: IdleProps) {
   const navigate = useNavigate();
@@ -65,7 +64,8 @@ export function Idle(props: IdleProps) {
     if (performance.getEntriesByName(IDLE_INTERACTIVE_MARK).length === 0) performance.mark(IDLE_INTERACTIVE_MARK);
   });
   const shortcuts = (): Shortcut[] => [
-    { id: "assistant", label: "Assistant", desc: assistantShortcut(ASSISTANT_SUGGESTIONS), icon: Bot, route: "/assistant" },
+    // REQ-DSCR-009.A5: the feed's actionable cards, as the sidebar badge counts them.
+    { id: "assistant", label: "Assistant", desc: assistantShortcut(actionableCount() ?? 0), icon: Bot, route: "/assistant" },
     { id: "map", label: "Space Map", desc: SPACE_MAP_SHORTCUT, icon: SpaceMapIcon, route: SPACE_MAP_ROUTE },
     {
       id: "large",

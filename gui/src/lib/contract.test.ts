@@ -3,6 +3,7 @@ import {
   ContractError,
   EngineError,
   LOCK_HELD,
+  parseAssistantView,
   parseCleanProgress,
   parseCleanResult,
   parseCleanupView,
@@ -15,6 +16,7 @@ import {
   parseScanProgress,
   parseTrashResult,
 } from "./contract";
+import { snapshotAssistantView } from "../../tests/fixtures/snapshotAssistant";
 
 /** A view as the engine's `contract::CleanupView` serialises it. */
 function validView(): Record<string, any> {
@@ -359,4 +361,33 @@ function parsesADupesViewAndRejectsBadGroups() {
 
 describe("duplicates contract (REQ-DSCR-005)", () => {
   it("parses a dupes view and rejects bad groups", parsesADupesViewAndRejectsBadGroups);
+});
+
+function parsesAnAssistantViewAndRejectsBadSuggestions() {
+  const raw = JSON.parse(JSON.stringify(snapshotAssistantView()));
+  const v = parseAssistantView(raw);
+  expect(v.agent_name).toBe("Claude Code");
+  expect(v.checks).toEqual({ enabled: true, frequency: "daily" });
+  expect(v.agents.map((a) => a.id)).toEqual(["claude", "codex", "gemini"]);
+  expect(v.suggestions.map((s) => s.key)).toEqual(["goal", "dev", "dl", "left"]);
+  expect(v.suggestions[0].bytes).toBe(12.1e9);
+  // An "ok" card carries no bytes and no action.
+  const ok = { key: "ok", kind: "On track", text: "x", bytes: null, categories: [], actionable: false, at: null };
+  expect(parseAssistantView({ ...raw, suggestions: [ok] }).suggestions[0].bytes).toBeNull();
+  // Fail safe: an unknown key, an actionable card with nothing to review,
+  // a found agent with no path or fractional bytes reject the whole view.
+  const bad = (patch: (r: any) => void) => {
+    const r = JSON.parse(JSON.stringify(raw));
+    patch(r);
+    return () => parseAssistantView(r);
+  };
+  expect(bad((r) => (r.suggestions[0].key = "maybe"))).toThrow(ContractError);
+  expect(bad((r) => (r.suggestions[1].categories = []))).toThrow(ContractError);
+  expect(bad((r) => (r.suggestions[1].bytes = 1.5))).toThrow(ContractError);
+  expect(bad((r) => (r.agents[0].path = null))).toThrow(ContractError);
+  expect(bad((r) => (r.checks.frequency = "monthly"))).toThrow(ContractError);
+}
+
+describe("assistant contract (REQ-DSCR-007, REQ-DSCR-008)", () => {
+  it("parses an assistant view and rejects bad suggestions", parsesAnAssistantViewAndRejectsBadSuggestions);
 });

@@ -22,10 +22,16 @@
 //! | `trash_large`       | `disky trash <path>... --title "Large files"`    |
 //! | `load_dupes`        | `disky dupes --format json`                      |
 //! | `trash_dupes`       | `disky trash <path>... --title "Duplicates"`     |
+//! | `load_assistant`    | `disky suggest` + `disky agents` + `disky prefs` |
 //!
 //! Preferences live in the engine's one store (`disky::prefs`): every view
 //! reads its goal and toggles from it, and Settings writes it through
 //! `set_prefs`, so the CLI and the GUI never hold copies (REQ-DSCR-001.A2).
+//!
+//! While the app runs, `checks.rs` ticks the proactive-check scheduler
+//! (`scheduler.rs`, REQ-DSCR-011): it reloads the Assistant view, starts
+//! scheduled background scans and posts the below-goal notification. It never
+//! cleans or trashes anything.
 //!
 //! Errors reach the GUI as `contract::EngineError`, typed by disky's
 //! exit-code slug (REQ-DCLEAN-018.A1).
@@ -47,28 +53,35 @@
 //! @implements REQ-DSCR-013
 //! @implements REQ-DSCR-005
 //! @implements REQ-DSCR-014
+//! @implements REQ-DSCR-009
+//! @implements REQ-DSCR-010
+//! @implements REQ-DSCR-011
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod checks;
+mod scheduler;
+
 use disky::cleanup::CleanupHit;
 use disky::contract::{
-    self, CleanResult, CleanupView, DupesView, EngineError, HistoryView, LargeFilter, LargeView,
-    MapView, RestoreResult, TrashResult,
+    self, AssistantView, CleanResult, CleanupView, DupesView, EngineError, HistoryView,
+    LargeFilter, LargeView, MapView, RestoreResult, TrashResult,
 };
 use disky::prefs::{self, Prefs};
 use disky::{history, scan as engine_scan, snapshots};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_notification::NotificationExt;
 
 /// Least time between two progress events on `scan://progress`.
 const PROGRESS_EVERY: Duration = Duration::from_millis(100);
 
 /// Per-window engine state.
 #[derive(Default)]
-struct Engine {
+pub(crate) struct Engine {
     /// Hits behind the last view the user was shown. `clean` acts only on
     /// paths found here (REQ-DCLEAN-007, REQ-DCLEAN-029.A1).
     reviewed: Mutex<Vec<CleanupHit>>,
@@ -84,6 +97,33 @@ struct Engine {
     /// `trash_dupes` trashes only these, and never every copy of a group
     /// (REQ-DSCR-006.A2, A3).
     dupes: Mutex<Vec<Vec<String>>>,
+    /// Held by whichever scan runs — Smart Clean's or a scheduled one — so
+    /// two never write at once (REQ-DSCR-011.A2).
+    pub(crate) scan_lock: Mutex<()>,
+    /// Stop flag of the running background scan, if any. A Smart Clean scan
+    /// sets it and takes over.
+    pub(crate) background_scan: Mutex<Option<Arc<AtomicBool>>>,
+    /// A Smart Clean clean is running.
+    cleaning: AtomicBool,
+}
+
+impl Engine {
+    /// A Smart Clean scan or clean, or a background scan, is running: no
+    /// background scan may start (REQ-DSCR-011.A2).
+    pub(crate) fn busy(&self) -> bool {
+        self.cancel.lock().unwrap().is_some()
+            || self.cleaning.load(Ordering::SeqCst)
+            || self.background_scan.lock().unwrap().is_some()
+    }
+}
+
+/// Clears [`Engine::cleaning`] when a clean ends, however it ends.
+struct Cleaning<'a>(&'a AtomicBool);
+
+impl Drop for Cleaning<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 type CmdResult<T> = Result<T, EngineError>;
@@ -164,6 +204,17 @@ fn dirs_home() -> Option<std::path::PathBuf> {
 #[tauri::command]
 async fn scan(app: AppHandle, root: Option<String>) -> CmdResult<CleanupView> {
     blocking(move || {
+        let engine = app.state::<Engine>();
+        // A background scan gives way: stop it, then wait for it to drain.
+        let _scanning = loop {
+            if let Some(stop) = engine.background_scan.lock().unwrap().as_ref() {
+                stop.store(true, Ordering::Relaxed);
+            }
+            match engine.scan_lock.try_lock() {
+                Ok(guard) => break guard,
+                Err(_) => std::thread::sleep(Duration::from_millis(50)),
+            }
+        };
         let root = root.unwrap_or_else(|| "/".to_string());
         let db_path = snapshots::new_snapshot_path()?;
         let cancel = Arc::new(AtomicBool::new(false));
@@ -211,7 +262,10 @@ async fn clean(
     opened_by: Option<String>,
 ) -> CmdResult<CleanResult> {
     blocking(move || {
-        let reviewed = app.state::<Engine>().reviewed.lock().unwrap().clone();
+        let engine = app.state::<Engine>();
+        engine.cleaning.store(true, Ordering::SeqCst);
+        let _cleaning = Cleaning(&engine.cleaning);
+        let reviewed = engine.reviewed.lock().unwrap().clone();
         contract::clean_observed(
             &reviewed,
             &item_paths,
@@ -370,6 +424,28 @@ async fn trash_dupes(app: AppHandle, paths: Vec<String>) -> CmdResult<TrashResul
     .await
 }
 
+/// The Assistant screen's data (REQ-DSCR-009, REQ-DSCR-010): the selected
+/// agent, the proactive checks, goal and disk, the three agents
+/// (REQ-DSCR-007) and the engine's suggestions for the latest snapshot
+/// (REQ-DSCR-008) — an empty feed with checks off. CLI: `disky suggest`,
+/// `disky agents` and `disky prefs`.
+#[tauri::command]
+async fn load_assistant() -> CmdResult<AssistantView> {
+    blocking(|| contract::assistant_view(snapshots::latest_snapshot().as_deref(), &read_prefs()?))
+        .await
+}
+
+/// Bring the window forward on Smart Clean: the below-goal notification was
+/// clicked (REQ-DSCR-011.A3).
+fn focus_smart_clean(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+    let _ = app.emit(checks::FOCUS_HOME_EVENT, ());
+}
+
 /// Open System Settings at Full Disk Access (REQ-DCLEAN-018.A2).
 #[tauri::command]
 async fn open_full_disk_access() -> CmdResult<()> {
@@ -386,7 +462,16 @@ async fn open_full_disk_access() -> CmdResult<()> {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(Engine::default())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            let on_click = handle.clone();
+            app.notification()
+                .on_action(move |_| focus_smart_clean(&on_click))?;
+            checks::spawn(handle);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             load_cleanup_view,
             get_prefs,
@@ -403,6 +488,7 @@ fn main() {
             trash_large,
             load_dupes,
             trash_dupes,
+            load_assistant,
             open_full_disk_access
         ])
         .run(tauri::generate_context!())

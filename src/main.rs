@@ -708,6 +708,27 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             let report = history::restore(&history::log_path(), &id)?;
             render::restore(&report, format)?;
         }
+        Command::Agents => {
+            render::agents(&disky::agents::detect(), format)?;
+        }
+        Command::Suggest { snapshot } => {
+            let p = prefs::load(&prefs::prefs_path())?;
+            // No snapshot yet: goal / ok only (REQ-DSCR-008.A3).
+            let db = if snapshot == "@latest" && snapshots::latest_snapshot().is_none() {
+                None
+            } else {
+                Some(snapshots::resolve(&snapshot)?)
+            };
+            let (view, hits) = contract::assistant_inputs(db.as_deref(), &p)?;
+            let home = dirs::home_dir();
+            let records = contract::suggestions_for(
+                &view,
+                &hits,
+                home.as_deref(),
+                chrono::Utc::now().timestamp(),
+            );
+            render::suggestions(&records, format)?;
+        }
         Command::Prefs { set } => {
             let path = prefs::prefs_path();
             let p = if set.is_empty() {

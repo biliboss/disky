@@ -4,10 +4,18 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@solidjs/te
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const invoke = vi.fn();
-vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
+// The shell loads the Assistant view for its badge (REQ-DSCR-009.A5); these
+// tests are about Smart Clean, so that call stays out of `invoke`'s record.
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) =>
+    args[0] === "load_assistant" ? Promise.reject(new Error("no Assistant here")) : invoke(...args),
+}));
 const progressListeners: ((ev: { payload: unknown }) => void)[] = [];
+/** Only the progress channels these tests drive are recorded. */
+const PROGRESS_CHANNELS = ["scan://progress", "clean://progress"];
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: async (_event: string, cb: (ev: { payload: unknown }) => void) => {
+  listen: async (event: string, cb: (ev: { payload: unknown }) => void) => {
+    if (!PROGRESS_CHANNELS.includes(event)) return () => undefined;
     progressListeners.push(cb);
     return () => progressListeners.splice(progressListeners.indexOf(cb), 1);
   },

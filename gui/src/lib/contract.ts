@@ -656,3 +656,99 @@ export function parseDupesView(raw: unknown): DupesView {
     }),
   };
 }
+
+/** Which Assistant suggestion a record is (REQ-DSCR-008.A1). */
+export type SuggestionKey = "goal" | "ok" | "dev" | "dl" | "left";
+export const SUGGESTION_KEYS: readonly SuggestionKey[] = ["goal", "ok", "dev", "dl", "left"];
+export const CHECK_FREQUENCIES: readonly CheckFrequency[] = ["hourly", "daily", "weekly"];
+
+/** One Assistant suggestion (`disky suggest`, `src/assistant.rs`). */
+export interface Suggestion {
+  key: SuggestionKey;
+  /** "Goal", "On track", "Suggestion" or "Heads-up". */
+  kind: string;
+  /** Worded by the engine, every figure real (REQ-DSCR-008.A2). */
+  text: string;
+  /** Physical bytes the review would clear; null when nothing is offered. */
+  bytes: number | null;
+  /** Engine category ids the review opens with selected. */
+  categories: string[];
+  actionable: boolean;
+  /** When the figures were taken (RFC 3339), if known. */
+  at: string | null;
+}
+
+/** One agent CLI and whether it is installed (`disky agents`, REQ-DSCR-007). */
+export interface Agent {
+  id: string;
+  name: string;
+  found: boolean;
+  path: string | null;
+  /** `path` with home shown as `~`. */
+  display_path: string | null;
+}
+
+/** Everything the Assistant screen renders (`src/contract.rs` `AssistantView`). */
+export interface AssistantView {
+  agent: string;
+  /** The selected agent's display name, from the engine. */
+  agent_name: string;
+  checks: { enabled: boolean; frequency: CheckFrequency };
+  goal_bytes: number;
+  disk: Disk;
+  agents: Agent[];
+  /** Empty when proactive checks are off (REQ-DSCR-009.A4). */
+  suggestions: Suggestion[];
+}
+
+function parseSuggestion(v: unknown, path: string): Suggestion {
+  const s = obj(v, path);
+  const actionable = bool(s.actionable, `${path}.actionable`);
+  const out: Suggestion = {
+    key: oneOf(s.key, SUGGESTION_KEYS, `${path}.key`),
+    kind: str(s.kind, `${path}.kind`),
+    text: str(s.text, `${path}.text`),
+    bytes: s.bytes === null ? null : bytes(s.bytes, `${path}.bytes`),
+    categories: strArr(s.categories, `${path}.categories`),
+    actionable,
+    at: s.at === undefined ? null : strOrNull(s.at, `${path}.at`),
+  };
+  if (actionable && (out.bytes === null || out.categories.length === 0)) {
+    throw new ContractError(path, "an actionable suggestion needs bytes and categories");
+  }
+  return out;
+}
+
+function parseAgent(v: unknown, path: string): Agent {
+  const a = obj(v, path);
+  const found = bool(a.found, `${path}.found`);
+  const p = strOrNull(a.path ?? null, `${path}.path`);
+  if (found && p === null) throw new ContractError(`${path}.path`, "a found agent needs its path");
+  return {
+    id: str(a.id, `${path}.id`),
+    name: str(a.name, `${path}.name`),
+    found,
+    path: p,
+    display_path: strOrNull(a.display_path ?? null, `${path}.display_path`),
+  };
+}
+
+/** The Assistant view (`load_assistant`), validated field by field. */
+export function parseAssistantView(raw: unknown): AssistantView {
+  const o = obj(raw, "assistant");
+  const c = obj(o.checks, "assistant.checks");
+  return {
+    agent: str(o.agent, "assistant.agent"),
+    agent_name: str(o.agent_name, "assistant.agent_name"),
+    checks: {
+      enabled: bool(c.enabled, "assistant.checks.enabled"),
+      frequency: oneOf(c.frequency, CHECK_FREQUENCIES, "assistant.checks.frequency"),
+    },
+    goal_bytes: bytes(o.goal_bytes, "assistant.goal_bytes"),
+    disk: parseDisk(o.disk, "assistant.disk"),
+    agents: arr(o.agents, "assistant.agents").map((a, i) => parseAgent(a, `assistant.agents[${i}]`)),
+    suggestions: arr(o.suggestions, "assistant.suggestions").map((s, i) =>
+      parseSuggestion(s, `assistant.suggestions[${i}]`),
+    ),
+  };
+}

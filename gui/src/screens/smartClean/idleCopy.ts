@@ -45,7 +45,7 @@ export function notificationText(freeBytes: number, goalBytes: number, safeBytes
   return `You’re down to ${formatBytes(freeBytes)} free, under your ${formatBytes(goalBytes)} goal. I can clear ${formatBytes(safeBytes)} of safe junk once you confirm.`;
 }
 
-/** The notification's sender line; the agent's name follows once one is known. */
+/** The notification's sender line, "Assistant · <agent>" (REQ-DSCR-009.A5); "Assistant" until the engine names the agent. */
 export function notificationSender(agentName: string | null): string {
   return agentName ? `Assistant · ${agentName}` : "Assistant";
 }

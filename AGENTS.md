@@ -264,6 +264,34 @@ every change with the `set_prefs` Tauri command; "Add folder" calls
 `pick_folder` (native picker, `tauri-plugin-dialog`, backend only) and then
 `set_prefs`.
 
+## Assistant (REQ-DSCR-007/008/009/010/011)
+
+```
+disky agents --format json    # kind:"agents", claude/codex/gemini in order
+disky suggest --format json   # kind:"suggestions", from @latest + prefs
+```
+
+`agents` looks for each CLI in `PATH`, then `~/.local/bin`,
+`/opt/homebrew/bin` and `/usr/local/bin`. It only checks the executable bit
+and never runs the CLI. Each `Agent` is `{id, name, found, path,
+display_path}`, and the display names come from `agents::AGENTS`.
+
+`suggest` returns `goal` or `ok`, then `dev`, `dl` and `left` (one per
+category group with hits), as `Suggestion {key, kind, text, bytes,
+categories, actionable, at}`. Every figure is the snapshot's or the disk's,
+and hits gone since the scan are left out. With checks off, the GUI's
+`contract::assistant_view` returns an empty feed, but `disky suggest` still
+reports.
+
+GUI: the Assistant screen reads `load_assistant`. Its cards only open a
+Smart Clean review, which the agent "prepared". The Tauri-side
+`scheduler.rs` (pure, with an injectable clock) and `checks.rs` (the
+driver) reload the view at the checks frequency. They start a due
+scheduled scan only when Smart Clean is idle, and post one macOS
+notification per below-goal episode (`tauri-plugin-notification`, pinned
+exactly). A test asserts the scheduler has no path to clean, trash or
+delete.
+
 ## `.diskyignore` loader (v0.11.0)
 
 Module `src/ignore.rs` (170 LOC, std-only) provides:
