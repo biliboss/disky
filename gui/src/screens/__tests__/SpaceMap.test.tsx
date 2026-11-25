@@ -18,6 +18,11 @@ const FOLDERS: Record<string, { name: string; total: number; kids: [string, numb
     total: 438 * GB,
     kids: [["Users", 212, true], ["Applications", 92, true], ["System", 58, false], ["Library", 34, false], ["Containers", 26, false], ["Other", 16, false]],
   },
+  "/Users/me": {
+    name: "me",
+    total: 300 * GB,
+    kids: [["Library", 120, true], ["dev", 90, true]],
+  },
   "/Users": {
     name: "Users",
     total: 212 * GB,
@@ -35,6 +40,8 @@ function mapView(path: string) {
     total_bytes: f.total,
     capacity_bytes: 512 * GB,
     records: f.kids.map(([name, gb, has]) => ({ name, path: `${path === "/" ? "" : path}/${name}`, bytes: gb * GB, has_children: has })),
+    // The engine folded 214 small children of /Users/me into one block.
+    other: path === "/Users/me" ? { count: 214, bytes: 90 * GB } : null,
   };
 }
 
@@ -130,6 +137,27 @@ async function revealAsksTheBackendForTheSelectedPath() {
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("reveal_in_finder", { path: "/Users" }));
 }
 
+async function foldedFolderEndsWithAnOtherBlock() {
+  invoke.mockImplementation(async (cmd: string) => {
+    if (cmd === "load_map") return mapView("/Users/me");
+    throw new Error(`unexpected command ${cmd}`);
+  });
+  const s = await renderMap();
+  const other = await within(s).findByRole("button", { name: "Other, 214 smaller items, 90 GB" });
+  expect(other).toHaveClass("map-tile-other");
+  // The engine's remainder is the last block, after the kept children.
+  const all = within(s).getAllByRole("button").filter((b) => b.classList.contains("map-tile"));
+  expect(all.at(-1)).toBe(other);
+  fireEvent.click(other);
+  expect(within(card(s)).getByText("Other")).toBeInTheDocument();
+  expect(within(card(s)).getByText("214 smaller items")).toBeInTheDocument();
+  // Not a folder on disk: no Open folder, no Reveal in Finder.
+  expect(within(card(s)).queryByRole("button", { name: "Open folder" })).toBeNull();
+  expect(within(card(s)).queryByRole("button", { name: "Reveal in Finder" })).toBeNull();
+  fireEvent.dblClick(other);
+  expect(invoke).toHaveBeenCalledTimes(1);
+}
+
 async function noSnapshotOffersStartScan() {
   fakeEngine(false);
   await renderMap();
@@ -151,4 +179,5 @@ describe("Space map screen (REQ-DSCR-012)", () => {
   it("Enter on the selected tile opens it (A5)", enterOnTheSelectedTileOpensIt);
   it("Reveal in Finder goes through the backend (A4)", revealAsksTheBackendForTheSelectedPath);
   it("no snapshot shows No scans yet with Start scan (A5)", noSnapshotOffersStartScan);
+  it("a folded folder ends with the engine's Other block, which cannot be opened (A2)", foldedFolderEndsWithAnOtherBlock);
 });

@@ -141,6 +141,7 @@ implementations:
   - src/map.rs:MapView
   - src/map.rs:map
   - src/map.rs:normalize
+  - src/map.rs:MapOther
   - src/contract.rs:map_view
   - src/render.rs:map
   - src/cli.rs:Command
@@ -156,6 +157,9 @@ verifies:
   - src/map.rs:map_leaves_out_excluded_folders
   - src/map.rs:map_of_the_filesystem_root
   - src/map.rs:map_json_shape
+  - src/map.rs:fold_keeps_the_largest_and_sums_the_rest_into_other
+  - src/map.rs:fold_moves_slivers_under_the_share_into_other
+  - src/map.rs:fold_leaves_a_small_folder_untouched
   - tests/lib_integration.rs:map_is_fast_on_large_snapshot
   - tests/lib_integration.rs:map_view_honours_excluded_folders
   - tests/agentic.rs:map_lists_children_largest_first_and_outside_exits_not_found
@@ -175,6 +179,11 @@ verifies:
 - A path outside the snapshot exits 4 (not-found).
 <!-- id: REQ-DSCR-003.A4 -->
 - On a 1 M-row snapshot one call returns in under 1 s (release build).
+<!-- id: REQ-DSCR-003.A5 -->
+- `--tiles <N>` folds the view for drawing. The largest children are kept, at most N − 1 of them, and any child under 0.5% of the folder is dropped from that list.
+  - Every dropped child is summed into one `other: {count, bytes}`. The bytes of the kept children plus `other.bytes` equal `total_bytes`.
+  - A view with nothing to fold, or a single child that would be folded, has `other: null`. A lone child is never renamed "Other".
+  - Without `--tiles`, every child is listed. The GUI always asks for at most 20 blocks.
 
 <!-- id: REQ-DSCR-004 -->
 ## The engine MUST list large files with their last-opened time
@@ -420,6 +429,7 @@ implementations:
   - gui/src/screens/spaceMap/mapCopy.ts:mapTitle
   - gui/src/screens/spaceMap/mapCopy.ts:tileLabel
   - gui/src/screens/spaceMap/mapCopy.ts:shareOfDisk
+  - gui/src/screens/spaceMap/mapCopy.ts:otherDetail
   - gui/src/lib/engine.ts:revealInFinder
   - gui/src-tauri/src/main.rs:reveal_in_finder
   - gui/src/App.tsx:ROUTES
@@ -435,6 +445,8 @@ verifies:
   - gui/src/screens/__tests__/SpaceMap.test.tsx:enterOnTheSelectedTileOpensIt
   - gui/src/screens/__tests__/SpaceMap.test.tsx:revealAsksTheBackendForTheSelectedPath
   - gui/src/screens/__tests__/SpaceMap.test.tsx:noSnapshotOffersStartScan
+  - gui/src/screens/__tests__/SpaceMap.test.tsx:foldedFolderEndsWithAnOtherBlock
+  - gui/tests/visual/spaceMap.spec.ts:crowdedFolderStaysInsideTheTreemap
   - gui/tests/visual/spaceMap.spec.ts:spaceMapMatchesSnapshot
   - gui/tests/visual/spaceMap.spec.ts:spaceMapPassesAxe
   - gui/tests/visual/spaceMap.spec.ts:keyboardDrillsIntoAFolder
@@ -453,6 +465,9 @@ verifies:
   - Each tile's area is proportional to its bytes.
   - Tile colours cycle through the snapshot's seven tile tokens.
   - Each tile shows its name and size.
+  - Every tile stays inside the treemap's box, and its padding never makes it larger than its slot.
+  - A tile too small to read hides its size, and then its name. A name that doesn't fit ends in an ellipsis. Its accessible name always carries both.
+  - When the engine folded children (REQ-DSCR-003.A5), the last tile is "Other", labelled "Other, <n> smaller items, <size>". Selecting it shows the count in the Selected card. It offers neither Open folder nor Reveal in Finder.
 <!-- id: REQ-DSCR-012.A3 -->
 - **Selection:**
   - Clicking a tile selects it, and the selection gets the inset accent-700 ring.

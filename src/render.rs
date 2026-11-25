@@ -503,6 +503,13 @@ pub fn map(view: &MapView, format: Format) -> Result<()> {
             format_size(c.bytes, BINARY)
         );
     }
+    if let Some(o) = &view.other {
+        println!(
+            "{:<70} {:>12}",
+            format!("Other ({} items)", o.count),
+            format_size(o.bytes, BINARY)
+        );
+    }
     Ok(())
 }
 

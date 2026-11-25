@@ -44,6 +44,14 @@ export function mapTitle(view: Pick<MapView, "path" | "root" | "total_bytes">): 
   return `${c[c.length - 1]} · ${formatBytes(view.total_bytes)}`;
 }
 
+/** The block the engine sums small children into (`MapView.other`). */
+export const OTHER = "Other";
+
+/** "12 smaller items" — the Other block's detail line. */
+export function otherDetail(count: number): string {
+  return `${count} smaller ${count === 1 ? "item" : "items"}`;
+}
+
 /** A tile's accessible name: "<name>, <size>" (REQ-DSCR-012.A5). */
 export function tileLabel(name: string, bytes: number): string {
   return `${name}, ${formatBytes(bytes)}`;

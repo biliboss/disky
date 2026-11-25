@@ -41,6 +41,50 @@ pub struct MapView {
     pub capacity_bytes: u64,
     /// Immediate children, largest first (ties by name).
     pub records: Vec<MapChild>,
+    /// Children folded away by [`MapView::fold`]: how many, and their bytes.
+    /// `None` when nothing was folded.
+    pub other: Option<MapOther>,
+}
+
+/// The children a folded map leaves out, summed by the engine so a client
+/// can draw one "Other" block without adding sizes itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MapOther {
+    pub count: u64,
+    pub bytes: u64,
+}
+
+/// Most blocks the Space map draws (REQ-DSCR-003.A5).
+pub const MAX_TILES: usize = 20;
+/// A child below this share of the folder is folded into "Other": a smaller
+/// block is too thin to label or click (REQ-DSCR-003.A5).
+pub const MIN_TILE_SHARE: f64 = 0.005;
+
+impl MapView {
+    /// Keep at most `max_tiles - 1` children (the last slot is "Other") whose
+    /// bytes are at least `min_share` of the folder, and fold the rest into
+    /// [`MapView::other`]. `total_bytes` is unchanged. Folding nothing leaves
+    /// the view as it is (REQ-DSCR-003.A5).
+    pub fn fold(mut self, max_tiles: usize, min_share: f64) -> Self {
+        let floor = (self.total_bytes as f64 * min_share).ceil() as u64;
+        let keep_max = max_tiles.saturating_sub(1).max(1);
+        let keep = self
+            .records
+            .iter()
+            .take_while(|c| c.bytes >= floor)
+            .count()
+            .min(keep_max);
+        // Folding a single child would only rename it: keep it as itself.
+        if self.records.len() - keep <= 1 && self.records.len() <= max_tiles {
+            return self;
+        }
+        let rest = self.records.split_off(keep);
+        self.other = Some(MapOther {
+            count: rest.len() as u64,
+            bytes: rest.iter().map(|c| c.bytes).sum(),
+        });
+        self
+    }
 }
 
 /// `path` without a trailing `/`; the filesystem root stays `/`.
@@ -168,6 +212,7 @@ pub fn map(
         root,
         capacity_bytes,
         records,
+        other: None,
     })
 }
 
@@ -290,5 +335,62 @@ mod tests {
         assert_eq!(j["records"][0]["has_children"], true);
         assert!(j["records"][0]["bytes"].is_u64());
         assert_eq!(j["capacity_bytes"], 7);
+    }
+
+    /// A view of `n` children whose sizes are `sizes`, largest first.
+    fn view_of(sizes: &[u64]) -> MapView {
+        MapView {
+            path: "/r".into(),
+            name: "r".into(),
+            root: "/r".into(),
+            total_bytes: sizes.iter().sum(),
+            capacity_bytes: 1,
+            records: sizes
+                .iter()
+                .enumerate()
+                .map(|(i, b)| MapChild {
+                    name: format!("c{i}"),
+                    path: format!("/r/c{i}"),
+                    bytes: *b,
+                    has_children: true,
+                })
+                .collect(),
+            other: None,
+        }
+    }
+
+    #[test]
+    fn fold_keeps_the_largest_and_sums_the_rest_into_other() {
+        // 30 children: the cap keeps 19, the 20th block is "Other".
+        let sizes: Vec<u64> = (0..30).map(|i| 1_000 - i).collect();
+        let v = view_of(&sizes).fold(20, 0.0);
+        assert_eq!(v.records.len(), 19);
+        let o = v.other.as_ref().unwrap();
+        assert_eq!(o.count, 11);
+        assert_eq!(o.bytes, sizes[19..].iter().sum::<u64>());
+        // Nothing is lost: kept + other = the folder.
+        assert_eq!(
+            v.records.iter().map(|c| c.bytes).sum::<u64>() + o.bytes,
+            v.total_bytes
+        );
+    }
+
+    #[test]
+    fn fold_moves_slivers_under_the_share_into_other() {
+        let v = view_of(&[900, 80, 4, 3, 2]).fold(20, 0.005);
+        // 0.5% of 989 rounds up to 5 bytes: 4, 3 and 2 are slivers.
+        assert_eq!(names(&v).len(), 2);
+        assert_eq!(v.other, Some(MapOther { count: 3, bytes: 9 }));
+    }
+
+    #[test]
+    fn fold_leaves_a_small_folder_untouched() {
+        let v = view_of(&[50, 40, 10]).fold(20, 0.005);
+        assert_eq!(v.records.len(), 3);
+        assert_eq!(v.other, None);
+        // A single sliver is kept as itself, never renamed "Other".
+        let v = view_of(&[1_000, 1]).fold(20, 0.005);
+        assert_eq!(v.records.len(), 2);
+        assert_eq!(v.other, None);
     }
 }

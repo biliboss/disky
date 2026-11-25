@@ -291,6 +291,10 @@ function parsesAMapViewAndRejectsBadBytes() {
   expect(parseMapView(map).records[0]).toEqual(map.records[0]);
   expect(() => parseMapView({ ...map, records: [{ ...map.records[0], bytes: 1.5 }] })).toThrow(ContractError);
   expect(() => parseMapView({ ...map, records: [{ ...map.records[0], has_children: "yes" }] })).toThrow(ContractError);
+  // `other` is optional: absent or null reads as none, present is checked.
+  expect(parseMapView(map).other).toBeNull();
+  expect(parseMapView({ ...map, other: { count: 12, bytes: 4e9 } }).other).toEqual({ count: 12, bytes: 4e9 });
+  expect(() => parseMapView({ ...map, other: { count: 12, bytes: -1 } })).toThrow(ContractError);
 }
 
 describe("history and map views (REQ-DSCR-015, REQ-DSCR-003)", () => {

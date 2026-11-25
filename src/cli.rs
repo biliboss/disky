@@ -296,6 +296,11 @@ pub enum Command {
     Map {
         /// Absolute folder path (`~/` is expanded). Default: the scan root.
         path: Option<String>,
+        /// Keep at most N blocks, as the Space map does: the largest
+        /// children, with the rest (and any under 0.5% of the folder)
+        /// summed into one "Other" (`other` in JSON).
+        #[arg(long, value_name = "N")]
+        tiles: Option<usize>,
         #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
         snapshot: String,
     },

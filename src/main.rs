@@ -650,7 +650,11 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             let view = contract::history_view_now(&history::log_path())?;
             render::history(&view, limit, format)?;
         }
-        Command::Map { path, snapshot } => {
+        Command::Map {
+            path,
+            tiles,
+            snapshot,
+        } => {
             let db = snapshots::resolve(&snapshot)?;
             let path = path.map(|p| match p.strip_prefix("~/") {
                 Some(rest) => dirs::home_dir()
@@ -659,7 +663,10 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                 None => p,
             });
             let p = prefs::load(&prefs::prefs_path())?;
-            let view = contract::map_view(&db, path.as_deref(), &p)?;
+            let mut view = contract::map_view(&db, path.as_deref(), &p)?;
+            if let Some(n) = tiles {
+                view = view.fold(n, disky::map::MIN_TILE_SHARE);
+            }
             render::map(&view, format)?;
         }
         Command::Large { filter, snapshot } => {

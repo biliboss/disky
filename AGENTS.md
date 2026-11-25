@@ -144,14 +144,18 @@ tests set a temp `HOME`. No test touches the real `~/.Trash` or log.
 ## Space map (REQ-DSCR-003/012)
 
 ```
-disky map [<path>] --snapshot @latest --format json
+disky map [<path>] [--tiles N] --snapshot @latest --format json
 ```
 
 Envelope `{kind:"map", path, name, root, total_bytes, capacity_bytes,
-records:[MapChild {name, path, bytes, has_children}]}`: the folder's
+records:[MapChild {name, path, bytes, has_children}], other}`: the folder's
 immediate children by physical bytes (recursive), largest first. The default
 path is the scan root, and a folder not in the snapshot exits 4. Excluded
-folders (prefs) are left out. `src/map.rs` runs one grouped range query
+folders (prefs) are left out. `--tiles N` folds the view for drawing: at
+most N − 1 children, each ≥ 0.5% of the folder, plus `other: {count,
+bytes}`, the engine's sum of the rest (`null` when nothing folds). The GUI's
+`load_map` always folds to `map::MAX_TILES` (20), so a crowded home folder
+never yields unreadable slivers. `src/map.rs` runs one grouped range query
 (`split_part` over the rows beneath the folder, with no per-child loop).
 `tests/lib_integration.rs::map_is_fast_on_large_snapshot` asserts < 1 s on
 ~1 M rows in release.

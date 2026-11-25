@@ -56,6 +56,13 @@
    is one of the seven tile tokens, set per tile. */
 .map-tile {
   position: absolute;
+  /* Padding sits inside the slot: a block never outgrows its rectangle, so
+     small blocks stay rectangles and never spill past the treemap. */
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  /* Labels below react to the block's own size (container queries). */
+  container-type: size;
   border-radius: var(--radius-md);
   border: none;
   padding: var(--map-tile-pad);
@@ -90,6 +97,14 @@
   outline-offset: var(--focus-ring-inset-offset);
 }
 
+.map-tile-name,
+.map-tile-size {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .map-tile-name {
   font-weight: var(--fw-map-tile-name);
   font-size: var(--fs-map-tile-name);
@@ -97,6 +112,28 @@
 
 .map-tile-size {
   font-size: var(--fs-map-tile-size);
+}
+
+/* A block too small to read keeps its colour and accessible name but shows
+   no text: the side card names it once selected. The query measures the
+   block's content box (inside its padding). Container query sizes cannot
+   read custom properties, so the thresholds are plain rem: one line of
+   text needs ~1.25rem, both lines ~2.4rem, a readable word ~2.5rem. */
+@container (max-width: 2.5rem) or (max-height: 2.4rem) {
+  .map-tile-size {
+    display: none;
+  }
+}
+
+@container (max-width: 2.5rem) or (max-height: 1.25rem) {
+  .map-tile-name {
+    display: none;
+  }
+}
+
+/* A thin block takes the small radius so it reads as a block, not a pill. */
+.map-tile-thin {
+  border-radius: var(--radius-sm);
 }
 
 .map-side {

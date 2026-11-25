@@ -277,12 +277,39 @@ export function snapshotMapFolders() {
 }
 
 /**
+ * A crowded home folder (the bug report's shape): 19 children the engine
+ * kept, largest first, and the 200+ it folded into `other`, as
+ * `MapView.fold(MAX_TILES, MIN_TILE_SHARE)` returns it.
+ */
+export function crowdedMapFolder() {
+  const kept: [string, number][] = [
+    ["Library", 265], ["dev", 198], [".specship", 26], [".cache", 24.7], [".ollama", 24.7], [".npm", 18.5],
+    [".android", 11.1], [".archon", 11.1], [".openclaw", 9.4], ["profiles-and-a-long-folder-name", 8.9], ["go", 7.2],
+    [".cargo", 5.2], [".rustup", 4.8], ["Documents", 4.1], ["Movies", 3.9], [".docker", 3.6], ["Pictures", 3.4],
+    ["Downloads", 3.3], [".bun", 3.3],
+  ];
+  const records = kept.map(([name, gb]) => ({ name, path: `/Users/me/${name}`, bytes: Math.round(gb * GB), has_children: true }));
+  const other = { count: 214, bytes: 22 * GB };
+  return {
+    path: "/Users/me",
+    name: "me",
+    root: "/Users/me",
+    total_bytes: records.reduce((a, r) => a + r.bytes, 0) + other.bytes,
+    capacity_bytes: 994 * GB,
+    records,
+    other,
+  };
+}
+
+/**
  * Answer the Space map's commands from the snapshot's MAP: `load_map`
  * returns the folder (null with `noSnapshot`), `reveal_in_finder` records
  * its path in `window.__revealed`. Every `load_map` path is recorded in
  * `window.__mapped`.
  */
-export async function stubMap(page: Page, noSnapshot = false) {
+export async function stubMap(page: Page, noSnapshot = false, root?: unknown) {
+  const folders = snapshotMapFolders();
+  if (root) folders["/"] = root;
   await page.addInitScript(
     ([folders, none]) => {
       const w = window as any;
@@ -306,7 +333,7 @@ export async function stubMap(page: Page, noSnapshot = false) {
         transformCallback: () => 0,
       };
     },
-    [snapshotMapFolders(), noSnapshot] as const,
+    [folders, noSnapshot] as const,
   );
 }
 

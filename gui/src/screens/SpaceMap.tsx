@@ -12,6 +12,7 @@ import {
   NO_SCANS,
   NO_SCANS_NOTE,
   OPEN_FOLDER,
+  OTHER,
   REVEAL,
   SELECTED,
   SHARE,
@@ -20,6 +21,7 @@ import {
   UP,
   crumbLine,
   mapTitle,
+  otherDetail,
   shareOfDisk,
   tileLabel,
 } from "./spaceMap/mapCopy";
@@ -36,6 +38,12 @@ import "./spaceMap/spaceMap.css";
  *
  * @implements REQ-DSCR-012
  */
+/** A block thinner than this (percent of the treemap side) takes the small radius. */
+const THIN_PERCENT = 8;
+
+/** A block: an engine child, or the engine's "Other" (`other` = its child count). */
+type Tile = MapChild & { weight: number; other: number | null };
+
 export function SpaceMap() {
   const navigate = useNavigate();
   /** Folders opened below the root, outermost first; empty at the root. */
@@ -51,13 +59,28 @@ export function SpaceMap() {
   const busy = useDelayedBusy(() => view.loading);
   const loadError = () => (view.state === "errored" ? parseEngineError(view.error) : null);
 
-  /** Tiles: children with bytes, laid out in the engine's order (largest first). */
+  /**
+   * Tiles: children with bytes, laid out in the engine's order (largest
+   * first), then the engine's "Other" block when it folded small children
+   * away (REQ-DSCR-012.A2). Other is neither openable nor revealable.
+   */
   const tiles = createMemo(() => {
     const v = latest();
     if (!v) return [];
-    return layout(v.records.filter((c) => c.bytes > 0).map((c) => ({ ...c, weight: c.bytes })));
+    const kids: Tile[] = v.records.filter((c) => c.bytes > 0).map((c) => ({ ...c, weight: c.bytes, other: null }));
+    if (v.other && v.other.bytes > 0) {
+      kids.push({
+        name: OTHER,
+        path: v.path,
+        bytes: v.other.bytes,
+        has_children: false,
+        weight: v.other.bytes,
+        other: v.other.count,
+      });
+    }
+    return layout(kids);
   });
-  const selected = (): MapChild | undefined => tiles()[Math.min(pick(), tiles().length - 1)];
+  const selected = (): Tile | undefined => tiles()[Math.min(pick(), tiles().length - 1)];
 
   function open(c: MapChild | undefined) {
     if (!c?.has_children) return;
@@ -138,7 +161,8 @@ export function SpaceMap() {
               <button
                 type="button"
                 class="map-tile"
-                aria-label={tileLabel(t.name, t.bytes)}
+                aria-label={t.other == null ? tileLabel(t.name, t.bytes) : tileLabel(`${t.name}, ${otherDetail(t.other)}`, t.bytes)}
+                classList={{ "map-tile-other": t.other != null, "map-tile-thin": Math.min(t.w, t.h) < THIN_PERCENT }}
                 aria-pressed={i() === pick() ? "true" : "false"}
                 style={{
                   left: `calc(${t.x}% + var(--map-tile-inset))`,
@@ -173,7 +197,7 @@ export function SpaceMap() {
               <div class="card map-card" data-testid="map-selected">
                 <span class="card-kicker map-card-kicker">{SELECTED}</span>
                 <span class="card-title map-card-title">{s().name}</span>
-                <span class="map-card-path">{s().path}</span>
+                <span class="map-card-path">{s().other == null ? s().path : otherDetail(s().other!)}</span>
                 <div class="map-card-row map-card-row-first">
                   <span>{SIZE}</span>
                   <span class={`map-card-value ${NUMERIC_CLASS}`}>{formatBytes(s().bytes)}</span>
@@ -190,9 +214,11 @@ export function SpaceMap() {
                       {OPEN_FOLDER}
                     </button>
                   </Show>
-                  <button type="button" class="btn btn-secondary" onClick={() => reveal(s().path)}>
-                    {REVEAL}
-                  </button>
+                  <Show when={s().other == null}>
+                    <button type="button" class="btn btn-secondary" onClick={() => reveal(s().path)}>
+                      {REVEAL}
+                    </button>
+                  </Show>
                 </div>
               </div>
             )}

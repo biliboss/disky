@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { MASK_COLOR, baselinePath, offset, openSnapshot } from "./snapshot";
-import { WINDOW, openApp, stubMap } from "./engineStub";
+import { WINDOW, crowdedMapFolder, openApp, stubMap } from "./engineStub";
 
 /**
  * REQ-DSCR-012 in a real browser: the Space map against the snapshot
@@ -40,6 +40,39 @@ async function spaceMapMatchesSnapshot({ page }: { page: Page }) {
     clip: WINDOW,
     mask: [page.locator(APP_LIGHTS), page.locator(".meter-free")],
   });
+}
+
+/**
+ * A crowded folder (bug: blocks spilled past the treemap as pills and
+ * labels overflowed): every block stays inside the treemap box, the
+ * engine's Other block is drawn last, and no shown label is wider than its
+ * block (ellipsis allowed, overflow not).
+ */
+async function crowdedFolderStaysInsideTheTreemap({ page }: { page: Page }) {
+  await stubMap(page, false, crowdedMapFolder());
+  await page.setViewportSize(WINDOW);
+  await openApp(page, "#/space-map");
+  await page.getByRole("button", { name: "Other, 214 smaller items, 22 GB" }).waitFor();
+  const report = await page.evaluate(() => {
+    const box = document.querySelector(".map-tiles")!.getBoundingClientRect();
+    const tiles = [...document.querySelectorAll<HTMLElement>(".map-tile")];
+    const outside = tiles
+      .filter((t) => {
+        const r = t.getBoundingClientRect();
+        return r.left < box.left - 0.5 || r.top < box.top - 0.5 || r.right > box.right + 0.5 || r.bottom > box.bottom + 0.5;
+      })
+      .map((t) => t.getAttribute("aria-label"));
+    const overflowing = tiles
+      .flatMap((t) => [...t.querySelectorAll<HTMLElement>("span")])
+      .filter((s) => s.offsetParent !== null && s.getBoundingClientRect().width > s.parentElement!.clientWidth + 0.5)
+      .map((s) => s.textContent);
+    return { count: tiles.length, last: tiles.at(-1)?.getAttribute("aria-label"), outside, overflowing };
+  });
+  expect(report.count).toBe(20);
+  expect(report.last).toBe("Other, 214 smaller items, 22 GB");
+  expect(report.outside).toEqual([]);
+  expect(report.overflowing).toEqual([]);
+  await page.screenshot({ path: test.info().outputPath("crowded-map.png"), clip: WINDOW });
 }
 
 async function spaceMapPassesAxe({ page }: { page: Page }) {
@@ -88,3 +121,4 @@ test("Space map matches the snapshot within 1% (REQ-DSCR-012.A1, REQ-DSCR-017.A1
 test("Space map has zero serious or critical axe violations (REQ-DSCR-017.A2)", spaceMapPassesAxe);
 test("the keyboard selects and drills into a folder (REQ-DSCR-012.A5, REQ-DSCR-017.A2)", keyboardDrillsIntoAFolder);
 test("no snapshot shows No scans yet with Start scan (REQ-DSCR-012.A5)", noSnapshotOffersStartScan);
+test("a crowded folder stays inside the treemap with an Other block (REQ-DSCR-012.A2)", crowdedFolderStaysInsideTheTreemap);

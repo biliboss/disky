@@ -491,6 +491,14 @@ export interface MapView {
   capacity_bytes: number;
   /** Largest first. */
   records: MapChild[];
+  /** Children the engine folded away (the Space map's "Other" block), or null. */
+  other: MapOther | null;
+}
+
+/** What `MapView.fold` left out: how many children, and their summed bytes. */
+export interface MapOther {
+  count: number;
+  bytes: number;
 }
 
 export function parseMapView(raw: unknown): MapView {
@@ -510,6 +518,13 @@ export function parseMapView(raw: unknown): MapView {
         has_children: bool(co.has_children, `map.records[${i}].has_children`),
       };
     }),
+    other:
+      o.other == null
+        ? null
+        : (() => {
+            const oo = obj(o.other, "map.other");
+            return { count: bytes(oo.count, "map.other.count"), bytes: bytes(oo.bytes, "map.other.bytes") };
+          })(),
   };
 }
 

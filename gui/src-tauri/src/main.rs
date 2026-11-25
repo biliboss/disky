@@ -249,7 +249,10 @@ async fn load_map(app: AppHandle, path: Option<String>) -> CmdResult<Option<MapV
             app.state::<Engine>().mapped.lock().unwrap().clear();
             return Ok(None);
         };
-        let view = contract::map_view(&snapshot, path.as_deref(), &read_prefs()?)?;
+        // The screen draws at most MAX_TILES blocks; the engine sums the rest
+        // into `other` so a crowded folder never yields unreadable slivers.
+        let view = contract::map_view(&snapshot, path.as_deref(), &read_prefs()?)?
+            .fold(disky::map::MAX_TILES, disky::map::MIN_TILE_SHARE);
         *app.state::<Engine>().mapped.lock().unwrap() =
             view.records.iter().map(|c| c.path.clone()).collect();
         Ok(Some(view))

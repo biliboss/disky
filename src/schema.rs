@@ -116,8 +116,8 @@ fn commands() -> Value {
         },
         {
             "name": "map",
-            "args": { "path": "string? (absolute folder; default the scan root)", "snapshot": "@latest|<id>|<path>" },
-            "output": "map envelope: {kind:'map', path, name, root (scan root), total_bytes:u64 (physical), capacity_bytes:u64 (volume), records:[MapChild]} — immediate children, largest first; excluded folders (prefs) left out",
+            "args": { "path": "string? (absolute folder; default the scan root)", "tiles": "usize? (keep at most N blocks; the rest, and children under 0.5% of the folder, fold into `other`)", "snapshot": "@latest|<id>|<path>" },
+            "output": "map envelope: {kind:'map', path, name, root (scan root), total_bytes:u64 (physical), capacity_bytes:u64 (volume), records:[MapChild], other:{count:u64, bytes:u64}?} — immediate children, largest first; excluded folders (prefs) left out; `other` sums what --tiles folded (null otherwise)",
             "errors": "not-found (folder not in the snapshot)"
         },
         {
