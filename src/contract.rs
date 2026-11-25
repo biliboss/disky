@@ -95,6 +95,8 @@ pub struct CategoryView {
     /// Display label (`cleanup::Category::label`).
     pub name: String,
     pub description: String,
+    /// Lucide icon name (`cleanup::Category::icon`).
+    pub icon: String,
     /// `review` if any item is `review`, as in the CLI summary.
     pub safety: Safety,
     /// Sum of `items[].bytes`.
@@ -109,6 +111,8 @@ pub struct CatalogueEntry {
     pub id: String,
     /// Display label (`cleanup::Category::label`).
     pub name: String,
+    /// Lucide icon name (`cleanup::Category::icon`).
+    pub icon: String,
     pub safety: Safety,
 }
 
@@ -119,6 +123,7 @@ pub fn catalogue() -> Vec<CatalogueEntry> {
         .map(|c| CatalogueEntry {
             id: c.name.to_string(),
             name: c.label.to_string(),
+            icon: c.icon.to_string(),
             safety: c.safety,
         })
         .collect()
@@ -211,6 +216,7 @@ pub fn categories_from_hits(hits: &[CleanupHit]) -> Vec<CategoryView> {
                 id: c.name.to_string(),
                 name: c.label.to_string(),
                 description: c.description.to_string(),
+                icon: c.icon.to_string(),
                 safety,
                 bytes: items.iter().map(|i| i.bytes).sum(),
                 items,
@@ -520,6 +526,7 @@ mod tests {
             let def = cleanup::category(&c.id).expect("id is an engine category");
             assert_eq!(c.name, def.label);
             assert_eq!(c.description, def.description);
+            assert_eq!(c.icon, def.icon);
         }
         // Unknown categories never surface.
         let stray = [hit("made_up", "/x", 1, Safety::Safe)];
@@ -753,6 +760,7 @@ mod tests {
         for (entry, c) in v.catalogue.iter().zip(CATEGORIES) {
             assert_eq!(entry.id, c.name);
             assert_eq!(entry.name, c.label);
+            assert_eq!(entry.icon, c.icon);
             assert_eq!(entry.safety, c.safety);
         }
         let json = serde_json::to_value(&v).unwrap();

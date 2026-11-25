@@ -16,6 +16,7 @@ function validView(): Record<string, any> {
         id: "app_caches",
         name: "App caches",
         description: "Rebuilt by each app the next time it runs",
+        icon: "app-window",
         safety: "safe",
         bytes: 1_500_000_000,
         items: [
@@ -23,12 +24,12 @@ function validView(): Record<string, any> {
           { name: "Google", path: "/Users/me/Library/Caches/Google", bytes: 600_000_000 },
         ],
       },
-      { id: "logs", name: "Logs & crash reports", description: "d", safety: "review", bytes: 0, items: [] },
+      { id: "logs", name: "Logs & crash reports", description: "d", icon: "file-text", safety: "review", bytes: 0, items: [] },
     ],
     catalogue: [
-      { id: "app_caches", name: "App caches", safety: "safe" },
-      { id: "logs", name: "Logs & crash reports", safety: "review" },
-      { id: "trash", name: "Trash", safety: "safe" },
+      { id: "app_caches", name: "App caches", icon: "app-window", safety: "safe" },
+      { id: "logs", name: "Logs & crash reports", icon: "file-text", safety: "review" },
+      { id: "trash", name: "Trash", icon: "trash", safety: "safe" },
     ],
   };
 }
@@ -155,6 +156,15 @@ function cleanResultWithoutDiskIsRejected() {
   expectContractError(() => parseCleanResult(bad), "result.disk.free_bytes");
 }
 
+function categoryAndCatalogueIconsAreRequired() {
+  const raw = validView();
+  delete raw.categories[0].icon;
+  expectContractError(() => parseCleanupView(raw), "view.categories[0].icon");
+  const cat = validView();
+  cat.catalogue[1].icon = 7;
+  expectContractError(() => parseCleanupView(cat), "view.catalogue[1].icon");
+}
+
 function largeFilesCountMustBeAWholeCount() {
   const missing = validView();
   delete missing.large_files_count;
@@ -175,5 +185,6 @@ describe("GUI data contract (REQ-DCLEAN-027, REQ-DCLEAN-029)", () => {
   it("catalogue and completed category bytes are parsed strictly (REQ-DCLEAN-004.A4)", catalogueAndCompletedBytesAreStrict);
   it("clean results parse with or without a history entry (REQ-DCLEAN-027)", cleanResultParsesWithAndWithoutEntry);
   it("a clean result without its post-clean disk is rejected (REQ-DCLEAN-002.A4)", cleanResultWithoutDiskIsRejected);
+  it("category and catalogue icons are required strings (REQ-DCLEAN-005)", categoryAndCatalogueIconsAreRequired);
   it("the large-files count is a whole number from the engine (REQ-DCLEAN-003.A4)", largeFilesCountMustBeAWholeCount);
 });

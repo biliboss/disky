@@ -116,6 +116,7 @@ fn cleanup_categories() -> Value {
                 "name": c.name,
                 "label": c.label,
                 "description": c.description,
+                "icon": c.icon,
                 "safety": c.safety,
                 "kind": "basename",
                 "basenames": b,
@@ -126,6 +127,7 @@ fn cleanup_categories() -> Value {
                 "name": c.name,
                 "label": c.label,
                 "description": c.description,
+                "icon": c.icon,
                 "safety": c.safety,
                 "kind": "location",
                 "locations": locations
@@ -230,6 +232,7 @@ mod tests {
             assert_eq!(t["name"], c.name);
             assert_eq!(t["label"], c.label);
             assert_eq!(t["description"], c.description);
+            assert_eq!(t["icon"], c.icon);
             assert!(
                 !c.label.is_empty() && !c.description.is_empty(),
                 "{}",

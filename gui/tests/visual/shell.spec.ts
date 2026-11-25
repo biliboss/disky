@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { MASK_COLOR, REGIONS, baselinePath, offset, openSnapshot } from "./snapshot";
+import { snapshotReviewCategories } from "../fixtures/snapshotReview";
 
 /**
  * REQ-DCLEAN-032 visual contract. The baseline is generated from
@@ -117,7 +118,7 @@ function idleFixtureView() {
     preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
     large_files_count: 8,
     categories: [],
-    catalogue: SNAPSHOT_SCAN_ROWS.map((name, i) => ({ id: `visual_cat_${i}`, name, safety: "safe" })),
+    catalogue: SNAPSHOT_SCAN_ROWS.map((name, i) => ({ id: `visual_cat_${i}`, name, icon: "folder", safety: "safe" })),
   };
 }
 
@@ -136,22 +137,25 @@ const SNAPSHOT_SCAN_ROWS = [
 /**
  * Answer the app's Tauri `invoke` calls in the browser build with `view`.
  * With `scanForever`, `scan` never resolves and progress subscriptions are
- * accepted, so the app holds the scanning phase.
+ * accepted, so the app holds the scanning phase. With `scanResult`, `scan`
+ * resolves to that view at once, so the app enters the results phase.
  */
-async function stubEngine(page: Page, view: unknown, scanForever = false) {
+async function stubEngine(page: Page, view: unknown, scanForever = false, scanResult: unknown = null) {
   await page.addInitScript(
-    ([v, forever]) => {
+    ([v, forever, result]) => {
       (window as any).__TAURI_INTERNALS__ = {
         invoke: async (cmd: string) => {
           if (cmd === "load_cleanup_view") return v;
           if (forever && cmd === "scan") return new Promise(() => undefined);
-          if (forever && cmd === "plugin:event|listen") return 1;
+          if (result && cmd === "scan") return result;
+          if ((forever || result) && cmd === "plugin:event|listen") return 1;
+          if (result && cmd === "plugin:event|unlisten") return null;
           throw new Error(`visual stub: ${cmd} is not available`);
         },
         transformCallback: () => 0,
       };
     },
-    [view, scanForever] as const,
+    [view, scanForever, scanResult] as const,
   );
 }
 
@@ -277,10 +281,59 @@ async function scanningPhaseMatchesSnapshot({ page }: { page: Page }) {
 
 test("Smart Clean scanning phase matches the snapshot within 1% (REQ-DCLEAN-032.A1, REQ-DCLEAN-004)", scanningPhaseMatchesSnapshot);
 
+/** The snapshot's review screen. */
+const SNAPSHOT_REVIEW = '[data-screen-label="Smart clean · review"]';
+
+/**
+ * Category sizes on the review screen, masked on both sides: the prototype
+ * formats MB with 1024 (0.6 GB → "614 MB") where the app uses decimal units
+ * (REQ-DCLEAN-028), so the figures differ by design.
+ */
+const SNAPSHOT_REVIEW_SIZES = ["4.2 GB", "3.1 GB", "1.8 GB", "614 MB", "2.4 GB", "2.7 GB", "5.3 GB", "7.9 GB"];
+
+/** The snapshot's review data as the engine's results view. */
+function reviewFixtureView() {
+  return { ...idleFixtureView(), categories: snapshotReviewCategories() };
+}
+
+async function resultsPhaseMatchesSnapshot({ page }: { page: Page }) {
+  const at = await openSnapshot(page);
+  await page.getByRole("button", { name: "Later" }).click();
+  await page.locator('[data-screen-label="Smart clean · home"]').waitFor();
+  // Run the prototype's simulated scan to completion (≈ 3.6 s + 350 ms).
+  await page.locator("main").getByRole("button", { name: "Start scan" }).click();
+  await page.locator(SNAPSHOT_REVIEW).waitFor({ timeout: 15_000 });
+  const review = page.locator(SNAPSHOT_REVIEW);
+  await page.screenshot({
+    path: baselinePath("phase-results.png"),
+    clip: offset(WINDOW, at),
+    mask: [
+      page.locator(SNAPSHOT_LIGHTS),
+      ...SNAPSHOT_REVIEW_SIZES.map((t) => review.locator(`span:text-is("${t}")`).first().locator("xpath=..")),
+      page.locator('aside span:has-text("GB free")'),
+    ],
+    maskColor: MASK_COLOR,
+    animations: "disabled",
+  });
+
+  await page.setViewportSize(WINDOW);
+  await stubEngine(page, idleFixtureView(), false, reviewFixtureView());
+  await openApp(page);
+  await page.getByTestId("idle").getByRole("button", { name: "Start scan" }).click();
+  await page.getByTestId("results").waitFor();
+  await expect(page.getByTestId("categories").getByRole("listitem")).toHaveCount(8);
+  await expect(page).toHaveScreenshot("phase-results.png", {
+    ...SHELL_DIFF,
+    clip: WINDOW,
+    mask: [page.locator(APP_LIGHTS), page.locator('[data-testid="category-size"]'), page.locator(".meter-free")],
+  });
+}
+
+test("Smart Clean results phase matches the snapshot within 1% (REQ-DCLEAN-032.A1, REQ-DCLEAN-005)", resultsPhaseMatchesSnapshot);
+
 // Full-phase comparisons (REQ-DCLEAN-032.A1). Parked until each Smart Clean
 // phase REQ is implemented; un-fixme as the phase lands.
 const PHASES = [
-  ["results", "REQ-DCLEAN-005"],
   ["cleaning", "REQ-DCLEAN-008"],
   ["done", "REQ-DCLEAN-009"],
 ] as const;

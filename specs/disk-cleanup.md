@@ -235,6 +235,46 @@ verifies:
 
 The heading reads "Found <total> you can clear", where the total is the sum of all listed categories. The kicker reads "Scan finished · <n> categories", or "Prepared by <agent> · review before cleaning" when the assistant opened the review. Each category row shows a selection control, an icon, the name, a safety tag ("Safe" or "Review"), a one-line description, its size, and a disclosure control. Expanding a row lists its items as name, path and size.
 
+The icon is the Lucide icon name the engine table gives each category (`cleanup::Category::icon`, carried on `CategoryView` and `CatalogueEntry` and listed by `disky schema`). The GUI resolves it by icon name, never by category id, and falls back to a folder for a name it does not know.
+
+implementations:
+  - gui/src/screens/smartClean/Results.tsx:Results
+  - gui/src/screens/smartClean/resultsCopy.ts:resultsHeading
+  - gui/src/screens/smartClean/resultsCopy.ts:resultsKicker
+  - gui/src/screens/smartClean/resultsCopy.ts:safetyTag
+  - gui/src/screens/smartClean/resultsCopy.ts:disclosureLabel
+  - gui/src/screens/smartClean/phase.ts:toggleExpanded
+  - gui/src/shell/iconByName.ts:iconByName
+  - gui/src/lib/contract.ts:parseCleanupView
+  - gui/src/screens/SmartClean.tsx:SmartClean
+  - src/contract.rs:categories_from_hits
+  - src/contract.rs:catalogue
+  - src/schema.rs:cleanup_categories
+
+verifies:
+  - gui/src/screens/__tests__/phase.test.ts:startScanClearsOpenedByAndSelection
+  - gui/src/screens/__tests__/phase.test.ts:toggleExpandedOpensSwitchesAndCollapses
+  - gui/src/screens/__tests__/phase.test.ts:toggleExpandedIsIgnoredOutsideResults
+  - gui/src/screens/__tests__/resultsCopy.test.ts:headingTotalIsTheSumOfListedCategories
+  - gui/src/screens/__tests__/resultsCopy.test.ts:kickerHasBothFormsSingularAndPlural
+  - gui/src/screens/__tests__/resultsCopy.test.ts:safetyTagClasses
+  - gui/src/screens/__tests__/resultsCopy.test.ts:disclosureIsNamedByItsCategory
+  - gui/src/screens/__tests__/resultsCopy.test.ts:itemSizesAddUpToTheCategorySize
+  - gui/src/screens/__tests__/SmartClean.test.tsx:rendersExactlyTheEngineCategories
+  - gui/src/screens/__tests__/SmartClean.test.tsx:rowsAndItemsComeOnlyFromTheScan
+  - gui/src/screens/__tests__/SmartClean.test.tsx:rowCarriesSelectionIconNameTagDescriptionSizeAndDisclosure
+  - gui/src/screens/__tests__/SmartClean.test.tsx:oneCategoryExpandedAtATime
+  - gui/src/screens/__tests__/SmartClean.test.tsx:chevronRotatesWithTheMotionToken
+  - gui/src/screens/__tests__/SmartClean.test.tsx:longPathIsEllipsisedWithTooltipAndAccessibleName
+  - gui/src/shell/__tests__/iconByName.test.ts:everyEngineIconHasItsOwnGlyph
+  - gui/src/shell/__tests__/iconByName.test.ts:unknownNamesFallBackToAFolder
+  - gui/src/lib/contract.test.ts:categoryAndCatalogueIconsAreRequired
+  - src/cleanup.rs:every_category_names_a_lucide_icon
+  - src/contract.rs:category_ids_come_from_engine_table
+  - src/contract.rs:catalogue_lists_every_engine_category
+  - src/schema.rs:cleanup_categories_carry_label_and_description
+  - gui/tests/visual/shell.spec.ts:resultsPhaseMatchesSnapshot
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-005.A1 -->
 - Every listed category and item comes from the scan result; no category is shown that the scan did not produce.
@@ -251,6 +291,33 @@ The heading reads "Found <total> you can clear", where the total is the sum of a
 
 <!-- id: REQ-DCLEAN-006 -->
 ## Category selection MUST default to the safe-only preference and MUST be user-adjustable
+
+implementations:
+  - gui/src/screens/smartClean/phase.ts:scanFinished
+  - gui/src/screens/smartClean/phase.ts:preselect
+  - gui/src/screens/smartClean/phase.ts:toggleSelected
+  - gui/src/screens/smartClean/phase.ts:selectSafeOnly
+  - gui/src/screens/smartClean/phase.ts:selectAll
+  - gui/src/screens/smartClean/resultsCopy.ts:selectedBytes
+  - gui/src/screens/smartClean/resultsCopy.ts:cleanLabel
+  - gui/src/screens/smartClean/resultsCopy.ts:safetyNote
+  - gui/src/screens/smartClean/Results.tsx:Results
+  - gui/src/screens/SmartClean.tsx:SmartClean
+
+verifies:
+  - gui/src/screens/__tests__/phase.test.ts:safeOnlyPreferencePreselectsExactlyTheSafeCategories
+  - gui/src/screens/__tests__/phase.test.ts:safeOnlyAndSelectAllActions
+  - gui/src/screens/__tests__/phase.test.ts:toggleSelectedFlipsOnlyThatCategory
+  - gui/src/screens/__tests__/resultsCopy.test.ts:cleanLabelFollowsTheSelectedTotal
+  - gui/src/screens/__tests__/resultsCopy.test.ts:safetyNoteFollowsTrashByDefault
+  - gui/src/screens/__tests__/SmartClean.test.tsx:safeOnlyPreferencePreselectsSafeCategories
+  - gui/src/screens/__tests__/SmartClean.test.tsx:safeOnlyOffPreselectsEverything
+  - gui/src/screens/__tests__/SmartClean.test.tsx:safeOnlyAndSelectAllButtons
+  - gui/src/screens/__tests__/SmartClean.test.tsx:togglingFlipsOnlyThatCategoryAndUpdatesTheTotal
+  - gui/src/screens/__tests__/SmartClean.test.tsx:footerNoteFollowsTrashByDefault
+  - gui/src/screens/__tests__/SmartClean.test.tsx:noSelectNoneAction
+  - gui/src/screens/__tests__/SmartClean.test.tsx:cleanIsDisabledWhenNothingIsSelected
+  - gui/src/screens/__tests__/SmartClean.test.tsx:cancelReturnsHome
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-006.A1 -->
@@ -455,6 +522,22 @@ The snapshot shows no error state. This REQ is gap-filled from disky's error tax
 
 <!-- id: REQ-DCLEAN-019 -->
 ## A scan with nothing reclaimable MUST show an empty state instead of an empty list
+
+implementations:
+  - gui/src/screens/smartClean/phase.ts:listedCategories
+  - gui/src/screens/smartClean/phase.ts:backHome
+  - gui/src/screens/smartClean/Results.tsx:Results
+  - gui/src/screens/smartClean/Results.tsx:EmptyResults
+  - gui/src/screens/SmartClean.tsx:SmartClean
+
+verifies:
+  - gui/src/screens/__tests__/phase.test.ts:zeroSizeCategoriesAreNotListed
+  - gui/src/screens/__tests__/phase.test.ts:backHomeReturnsToIdleWithNothingSelected
+  - gui/src/screens/__tests__/resultsCopy.test.ts:emptyCopyMatchesTheSpec
+  - gui/src/screens/__tests__/SmartClean.test.tsx:emptyViewShowsNothingToClean
+  - gui/src/screens/__tests__/SmartClean.test.tsx:zeroCategoriesShowTheEmptyStateWithBackToHome
+  - gui/src/screens/__tests__/SmartClean.test.tsx:zeroSizeCategoryIsOmitted
+  - gui/src/screens/__tests__/SmartClean.test.tsx:expandedCategoryWithNoItemsSaysNoItems
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-019.A1 -->

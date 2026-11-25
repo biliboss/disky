@@ -249,3 +249,253 @@
     animation: none;
   }
 }
+
+/* ── Results · review (REQ-DCLEAN-005/006/019) ────────────────── */
+.results {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.results-stale {
+  margin: 0;
+  padding: var(--results-pt) var(--layout-screen-px) 0;
+  font-size: var(--fs-small);
+}
+
+.results-head {
+  padding: var(--results-pt) var(--layout-screen-px) var(--results-head-pb);
+  display: flex;
+  align-items: flex-end;
+  gap: var(--results-head-gap);
+}
+
+.results-heading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--results-heading-gap);
+}
+
+.results-kicker {
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+.results-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-results-title);
+  margin: 0;
+}
+
+.results-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0 var(--layout-screen-px) var(--results-list-pb);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--results-list-gap);
+}
+
+/* REQ-DCLEAN-012.A3: surface rows on the page background. */
+.result {
+  flex: none;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: var(--result-row-gap);
+  padding: var(--result-row-py) var(--result-row-px);
+  border-radius: var(--radius-md);
+}
+
+/* REQ-DCLEAN-013.A4 */
+.result-row:hover {
+  background: var(--overlay-row-hover);
+}
+
+/* REQ-DCLEAN-012.A2: round selection control. */
+.result-check {
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  flex: none;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  border: var(--check-border) solid var(--color-neutral-400);
+  background: transparent;
+  color: var(--color-bg);
+}
+
+.result-check[aria-checked="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.result-check-glyph {
+  width: var(--check-glyph);
+  height: var(--check-glyph);
+  stroke-width: var(--check-stroke);
+}
+
+.result-icon {
+  width: var(--result-icon);
+  height: var(--result-icon);
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  display: grid;
+  place-items: center;
+  color: var(--color-accent-2-700);
+}
+
+.result-glyph {
+  width: var(--result-glyph);
+  height: var(--result-glyph);
+  stroke-width: var(--icon-stroke);
+}
+
+.result-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--result-text-gap);
+}
+
+.result-title {
+  display: flex;
+  align-items: center;
+  gap: var(--result-title-gap);
+}
+
+.result-name {
+  font-weight: var(--fw-result-name);
+  font-size: var(--fs-result-name);
+}
+
+.result-desc {
+  font-size: var(--fs-result-desc);
+  color: var(--color-neutral-700);
+}
+
+.result-size {
+  font-size: var(--fs-result-size);
+  font-weight: var(--fw-result-size);
+  min-width: var(--result-size-min);
+  text-align: right;
+}
+
+.result-disclose {
+  color: var(--color-text);
+}
+
+/* A4: the chevron flips to show the expanded state. */
+.chevron {
+  width: var(--chevron-size);
+  height: var(--chevron-size);
+  stroke-width: var(--icon-stroke);
+  transition: var(--motion-chevron);
+}
+
+[data-expanded="true"] .chevron {
+  transform: var(--chevron-open);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+.result-items {
+  padding: 0 var(--result-row-px) var(--result-items-pb) var(--result-items-pl);
+}
+
+.result-items[hidden] {
+  display: none;
+}
+
+.result-items-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--fs-item);
+}
+
+.result-item td {
+  padding: var(--item-py) 0;
+  border-top: var(--item-rule) solid var(--color-divider);
+  vertical-align: top;
+}
+
+.item-name {
+  width: var(--item-name-w);
+  padding-right: var(--item-gap);
+}
+
+/* A5: long paths are ellipsised; the full path is the tooltip and label. */
+.result-item .item-path {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-neutral-700);
+  padding-right: var(--item-gap);
+}
+
+.item-size {
+  width: var(--item-size-min);
+  text-align: right;
+}
+
+.result-no-items {
+  margin: 0;
+  padding: var(--item-py) 0;
+  border-top: var(--item-rule) solid var(--color-divider);
+  font-size: var(--fs-item);
+  color: var(--color-neutral-700);
+}
+
+.results-foot {
+  padding: var(--results-foot-py) var(--layout-screen-px);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  gap: var(--results-foot-gap);
+}
+
+.results-foot-glyph {
+  width: var(--results-foot-glyph);
+  height: var(--results-foot-glyph);
+  flex: none;
+  stroke: var(--color-accent-2-700);
+  stroke-width: var(--icon-stroke);
+}
+
+.results-foot-note {
+  flex: 1;
+  font-size: var(--fs-results-foot);
+  color: var(--color-neutral-800);
+}
+
+.results-clean {
+  padding: var(--btn-clean-py) var(--btn-clean-px);
+}
+
+.results-empty {
+  padding: var(--results-pt) var(--layout-screen-px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--results-empty-gap);
+}

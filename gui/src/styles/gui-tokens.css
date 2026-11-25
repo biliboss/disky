@@ -95,6 +95,48 @@
   --scan-check: 12px;
   --scan-check-stroke: 3.5;
 
+  /* ── Smart Clean · review (REQ-DCLEAN-005/006/019) ──────────── */
+  --results-pt: var(--screen-py);     /* 36px */
+  --results-head-pb: 18px;
+  --results-head-gap: 12px;
+  --results-heading-gap: 8px;
+  --fs-results-title: var(--fs-ring-number); /* 38px */
+  --results-list-gap: 8px;
+  --results-list-pb: 24px;
+  --result-row-gap: 14px;
+  --result-row-py: 12px;
+  --result-row-px: 18px;
+  --check-border: 2px;
+  --check-glyph: 13px;
+  --check-stroke: var(--scan-check-stroke); /* 3.5 */
+  --result-icon: 38px;
+  --result-glyph: var(--nav-icon);    /* 18px */
+  --result-text-gap: 2px;
+  --result-title-gap: 10px;
+  --fs-result-name: var(--fs-body);   /* 15px */
+  --fw-result-name: 600;
+  --fs-result-desc: var(--fs-small);  /* 13px */
+  --fs-result-size: var(--fs-body);   /* 15px */
+  --fw-result-size: 600;
+  --result-size-min: 72px;
+  --chevron-size: var(--nav-icon);    /* 18px */
+  --chevron-open: rotate(180deg);     /* snapshot: chevron-down flips up */
+  --result-items-pl: 124px;           /* aligns items under the category name */
+  --result-items-pb: 12px;
+  --item-gap: 12px;
+  --item-py: 8px;
+  --item-rule: 1px;
+  --fs-item: var(--fs-small);         /* 13px */
+  --item-size-min: 64px;
+  --item-name-w: 33.333%;             /* name : path = 1 : 2, as the snapshot's flex */
+  --results-foot-py: 16px;
+  --results-foot-gap: 16px;
+  --results-foot-glyph: 20px;
+  --fs-results-foot: var(--fs-nav);   /* 14px */
+  --btn-clean-py: 12px;
+  --btn-clean-px: 24px;
+  --results-empty-gap: var(--idle-stack-gap); /* 20px */
+
   /* ── Busy indicator (REQ-DCLEAN-017.A2) ─────────────────────── */
   --busy-size: 18px;
   --busy-stroke: 2px;

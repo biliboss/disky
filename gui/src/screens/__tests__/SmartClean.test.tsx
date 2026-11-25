@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +16,9 @@ vi.mock("@tauri-apps/api/event", () => ({
 import { App } from "../../App";
 import { clean } from "../../lib/engine";
 import { resetDiskState } from "../../lib/diskState";
+import { parseCleanupView } from "../../lib/contract";
+import { Results } from "../smartClean/Results";
+import { INITIAL_STATE } from "../smartClean/phase";
 
 const DAY = 86_400_000;
 
@@ -31,6 +36,7 @@ function engineView(overrides: Record<string, unknown> = {}) {
         id: "engine_cat_a",
         name: "Engine label A",
         description: "Engine description A",
+        icon: "box",
         safety: "safe",
         bytes: 4_200_000_000,
         items: [{ name: "x", path: "/x", bytes: 4_200_000_000 }],
@@ -39,15 +45,16 @@ function engineView(overrides: Record<string, unknown> = {}) {
         id: "engine_cat_b",
         name: "Engine label B",
         description: "Engine description B",
+        icon: "engine-icon-unknown",
         safety: "review",
         bytes: 600_000_000,
         items: [{ name: "y", path: "/y", bytes: 600_000_000 }],
       },
     ],
     catalogue: [
-      { id: "engine_cat_a", name: "Engine label A", safety: "safe" },
-      { id: "engine_cat_b", name: "Engine label B", safety: "review" },
-      { id: "engine_cat_c", name: "Engine label C", safety: "review" },
+      { id: "engine_cat_a", name: "Engine label A", icon: "box", safety: "safe" },
+      { id: "engine_cat_b", name: "Engine label B", icon: "box", safety: "review" },
+      { id: "engine_cat_c", name: "Engine label C", icon: "box", safety: "review" },
     ],
     ...overrides,
   };
@@ -91,9 +98,14 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+/** The results list's category rows. */
+function resultRows() {
+  return within(screen.getByTestId("categories")).getAllByRole("listitem");
+}
+
 async function rendersExactlyTheEngineCategories() {
   await startScanAndFinish(engineView());
-  const rows = await screen.findAllByRole("row");
+  const rows = resultRows();
   expect(rows.map((r) => r.getAttribute("data-category-id"))).toEqual(["engine_cat_a", "engine_cat_b"]);
   expect(rows[0]).toHaveTextContent("Engine label A");
   expect(rows[0]).toHaveTextContent("Engine description A");
@@ -101,7 +113,7 @@ async function rendersExactlyTheEngineCategories() {
   expect(rows[0]).toHaveTextContent("4.2 GB");
   expect(rows[1]).toHaveTextContent("Review");
   expect(rows[1]).toHaveTextContent("600 MB");
-  expect(rows[1].lastElementChild).toHaveClass("num");
+  expect(within(rows[1]).getByTestId("category-size")).toHaveClass("num");
   expect(invoke).toHaveBeenCalledWith("load_cleanup_view", { snapshot: null, goalBytes: null });
 }
 
@@ -123,7 +135,264 @@ async function staleSnapshotWarnsBeforeCleaning() {
 
 async function emptyViewShowsNothingToClean() {
   await startScanAndFinish(engineView({ categories: [] }));
-  expect(await screen.findByText("Nothing to clean right now.")).toBeInTheDocument();
+  expect(await screen.findByText("Nothing worth clearing right now.")).toBeInTheDocument();
+}
+
+// ── Results phase (REQ-DCLEAN-005) ───────────────────────────────
+
+/** A view whose categories carry several items, one with a long path. */
+const LONG_PATH = "/Users/me/Library/Application Support/Some Very Long Vendor Name/Caches/deeply/nested/folder/cache.db";
+function itemsView(overrides: Record<string, unknown> = {}) {
+  return engineView({
+    categories: [
+      {
+        id: "engine_cat_a",
+        name: "Engine label A",
+        description: "Engine description A",
+        icon: "box",
+        safety: "safe",
+        bytes: 4_200_000_000,
+        items: [
+          { name: "one", path: "/a/one", bytes: 1_100_000_000 },
+          { name: "two", path: LONG_PATH, bytes: 3_100_000_000 },
+        ],
+      },
+      {
+        id: "engine_cat_b",
+        name: "Engine label B",
+        description: "Engine description B",
+        icon: "engine-icon-unknown",
+        safety: "review",
+        bytes: 600_000_000,
+        items: [{ name: "y", path: "/y", bytes: 600_000_000 }],
+      },
+      {
+        id: "engine_cat_c",
+        name: "Engine label C",
+        description: "Engine description C",
+        icon: "box",
+        safety: "safe",
+        bytes: 0,
+        items: [],
+      },
+    ],
+    ...overrides,
+  });
+}
+
+async function rowsAndItemsComeOnlyFromTheScan() {
+  const view = itemsView();
+  await startScanAndFinish(view);
+  const rows = resultRows();
+  // A1 + REQ-DCLEAN-019.A2: the scan's non-empty categories, in engine order, nothing else.
+  expect(rows.map((r) => r.getAttribute("data-category-id"))).toEqual(["engine_cat_a", "engine_cat_b"]);
+  fireEvent.click(within(rows[0]).getByRole("button", { name: "Show items in Engine label A" }));
+  const items = within(rows[0]).getAllByRole("row");
+  const engineItems = (view.categories as any[])[0].items;
+  expect(items).toHaveLength(engineItems.length);
+  items.forEach((tr, i) => {
+    expect(tr).toHaveTextContent(engineItems[i].name);
+    expect(tr.querySelector(".item-path")).toHaveTextContent(engineItems[i].path);
+  });
+  expect(within(items[0]).getByText("1.1 GB")).toHaveClass("num");
+}
+
+async function rowCarriesSelectionIconNameTagDescriptionSizeAndDisclosure() {
+  await startScanAndFinish(itemsView());
+  const screenEl = screen.getByTestId("results");
+  expect(screenEl).toHaveAttribute("data-screen-label", "Smart clean · review");
+  expect(within(screenEl).getByTestId("results-kicker")).toHaveTextContent(/^Scan finished · 2 categories$/);
+  expect(within(screenEl).getByRole("heading", { level: 1 })).toHaveTextContent(/^Found 4.8 GB you can clear$/);
+  const [a, b] = resultRows();
+  expect(within(a).getByRole("checkbox", { name: "Engine label A" })).toBeInTheDocument();
+  expect(a.querySelector(".result-icon svg")).not.toBeNull();
+  expect(a.querySelector(".result-icon")).toHaveAttribute("data-icon", "box");
+  // An icon name the GUI does not know still draws (the folder fallback).
+  expect(b.querySelector(".result-icon svg")).not.toBeNull();
+  expect(within(a).getByTestId("safety-tag")).toHaveClass("tag", "tag-accent-2");
+  expect(within(a).getByTestId("safety-tag")).toHaveTextContent(/^Safe$/);
+  expect(within(b).getByTestId("safety-tag")).toHaveClass("tag", "tag-accent");
+  expect(within(b).getByTestId("safety-tag")).toHaveTextContent(/^Review$/);
+  expect(a).toHaveTextContent("Engine description A");
+  expect(within(a).getByTestId("category-size")).toHaveTextContent(/^4.2 GB$/);
+  const disclose = within(a).getByRole("button", { name: "Show items in Engine label A" });
+  expect(disclose).toHaveAttribute("aria-expanded", "false");
+  expect(disclose).toHaveAttribute("aria-controls", within(a).getByTestId("category-items").id);
+}
+
+async function oneCategoryExpandedAtATime() {
+  await startScanAndFinish(itemsView());
+  const [a, b] = resultRows();
+  const discA = within(a).getByRole("button", { name: "Show items in Engine label A" });
+  const discB = within(b).getByRole("button", { name: "Show items in Engine label B" });
+  fireEvent.click(discA);
+  expect(discA).toHaveAttribute("aria-expanded", "true");
+  expect(within(a).getByTestId("category-items")).toBeVisible();
+  fireEvent.click(discB);
+  expect(discA).toHaveAttribute("aria-expanded", "false");
+  expect(within(a).getByTestId("category-items")).not.toBeVisible();
+  expect(discB).toHaveAttribute("aria-expanded", "true");
+  fireEvent.click(discB);
+  expect(discB).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByTestId("results").querySelectorAll('[aria-expanded="true"]')).toHaveLength(0);
+}
+
+async function chevronRotatesWithTheMotionToken() {
+  await startScanAndFinish(itemsView());
+  const disc = within(resultRows()[0]).getByRole("button", { name: "Show items in Engine label A" });
+  expect(disc).toHaveAttribute("data-expanded", "false");
+  expect(disc.querySelector("svg.chevron")).not.toBeNull();
+  fireEvent.click(disc);
+  expect(disc).toHaveAttribute("data-expanded", "true");
+  const css = readFileSync(resolve(__dirname, "../smartClean/smartClean.css"), "utf8");
+  expect(css).toMatch(/\.chevron\s*\{[^}]*transition:\s*var\(--motion-chevron\)/);
+  expect(css).toMatch(/\[data-expanded="true"\]\s*\.chevron\s*\{[^}]*transform:/);
+}
+
+async function longPathIsEllipsisedWithTooltipAndAccessibleName() {
+  await startScanAndFinish(itemsView());
+  const a = resultRows()[0];
+  fireEvent.click(within(a).getByRole("button", { name: "Show items in Engine label A" }));
+  const cell = within(a).getByText(LONG_PATH);
+  expect(cell).toHaveClass("item-path");
+  expect(cell).toHaveAttribute("title", LONG_PATH);
+  expect(cell).toHaveAttribute("aria-label", LONG_PATH);
+  const css = readFileSync(resolve(__dirname, "../smartClean/smartClean.css"), "utf8");
+  expect(css).toMatch(/\.item-path\s*\{[^}]*text-overflow:\s*ellipsis/);
+}
+
+// ── Selection (REQ-DCLEAN-006) ───────────────────────────────────
+
+function checkedIds() {
+  return resultRows()
+    .filter((r) => within(r).getByRole("checkbox").getAttribute("aria-checked") === "true")
+    .map((r) => r.getAttribute("data-category-id"));
+}
+
+function cleanButton() {
+  return screen.getByTestId("clean");
+}
+
+async function safeOnlyPreferencePreselectsSafeCategories() {
+  await startScanAndFinish(itemsView());
+  expect(checkedIds()).toEqual(["engine_cat_a"]);
+  expect(cleanButton()).toHaveTextContent(/^Clean 4.2 GB$/);
+}
+
+async function safeOnlyOffPreselectsEverything() {
+  await startScanAndFinish(
+    itemsView({ preferences: { trash_by_default: true, safe_only: false, notifications: true, assistant: true } }),
+  );
+  expect(checkedIds()).toEqual(["engine_cat_a", "engine_cat_b"]);
+  expect(cleanButton()).toHaveTextContent(/^Clean 4.8 GB$/);
+}
+
+async function safeOnlyAndSelectAllButtons() {
+  await startScanAndFinish(itemsView());
+  fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+  expect(checkedIds()).toEqual(["engine_cat_a", "engine_cat_b"]);
+  fireEvent.click(screen.getByRole("button", { name: "Safe only" }));
+  expect(checkedIds()).toEqual(["engine_cat_a"]);
+  expect(screen.getByRole("button", { name: "Safe only" })).toHaveClass("btn", "btn-ghost");
+}
+
+async function togglingFlipsOnlyThatCategoryAndUpdatesTheTotal() {
+  await startScanAndFinish(itemsView());
+  const [a, b] = resultRows();
+  fireEvent.click(within(b).getByRole("checkbox", { name: "Engine label B" }));
+  expect(checkedIds()).toEqual(["engine_cat_a", "engine_cat_b"]);
+  expect(cleanButton()).toHaveTextContent(/^Clean 4.8 GB$/);
+  fireEvent.click(within(a).getByRole("checkbox", { name: "Engine label A" }));
+  expect(checkedIds()).toEqual(["engine_cat_b"]);
+  expect(cleanButton()).toHaveTextContent(/^Clean 600 MB$/);
+  expect(cleanButton()).toBeEnabled();
+}
+
+async function cleanIsDisabledWhenNothingIsSelected() {
+  await startScanAndFinish(itemsView());
+  fireEvent.click(within(resultRows()[0]).getByRole("checkbox", { name: "Engine label A" }));
+  expect(checkedIds()).toEqual([]);
+  expect(cleanButton()).toHaveTextContent(/^Clean 0 MB$/);
+  expect(cleanButton()).toBeDisabled();
+  expect(cleanButton()).toHaveClass("btn-primary");
+}
+
+async function footerNoteFollowsTrashByDefault() {
+  await startScanAndFinish(itemsView());
+  expect(screen.getByTestId("safety-note")).toHaveTextContent(
+    /^Items move to the Trash and can be restored from History for 30 days\.$/,
+  );
+  cleanup();
+  resetDiskState();
+  await startScanAndFinish(
+    itemsView({ preferences: { trash_by_default: false, safe_only: true, notifications: true, assistant: true } }),
+  );
+  expect(screen.getByTestId("safety-note")).toHaveTextContent(
+    /^Trash is off in Settings, so items will be deleted permanently\.$/,
+  );
+}
+
+async function noSelectNoneAction() {
+  await startScanAndFinish(itemsView());
+  const results = screen.getByTestId("results");
+  expect(within(results).queryByRole("button", { name: /select none|deselect|clear selection/i })).toBeNull();
+  const names = within(results)
+    .getAllByRole("button")
+    .map((b) => b.textContent?.trim())
+    .filter(Boolean);
+  expect(names).toEqual(["Safe only", "Select all", "Cancel", "Clean 4.2 GB"]);
+}
+
+// ── Empty states (REQ-DCLEAN-019) ────────────────────────────────
+
+async function zeroCategoriesShowTheEmptyStateWithBackToHome() {
+  const zeroOnly = itemsView();
+  (zeroOnly as any).categories = [(zeroOnly.categories as any[])[2]]; // one category, 0 bytes
+  await startScanAndFinish(zeroOnly);
+  const empty = screen.getByTestId("results-empty");
+  expect(within(empty).getByRole("heading", { level: 1 })).toHaveTextContent(/^Nothing worth clearing right now\.$/);
+  expect(screen.queryByTestId("clean")).toBeNull();
+  expect(screen.queryByRole("button", { name: /^Clean/ })).toBeNull();
+  expect(screen.queryByTestId("categories")).toBeNull();
+  fireEvent.click(within(empty).getByRole("button", { name: "Back to home" }));
+  expect(await idle()).toBeInTheDocument();
+}
+
+async function zeroSizeCategoryIsOmitted() {
+  await startScanAndFinish(itemsView());
+  expect(screen.getByTestId("results").querySelector('[data-category-id="engine_cat_c"]')).toBeNull();
+  expect(screen.getByTestId("results-kicker")).toHaveTextContent("2 categories");
+}
+
+function expandedCategoryWithNoItemsSaysNoItems() {
+  // The strict parser refuses this shape from the engine (bytes ≠ item sum),
+  // so the branch is rendered directly.
+  const view = parseCleanupView(engineView({ categories: [] }));
+  view.categories = [
+    { id: "engine_cat_a", name: "Engine label A", description: "d", icon: "box", safety: "safe", bytes: 5, items: [] },
+  ];
+  render(() => (
+    <Results
+      view={view}
+      state={{ ...INITIAL_STATE, phase: "results", expanded: "engine_cat_a" }}
+      onToggleExpand={() => undefined}
+      onToggleSelect={() => undefined}
+      onSelectSafe={() => undefined}
+      onSelectAll={() => undefined}
+      onBack={() => undefined}
+    />
+  ));
+  const items = screen.getByTestId("category-items");
+  expect(items).toBeVisible();
+  expect(items).toHaveTextContent(/^No items$/);
+  expect(within(items).queryByRole("table")).toBeNull();
+}
+
+async function cancelReturnsHome() {
+  await startScanAndFinish(itemsView());
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(await idle()).toBeInTheDocument();
+  expect(invoke.mock.calls.map(([cmd]) => cmd)).toEqual(["load_cleanup_view", "scan"]);
 }
 
 async function idleShowsHeadingDescriptionActionsAndShortcuts() {
@@ -387,6 +656,31 @@ describe("Smart Clean consumes the engine view", () => {
   it("malformed data renders the error state, not a partial list (REQ-DCLEAN-029.A4)", malformedDataShowsTheErrorStateNotAPartialList);
   it("a stale snapshot warns before cleaning (REQ-DCLEAN-029.A2)", staleSnapshotWarnsBeforeCleaning);
   it("an empty view says nothing to clean (REQ-DCLEAN-027)", emptyViewShowsNothingToClean);
+});
+
+describe("Smart Clean results phase (REQ-DCLEAN-005)", () => {
+  it("rows and items come only from the scan (REQ-DCLEAN-005.A1)", rowsAndItemsComeOnlyFromTheScan);
+  it("each row has selection, icon, name, tag, description, size and disclosure (REQ-DCLEAN-005.A2)", rowCarriesSelectionIconNameTagDescriptionSizeAndDisclosure);
+  it("one category is expanded at a time (REQ-DCLEAN-005.A3)", oneCategoryExpandedAtATime);
+  it("the chevron rotates using --motion-chevron (REQ-DCLEAN-005.A4)", chevronRotatesWithTheMotionToken);
+  it("long paths are ellipsised with a tooltip and accessible name (REQ-DCLEAN-005.A5)", longPathIsEllipsisedWithTooltipAndAccessibleName);
+});
+
+describe("Smart Clean selection (REQ-DCLEAN-006)", () => {
+  it("safe-only on preselects exactly the Safe categories (REQ-DCLEAN-006.A1)", safeOnlyPreferencePreselectsSafeCategories);
+  it("safe-only off preselects every category (REQ-DCLEAN-006.A1)", safeOnlyOffPreselectsEverything);
+  it("Safe only and Select all (REQ-DCLEAN-006.A2)", safeOnlyAndSelectAllButtons);
+  it("toggling flips one category and updates the Clean total (REQ-DCLEAN-006.A3, A4)", togglingFlipsOnlyThatCategoryAndUpdatesTheTotal);
+  it("the footer note follows trash-by-default (REQ-DCLEAN-006.A5)", footerNoteFollowsTrashByDefault);
+  it("no Select none action is offered (REQ-DCLEAN-006.A6)", noSelectNoneAction);
+  it("Clean is disabled with nothing selected (REQ-DCLEAN-016.A1)", cleanIsDisabledWhenNothingIsSelected);
+  it("Cancel returns home and cleans nothing (REQ-DCLEAN-006)", cancelReturnsHome);
+});
+
+describe("Smart Clean empty results (REQ-DCLEAN-019)", () => {
+  it("zero categories show the empty state with Back to home and no Clean (REQ-DCLEAN-019.A1)", zeroCategoriesShowTheEmptyStateWithBackToHome);
+  it("a zero-size category is omitted (REQ-DCLEAN-019.A2)", zeroSizeCategoryIsOmitted);
+  it("an expanded category with no items says No items (REQ-DCLEAN-019.A3)", expandedCategoryWithNoItemsSaysNoItems);
 });
 
 describe("Smart Clean idle phase (REQ-DCLEAN-003)", () => {

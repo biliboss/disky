@@ -1,17 +1,22 @@
-import { For, Match, Show, Switch, createEffect, createResource, createSignal, onCleanup } from "solid-js";
+import { Match, Show, Switch, createEffect, createResource, createSignal, onCleanup } from "solid-js";
 import { useDelayedBusy } from "../lib/busy";
 import { loadCleanupView, onScanProgress, scan, stopScan } from "../lib/engine";
-import { NUMERIC_CLASS, formatBytes } from "../lib/format";
 import type { CleanupView } from "../lib/contract";
 import { diskState, setFromView } from "../lib/diskState";
 import { Idle } from "./smartClean/Idle";
+import { Results } from "./smartClean/Results";
 import { Scanning } from "./smartClean/Scanning";
 import {
   INITIAL_STATE,
+  backHome,
   scanFinished,
   scanProgress,
   scanStopped,
+  selectAll,
+  selectSafeOnly,
   startScan,
+  toggleExpanded,
+  toggleSelected,
   type SmartCleanState,
 } from "./smartClean/phase";
 import "./smartClean/smartClean.css";
@@ -21,8 +26,9 @@ import "./smartClean/smartClean.css";
  * (REQ-DCLEAN-003), scanning (REQ-DCLEAN-004), results, cleaning, done.
  * Every figure comes from the engine's cleanup view (REQ-DCLEAN-027.A4),
  * parsed at the boundary, and disk usage goes through the shared disk state
- * (REQ-DCLEAN-002). Results reuse the engine category list until
- * REQ-DCLEAN-005.
+ * (REQ-DCLEAN-002). Results (REQ-DCLEAN-005) list the engine's categories
+ * with the safe-only preselection (REQ-DCLEAN-006), or the empty state
+ * (REQ-DCLEAN-019).
  *
  * Loading (REQ-DCLEAN-017): the scanning screen is the scan's loading state;
  * loading the view shows a busy indicator only past the spinner threshold;
@@ -30,7 +36,10 @@ import "./smartClean/smartClean.css";
  *
  * @implements REQ-DCLEAN-003
  * @implements REQ-DCLEAN-004
+ * @implements REQ-DCLEAN-005
+ * @implements REQ-DCLEAN-006
  * @implements REQ-DCLEAN-017
+ * @implements REQ-DCLEAN-019
  */
 export function SmartClean() {
   const [loaded, { refetch }] = createResource(() => loadCleanupView());
@@ -69,7 +78,8 @@ export function SmartClean() {
       // REQ-DCLEAN-004.A2 / REQ-DCLEAN-017.A3: straight to results, no pause.
       setScanned(v);
       setFromView(v);
-      setState(scanFinished);
+      // REQ-DCLEAN-006.A1: a new scan preselects per the safe-only preference.
+      setState((s) => scanFinished(s, v.categories, v.preferences.safe_only));
     } catch (e) {
       if (state().phase === "scanning") setScanError(String((e as Error)?.message ?? e));
       setState(scanStopped);
@@ -101,7 +111,17 @@ export function SmartClean() {
           <Scanning state={state()} catalogue={view()?.catalogue ?? []} onStop={endScan} />
         </Match>
         <Match when={state().phase === "results" && view()}>
-          {(v) => <Categories view={v()} />}
+          {(v) => (
+            <Results
+              view={v()}
+              state={state()}
+              onToggleExpand={(id) => setState((s) => toggleExpanded(s, id))}
+              onToggleSelect={(id) => setState((s) => toggleSelected(s, id))}
+              onSelectSafe={() => setState((s) => selectSafeOnly(s, v().categories))}
+              onSelectAll={() => setState((s) => selectAll(s, v().categories))}
+              onBack={() => setState(backHome)}
+            />
+          )}
         </Match>
         <Match when={view() && diskState()}>
           <Show when={scanError()}>
@@ -122,39 +142,3 @@ export function SmartClean() {
   );
 }
 
-function Categories(props: { view: CleanupView }) {
-  return (
-    <div class="screen" data-testid="results">
-      <Show when={props.view.is_stale}>
-        {/* REQ-DCLEAN-029.A2: warn before cleaning a snapshot older than 24 h. */}
-        <p role="status" data-testid="stale-warning">
-          <span class="tag tag-accent">Out of date</span> This scan is more than a day old. Scan again before
-          cleaning.
-        </p>
-      </Show>
-      <Show
-        when={props.view.categories.length > 0}
-        fallback={<p class="screen-note">Nothing to clean right now.</p>}
-      >
-        <table class="table" data-testid="categories">
-          <tbody>
-            <For each={props.view.categories}>
-              {(c) => (
-                <tr data-category-id={c.id}>
-                  <td>{c.name}</td>
-                  <td class="text-muted">{c.description}</td>
-                  <td>
-                    <span class={c.safety === "safe" ? "tag tag-accent-2" : "tag tag-outline"}>
-                      {c.safety === "safe" ? "Safe" : "Review"}
-                    </span>
-                  </td>
-                  <td class={NUMERIC_CLASS}>{formatBytes(c.bytes)}</td>
-                </tr>
-              )}
-            </For>
-          </tbody>
-        </table>
-      </Show>
-    </div>
-  );
-}

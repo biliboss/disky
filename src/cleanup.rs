@@ -89,6 +89,9 @@ pub struct Category {
     pub label: &'static str,
     /// One-line explanation of what the category holds.
     pub description: &'static str,
+    /// Lucide icon name the GUI draws for the category (e.g. `"app-window"`).
+    /// The GUI resolves it by name, never by category id (REQ-DCLEAN-005).
+    pub icon: &'static str,
     pub safety: Safety,
     pub matcher: Matcher,
     /// Caveat copied onto every hit of this category.
@@ -149,6 +152,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "node_modules",
         label: "node_modules",
+        icon: "code",
         description: "Installed JavaScript packages; npm install restores them",
         safety: Safety::Review,
         matcher: Matcher::Basename(&["node_modules"]),
@@ -157,6 +161,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "target",
         label: "Cargo target dirs",
+        icon: "code",
         description: "Rust build output; cargo build recreates it",
         safety: Safety::Review,
         matcher: Matcher::Basename(&["target"]),
@@ -165,6 +170,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "pycache",
         label: "Python bytecode",
+        icon: "code",
         description: "__pycache__ folders; Python regenerates them on import",
         safety: Safety::Review,
         matcher: Matcher::Basename(&["__pycache__"]),
@@ -173,6 +179,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "next",
         label: "Next.js build caches",
+        icon: "code",
         description: ".next folders; next build recreates them",
         safety: Safety::Review,
         matcher: Matcher::Basename(&[".next"]),
@@ -181,6 +188,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "dist",
         label: "dist folders",
+        icon: "code",
         description: "Build output; check it is not the only copy of a release",
         safety: Safety::Review,
         matcher: Matcher::Basename(&["dist"]),
@@ -189,6 +197,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "build",
         label: "build folders",
+        icon: "code",
         description: "Build output; check it is not hand-written source",
         safety: Safety::Review,
         matcher: Matcher::Basename(&["build"]),
@@ -197,6 +206,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "venv",
         label: "Python virtualenvs",
+        icon: "code",
         description: ".venv / venv folders; reinstall from requirements to restore",
         safety: Safety::Review,
         matcher: Matcher::Basename(&[".venv", "venv"]),
@@ -205,6 +215,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "gradle",
         label: "Gradle caches",
+        icon: "code",
         description: ".gradle folders; Gradle re-downloads and rebuilds them",
         safety: Safety::Review,
         matcher: Matcher::Basename(&[".gradle"]),
@@ -213,6 +224,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "pytest",
         label: "pytest caches",
+        icon: "code",
         description: ".pytest_cache folders; pytest recreates them",
         safety: Safety::Review,
         matcher: Matcher::Basename(&[".pytest_cache"]),
@@ -222,6 +234,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "system_caches",
         label: "System caches",
+        icon: "box",
         description: "Rebuilt automatically when needed",
         safety: Safety::Safe,
         matcher: Matcher::Location {
@@ -239,6 +252,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "app_caches",
         label: "App caches",
+        icon: "app-window",
         description: "Rebuilt by each app the next time it runs",
         safety: Safety::Safe,
         matcher: Matcher::Location {
@@ -262,6 +276,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "temp",
         label: "Temporary files",
+        icon: "clock",
         description: "Left behind by installers and apps",
         safety: Safety::Review,
         matcher: Matcher::Location {
@@ -285,6 +300,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "logs",
         label: "Logs & crash reports",
+        icon: "file-text",
         description: "App and system logs; kept only for troubleshooting",
         safety: Safety::Review,
         matcher: Matcher::Location {
@@ -306,6 +322,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: TRASH_CATEGORY,
         label: "Trash",
+        icon: "trash",
         description: "Items already in the Trash; cleaning empties them permanently",
         safety: Safety::Safe,
         matcher: Matcher::Location {
@@ -321,6 +338,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "app_leftovers",
         label: "App leftovers",
+        icon: "package",
         description: "Support files of apps that are no longer installed",
         safety: Safety::Review,
         matcher: Matcher::Location {
@@ -344,6 +362,7 @@ pub const CATEGORIES: &[Category] = &[
     Category {
         name: "old_downloads",
         label: "Old downloads",
+        icon: "download",
         description: "Downloads untouched for more than 90 days",
         safety: Safety::Review,
         matcher: Matcher::Location {
@@ -1283,6 +1302,22 @@ mod tests {
             physical_bytes: bytes,
             files,
             note: None,
+        }
+    }
+
+    /// REQ-DCLEAN-005: every category names a Lucide icon in kebab case.
+    #[test]
+    fn every_category_names_a_lucide_icon() {
+        for c in CATEGORIES {
+            assert!(!c.icon.is_empty(), "{} has no icon", c.name);
+            assert!(
+                c.icon
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'),
+                "{}: icon {:?} is not a kebab-case Lucide name",
+                c.name,
+                c.icon
+            );
         }
     }
 

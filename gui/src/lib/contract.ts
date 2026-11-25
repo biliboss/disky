@@ -35,6 +35,8 @@ export interface CategoryView {
   id: string;
   name: string;
   description: string;
+  /** Lucide icon name from the engine table (REQ-DCLEAN-005). */
+  icon: string;
   safety: Safety;
   bytes: number;
   items: ItemView[];
@@ -44,6 +46,7 @@ export interface CategoryView {
 export interface CatalogueEntry {
   id: string;
   name: string;
+  icon: string;
   safety: Safety;
 }
 
@@ -187,6 +190,7 @@ function parseCategory(v: unknown, path: string): CategoryView {
     id: str(o.id, `${path}.id`),
     name: str(o.name, `${path}.name`),
     description: str(o.description, `${path}.description`),
+    icon: str(o.icon, `${path}.icon`),
     safety: safety(o.safety, `${path}.safety`),
     bytes: total,
     items,
@@ -224,6 +228,7 @@ export function parseCleanupView(raw: unknown): CleanupView {
       return {
         id: str(e.id, `view.catalogue[${i}].id`),
         name: str(e.name, `view.catalogue[${i}].name`),
+        icon: str(e.icon, `view.catalogue[${i}].icon`),
         safety: safety(e.safety, `view.catalogue[${i}].safety`),
       };
     }),

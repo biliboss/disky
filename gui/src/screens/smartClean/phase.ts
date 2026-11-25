@@ -4,7 +4,7 @@
  * each rule is testable without rendering. Only the transitions the shipped
  * phases use live here; later phase REQs (005 … 009) add theirs.
  */
-import type { ScanProgress } from "../../lib/contract";
+import type { CategoryView, ScanProgress } from "../../lib/contract";
 
 export type Phase = "idle" | "scanning" | "results" | "cleaning" | "done";
 
@@ -22,7 +22,17 @@ export interface SmartCleanState {
   completed: readonly string[];
   /** Physical bytes of each completed category that has hits. */
   completedBytes: Readonly<Record<string, number>>;
+  /**
+   * The agent that opened the review ("Prepared by <agent>"), or null for a
+   * scan the user ran. Nothing sets it until the Assistant spec.
+   */
+  openedBy: string | null;
+  /** Category ids selected for cleaning on the results list (REQ-DCLEAN-006). */
+  selected: readonly string[];
 }
+
+/** What selection needs from a category. */
+export type Selectable = Pick<CategoryView, "id" | "safety" | "bytes">;
 
 export const INITIAL_STATE: SmartCleanState = {
   phase: "idle",
@@ -32,6 +42,8 @@ export const INITIAL_STATE: SmartCleanState = {
   currentPath: "",
   completed: [],
   completedBytes: {},
+  openedBy: null,
+  selected: [],
 };
 
 /** Highest progress a running scan shows: 100% means finished (REQ-DCLEAN-004.A1). */
@@ -48,7 +60,15 @@ const NO_SCAN = { progress: 0, currentPath: "", completed: [], completedBytes: {
  */
 export function startScan(s: SmartCleanState): SmartCleanState {
   if (!CAN_SCAN.includes(s.phase)) return s;
-  return { ...s, ...NO_SCAN, phase: "scanning", expanded: null, notificationDismissed: true };
+  return {
+    ...s,
+    ...NO_SCAN,
+    phase: "scanning",
+    expanded: null,
+    notificationDismissed: true,
+    openedBy: null,
+    selected: [],
+  };
 }
 
 /**
@@ -70,10 +90,96 @@ export function scanProgress(s: SmartCleanState, p: ScanProgress): SmartCleanSta
   };
 }
 
-/** The scan finished: show its results. Ignored once the scan was stopped. */
-export function scanFinished(s: SmartCleanState): SmartCleanState {
+/**
+ * The scan finished: show its results, with the preselection the
+ * safe-only preference asks for (REQ-DCLEAN-006.A1). Ignored once the scan
+ * was stopped.
+ *
+ * @implements REQ-DCLEAN-006
+ */
+export function scanFinished(
+  s: SmartCleanState,
+  categories: readonly Selectable[] = [],
+  safeOnly = true,
+): SmartCleanState {
   if (s.phase !== "scanning") return s;
-  return { ...s, phase: "results", progress: 1 };
+  return { ...s, phase: "results", progress: 1, expanded: null, selected: preselect(categories, safeOnly) };
+}
+
+/**
+ * The categories the results list shows: every engine category except the
+ * empty ones (REQ-DCLEAN-019.A2), in engine order (REQ-DCLEAN-005.A1).
+ *
+ * @implements REQ-DCLEAN-019
+ */
+export function listedCategories<C extends Selectable>(categories: readonly C[]): C[] {
+  return categories.filter((c) => c.bytes > 0);
+}
+
+/**
+ * A new scan's selection (REQ-DCLEAN-006.A1): exactly the Safe categories
+ * when the safe-only preference is on, otherwise every listed category.
+ *
+ * @implements REQ-DCLEAN-006
+ */
+export function preselect(categories: readonly Selectable[], safeOnly: boolean): string[] {
+  return listedCategories(categories)
+    .filter((c) => !safeOnly || c.safety === "safe")
+    .map((c) => c.id);
+}
+
+/**
+ * The disclosure control (REQ-DCLEAN-005.A3): open `id`, which collapses any
+ * other open row, or collapse `id` when it is already open.
+ *
+ * @implements REQ-DCLEAN-005
+ */
+export function toggleExpanded(s: SmartCleanState, id: string): SmartCleanState {
+  if (s.phase !== "results") return s;
+  return { ...s, expanded: s.expanded === id ? null : id };
+}
+
+/**
+ * A category's selection control (REQ-DCLEAN-006.A3): flips `id` and
+ * nothing else.
+ *
+ * @implements REQ-DCLEAN-006
+ */
+export function toggleSelected(s: SmartCleanState, id: string): SmartCleanState {
+  if (s.phase !== "results") return s;
+  const selected = s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id];
+  return { ...s, selected };
+}
+
+/**
+ * "Safe only" (REQ-DCLEAN-006.A2): select exactly the Safe categories.
+ *
+ * @implements REQ-DCLEAN-006
+ */
+export function selectSafeOnly(s: SmartCleanState, categories: readonly Selectable[]): SmartCleanState {
+  if (s.phase !== "results") return s;
+  return { ...s, selected: preselect(categories, true) };
+}
+
+/**
+ * "Select all" (REQ-DCLEAN-006.A2): select every listed category.
+ *
+ * @implements REQ-DCLEAN-006
+ */
+export function selectAll(s: SmartCleanState, categories: readonly Selectable[]): SmartCleanState {
+  if (s.phase !== "results") return s;
+  return { ...s, selected: preselect(categories, false) };
+}
+
+/**
+ * "Back to home" / "Cancel" on the results phase (REQ-DCLEAN-019.A1): return
+ * to idle. Nothing is cleaned.
+ *
+ * @implements REQ-DCLEAN-019
+ */
+export function backHome(s: SmartCleanState): SmartCleanState {
+  if (s.phase !== "results") return s;
+  return { ...s, ...NO_SCAN, phase: "idle", expanded: null, selected: [], openedBy: null };
 }
 
 /** "Stop", or a scan that failed: back to idle, no results (REQ-DCLEAN-004.A3). */

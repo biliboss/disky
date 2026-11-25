@@ -61,7 +61,9 @@ cleanup query, in physical bytes. The Tauri commands only delegate to it, and
 walking, size summing, deletion and category ids out of `gui/`.
 
 **Categories (REQ-DCLEAN-033).** One table, `cleanup::CATEGORIES` — the GUI
-and `disky schema` read it; nothing else defines a category.
+and `disky schema` read it; nothing else defines a category. Each entry carries
+an `icon` (a Lucide icon name) that the GUI resolves by name, never by
+category id (REQ-DCLEAN-005).
 
 | Category | Matches | Safety |
 |---|---|---|
