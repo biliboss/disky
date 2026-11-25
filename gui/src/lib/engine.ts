@@ -12,12 +12,14 @@ import {
   parseCleanResult,
   parseCleanupView,
   parseEngineError,
+  parsePreferences,
   parseRestoreResult,
   parseScanProgress,
   type CleanMode,
   type CleanProgress,
   type CleanResult,
   type CleanupView,
+  type Preferences,
   type RestoreResult,
   type ScanProgress,
 } from "./contract";
@@ -40,7 +42,7 @@ async function call(cmd: string, args?: Record<string, unknown>): Promise<unknow
 
 /** The latest snapshot's cleanup view. CLI: `disky cleanup --format json`. */
 export async function loadCleanupView(snapshot?: string): Promise<CleanupView> {
-  return parseCleanupView(await invoke("load_cleanup_view", { snapshot: snapshot ?? null, goalBytes: null }));
+  return parseCleanupView(await invoke("load_cleanup_view", { snapshot: snapshot ?? null }));
 }
 
 /** Scan `root` into a new snapshot and return its view. CLI: `disky scan`. */
@@ -106,4 +108,25 @@ export async function restore(historyId: string): Promise<RestoreResult> {
 /** Open System Settings at Full Disk Access (REQ-DCLEAN-018.A2). */
 export async function openFullDiskAccess(): Promise<void> {
   await call("open_full_disk_access");
+}
+
+/** Every preference, from the shared store (REQ-DSCR-001). CLI: `disky prefs --format json`. */
+export async function getPrefs(): Promise<Preferences> {
+  return parsePreferences(await call("get_prefs"));
+}
+
+/**
+ * Save one preference at once and return the store as saved
+ * (REQ-DSCR-016). CLI: `disky prefs --set <key>=<value>`. `excluded` takes
+ * a JSON array, so folder names may hold commas.
+ */
+export async function setPrefs(key: string, value: string): Promise<Preferences> {
+  return parsePreferences(await call("set_prefs", { key, value }));
+}
+
+/** The native folder picker (REQ-DSCR-016.A3); null when cancelled. Saves nothing. */
+export async function pickFolder(): Promise<string | null> {
+  const picked = await call("pick_folder");
+  if (picked !== null && typeof picked !== "string") throw parseEngineError(new Error("pick_folder: expected a path"));
+  return picked;
 }

@@ -21,7 +21,17 @@ const TAURI_SRC = join(ROOT, "src-tauri", "src");
 const ENGINE_TS = join(SRC, "lib", "engine.ts");
 
 /** Tauri commands the frontend may call; each one delegates to the engine. */
-const COMMANDS = ["load_cleanup_view", "scan", "stop_scan", "clean", "restore", "open_full_disk_access"];
+const COMMANDS = [
+  "load_cleanup_view",
+  "scan",
+  "stop_scan",
+  "clean",
+  "restore",
+  "open_full_disk_access",
+  "get_prefs",
+  "set_prefs",
+  "pick_folder",
+];
 
 /** Category ids, read from the engine's single table. */
 function categoryIds() {

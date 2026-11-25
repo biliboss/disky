@@ -12,6 +12,13 @@
 //! | `clean`             | `disky cleanup --apply [--reversible]`           |
 //! | `restore`           | `disky restore <history_id>`                     |
 //! | `open_full_disk_access` | `open "<contract::FULL_DISK_ACCESS_URL>"`    |
+//! | `get_prefs`         | `disky prefs --format json`                      |
+//! | `set_prefs`         | `disky prefs --set <key>=<value>`                |
+//! | `pick_folder`       | (native picker only; the path is then saved with `set_prefs`) |
+//!
+//! Preferences live in the engine's one store (`disky::prefs`): every view
+//! reads its goal and toggles from it, and Settings writes it through
+//! `set_prefs`, so the CLI and the GUI never hold copies (REQ-DSCR-001.A2).
 //!
 //! Errors reach the GUI as `contract::EngineError`, typed by disky's
 //! exit-code slug (REQ-DCLEAN-018.A1).
@@ -23,6 +30,8 @@
 //! @implements REQ-DCLEAN-009
 //! @implements REQ-DCLEAN-018
 //! @implements REQ-DCLEAN-027
+//! @implements REQ-DSCR-001
+//! @implements REQ-DSCR-016
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,9 +39,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use disky::cleanup::CleanupHit;
-use disky::contract::{self, CleanResult, CleanupView, EngineError, Preferences, RestoreResult};
+use disky::contract::{self, CleanResult, CleanupView, EngineError, RestoreResult};
+use disky::prefs::{self, Prefs};
 use disky::{history, scan as engine_scan, snapshots};
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_dialog::DialogExt;
 
 /// Least time between two progress events on `scan://progress`.
 const PROGRESS_EVERY: Duration = Duration::from_millis(100);
@@ -59,42 +70,67 @@ async fn blocking<T: Send + 'static>(
         .map_err(EngineError::from)
 }
 
-/// Build a snapshot's view and remember its hits as the reviewed set.
-fn load_view(
-    app: &AppHandle,
-    snapshot_path: &str,
-    goal: Option<u64>,
-) -> anyhow::Result<CleanupView> {
-    let (view, hits) = contract::load(
-        snapshot_path,
-        goal.unwrap_or(contract::DEFAULT_GOAL_BYTES),
-        Preferences::default(),
-    )?;
+/// The shared preferences store (REQ-DSCR-001). A malformed file is an
+/// error, never replaced by defaults.
+fn read_prefs() -> anyhow::Result<Prefs> {
+    prefs::load(&prefs::prefs_path())
+}
+
+/// Build a snapshot's view from the store's preferences and remember its hits
+/// as the reviewed set.
+fn load_view(app: &AppHandle, snapshot_path: &str) -> anyhow::Result<CleanupView> {
+    let (view, hits) = contract::load(snapshot_path, &read_prefs()?)?;
     *app.state::<Engine>().reviewed.lock().unwrap() = hits;
     Ok(view)
 }
 
 #[tauri::command]
-async fn load_cleanup_view(
-    app: AppHandle,
-    snapshot: Option<String>,
-    goal_bytes: Option<u64>,
-) -> CmdResult<CleanupView> {
+async fn load_cleanup_view(app: AppHandle, snapshot: Option<String>) -> CmdResult<CleanupView> {
     blocking(move || {
         let spec = snapshot.as_deref().unwrap_or("@latest");
         // No snapshot yet: live disk, no categories, "No scans yet"
         // (REQ-DCLEAN-003.A2). Nothing is reviewed, so nothing can be cleaned.
         if spec == "@latest" && snapshots::latest_snapshot().is_none() {
             app.state::<Engine>().reviewed.lock().unwrap().clear();
-            return contract::empty_view(
-                goal_bytes.unwrap_or(contract::DEFAULT_GOAL_BYTES),
-                Preferences::default(),
-            );
+            return contract::empty_view(&read_prefs()?);
         }
         let path = snapshots::resolve(spec)?;
-        load_view(&app, &path, goal_bytes)
+        load_view(&app, &path)
     })
     .await
+}
+
+/// Every preference. CLI: `disky prefs --format json`.
+#[tauri::command]
+async fn get_prefs() -> CmdResult<Prefs> {
+    blocking(read_prefs).await
+}
+
+/// Set one preference and return the store as saved. CLI: `disky prefs
+/// --set <key>=<value>`. A bad key or value is a `usage` error and nothing
+/// is written (REQ-DSCR-001.A1).
+#[tauri::command]
+async fn set_prefs(key: String, value: String) -> CmdResult<Prefs> {
+    blocking(move || prefs::set(&prefs::prefs_path(), &key, &value)).await
+}
+
+/// The native folder picker (REQ-DSCR-016.A3). Returns the chosen folder in
+/// the store's display form (`~/…` under home), or null when cancelled. It
+/// writes nothing: Settings saves the new list with `set_prefs`.
+#[tauri::command]
+async fn pick_folder(app: AppHandle) -> CmdResult<Option<String>> {
+    blocking(move || {
+        let Some(picked) = app.dialog().file().blocking_pick_folder() else {
+            return Ok(None);
+        };
+        let path = picked.into_path()?;
+        Ok(Some(prefs::abbreviate_home(&path, dirs_home().as_deref())))
+    })
+    .await
+}
+
+fn dirs_home() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(std::path::PathBuf::from)
 }
 
 #[tauri::command]
@@ -119,7 +155,7 @@ async fn scan(app: AppHandle, root: Option<String>) -> CmdResult<CleanupView> {
         });
         *app.state::<Engine>().cancel.lock().unwrap() = None;
         outcome?;
-        let view = load_view(&app, &db_path, None)?;
+        let view = load_view(&app, &db_path)?;
         let _ = app.emit(
             contract::SCAN_PROGRESS_EVENT,
             contract::scan_finished(&view),
@@ -183,9 +219,13 @@ async fn open_full_disk_access() -> CmdResult<()> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(Engine::default())
         .invoke_handler(tauri::generate_handler![
             load_cleanup_view,
+            get_prefs,
+            set_prefs,
+            pick_folder,
             scan,
             stop_scan,
             clean,

@@ -43,7 +43,9 @@ async function secondaryEntriesOpenComingSoonPlaceholders() {
     const main = screen.getByRole("main");
     // Router navigation commits in a transition, so wait for the new screen.
     expect(await within(main).findByRole("heading", { level: 1, name: item.label })).toBeInTheDocument();
-    expect(within(main).getByText("Coming soon")).toBeInTheDocument();
+    // Settings is a real screen (REQ-DSCR-016); the rest are still placeholders.
+    if (item.id === "settings") expect(within(main).queryByText("Coming soon")).toBeNull();
+    else expect(within(main).getByText("Coming soon")).toBeInTheDocument();
     await waitFor(() => expect(navButton(item.label)).toHaveAttribute("aria-current", "page"));
   }
   fireEvent.click(navButton("Smart Clean"));
@@ -79,7 +81,7 @@ function liveView(disk: CleanupView["disk"], goal: number): CleanupView {
     last_scan_at: null,
     snapshot_taken_at: null,
     is_stale: false,
-    preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
+    preferences: { trash_by_default: true, skip_recently_used: true, safe_only: true, warn_below_goal: true, goal_bytes: 80e9, checks: { enabled: true, frequency: "daily" }, agent: "claude", scheduled_scan: "weekly", excluded: [] },
     large_files_count: 0,
     skipped_paths: 0,
     categories: [],

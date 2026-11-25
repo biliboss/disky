@@ -19,7 +19,7 @@ function validView(): Record<string, any> {
     last_scan_at: "2026-11-25T09:00:00Z",
     snapshot_taken_at: "2026-11-25T08:59:00Z",
     is_stale: false,
-    preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
+    preferences: { trash_by_default: true, skip_recently_used: true, safe_only: true, warn_below_goal: true, goal_bytes: 80e9, checks: { enabled: true, frequency: "daily" }, agent: "claude", scheduled_scan: "weekly", excluded: [] },
     large_files_count: 8,
     skipped_paths: 0,
     categories: [

@@ -49,11 +49,33 @@ function bundledFontCss(): string {
  * __baseline__/cdn so later runs are offline. Allowed deviations applied:
  * brand text "Diskee" → "disky" (A2), and the window's rounded corners and
  * drop shadow are removed because macOS draws them around the real window.
+ * With `startScreen`, the prototype opens on that screen: its `startScreen`
+ * prop default is rewritten before the runtime boots (DOMContentLoaded), as
+ * the design tool's prop editor would set it.
  * Returns the app window's top-left offset on the page.
  */
-export async function openSnapshot(page: Page): Promise<{ x: number; y: number }> {
+export async function openSnapshot(
+  page: Page,
+  opts: { startScreen?: "clean" | "agent" | "map" | "large" | "dupes" | "history" | "settings" } = {},
+): Promise<{ x: number; y: number }> {
   mkdirSync(CDN_CACHE, { recursive: true });
   const fontCss = bundledFontCss();
+  if (opts.startScreen) {
+    await page.addInitScript((screen) => {
+      document.addEventListener(
+        "DOMContentLoaded",
+        () => {
+          const el = document.querySelector("script[data-dc-script]");
+          const raw = el?.getAttribute("data-props");
+          if (!el || !raw) return;
+          const props = JSON.parse(raw);
+          props.startScreen.default = screen;
+          el.setAttribute("data-props", JSON.stringify(props));
+        },
+        { capture: true, once: true },
+      );
+    }, opts.startScreen);
+  }
 
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.route("https://fonts.googleapis.com/**", (route) =>

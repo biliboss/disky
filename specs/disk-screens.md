@@ -48,6 +48,51 @@ The defaults are the snapshot's initial state:
 - scheduled scan: `weekly`;
 - excluded folders: none.
 
+implementations:
+  - src/prefs.rs:Prefs
+  - src/prefs.rs:Checks
+  - src/prefs.rs:Frequency
+  - src/prefs.rs:Schedule
+  - src/prefs.rs:prefs_path
+  - src/prefs.rs:load
+  - src/prefs.rs:save
+  - src/prefs.rs:update
+  - src/prefs.rs:set
+  - src/prefs.rs:set_all
+  - src/prefs.rs:apply
+  - src/prefs.rs:parse_bytes
+  - src/history.rs:Lock
+  - src/render.rs:prefs
+  - src/contract.rs:load
+  - src/contract.rs:empty_view
+  - src/contract.rs:cleanup_view
+  - gui/src-tauri/src/main.rs:get_prefs
+  - gui/src-tauri/src/main.rs:set_prefs
+  - gui/src-tauri/src/main.rs:load_cleanup_view
+  - gui/src/lib/contract.ts:parsePreferences
+  - gui/src/lib/engine.ts:getPrefs
+  - gui/src/lib/engine.ts:setPrefs
+
+verifies:
+  - src/prefs.rs:missing_file_yields_snapshot_defaults
+  - src/prefs.rs:malformed_file_is_an_error_and_never_replaced
+  - src/prefs.rs:set_then_load_round_trips
+  - src/prefs.rs:bad_key_or_value_is_usage_and_changes_nothing
+  - src/prefs.rs:save_is_atomic_and_leaves_no_temp_file
+  - src/prefs.rs:concurrent_writers_never_truncate_or_lose_the_file
+  - src/prefs.rs:every_enum_value_parses
+  - src/prefs.rs:byte_suffixes_are_decimal_and_binary
+  - src/prefs.rs:json_shape_uses_snake_case_keys_and_values
+  - src/contract.rs:view_goal_and_preferences_come_from_the_store
+  - src/schema.rs:prefs_command_lists_every_key
+  - tests/agentic.rs:prefs_prints_every_key_with_its_default
+  - tests/agentic.rs:prefs_set_persists_and_is_shared_with_the_library
+  - tests/agentic.rs:prefs_bad_key_or_value_exits_usage_and_changes_nothing
+  - tests/agentic.rs:prefs_malformed_store_is_reported_not_replaced
+  - tests/agentic.rs:schema_lists_the_prefs_command
+  - gui/src/screens/__tests__/Settings.test.tsx:aFailedSaveIsReportedAndShowsTheStore
+  - gui/src/screens/__tests__/Settings.test.tsx:aMalformedStoreIsReportedNotDefaulted
+
 **Acceptance**
 <!-- id: REQ-DSCR-001.A1 -->
 - `disky prefs --format json` prints every preference. `disky prefs --set <key>=<value>` changes one and prints the result. An unknown key or invalid value exits 2 (usage) and changes nothing.
@@ -62,6 +107,22 @@ The defaults are the snapshot's initial state:
 
 <!-- id: REQ-DSCR-002 -->
 ## Excluded folders and skip-recently-used MUST be honoured by cleanup and every screen's results
+
+implementations:
+  - src/cleanup.rs:ScanContext.with_prefs
+  - src/cleanup.rs:scan_with
+  - src/cleanup.rs:in_scope
+  - src/prefs.rs:Prefs.expanded_excluded
+  - src/prefs.rs:Prefs.recent_cutoff
+  - src/contract.rs:large_files_count_in
+  - src/contract.rs:load
+
+verifies:
+  - tests/lib_integration.rs:cleanup_drops_excluded_and_recently_used_hits
+  - tests/lib_integration.rs:contract_load_honours_the_preferences_store
+  - tests/agentic.rs:cleanup_honours_excluded_folders_and_skip_recently_used
+  - src/contract.rs:large_files_count_honours_exclusions_and_recent_use
+  - src/prefs.rs:excluded_expands_home_and_recent_cutoff_follows_the_toggle
 
 **Acceptance**
 <!-- id: REQ-DSCR-002.A1 -->
@@ -318,6 +379,29 @@ The defaults are the snapshot's initial state:
 
 <!-- id: REQ-DSCR-016 -->
 ## The Settings screen MUST edit every preference and the excluded folders
+
+implementations:
+  - gui/src/screens/Settings.tsx:Settings
+  - gui/src/screens/settings/settingsCopy.ts:SETTINGS_TOGGLES
+  - gui/src/screens/settings/settingsCopy.ts:removeFolderLabel
+  - gui/src/lib/engine.ts:pickFolder
+  - gui/src-tauri/src/main.rs:pick_folder
+  - src/prefs.rs:abbreviate_home
+  - gui/src/App.tsx:ROUTES
+
+verifies:
+  - gui/src/screens/__tests__/Settings.test.tsx:rendersEveryPreferenceFromTheStore
+  - gui/src/screens/__tests__/Settings.test.tsx:eachSwitchSavesImmediately
+  - gui/src/screens/__tests__/Settings.test.tsx:scheduleSavesThePickedPeriod
+  - gui/src/screens/__tests__/Settings.test.tsx:addFolderUsesThePickerAndSaves
+  - gui/src/screens/__tests__/Settings.test.tsx:cancellingThePickerSavesNothing
+  - gui/src/screens/__tests__/Settings.test.tsx:chipRemoveButtonIsNamedAndSaves
+  - gui/src/screens/__tests__/Settings.test.tsx:trashOffMakesSmartCleanDeletePermanently
+  - gui/tests/visual/settings.spec.ts:settingsMatchesSnapshot
+  - gui/tests/visual/settings.spec.ts:settingsPassesAxe
+  - gui/tests/visual/settings.spec.ts:keyboardTogglesASwitch
+  - gui/tests/visual/settings.spec.ts:foldersAreAddedAndRemovedThroughTheStore
+  - src/prefs.rs:picked_folders_abbreviate_home
 
 **Acceptance**
 <!-- id: REQ-DSCR-016.A1 -->

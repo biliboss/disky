@@ -32,7 +32,7 @@ function engineView(overrides: Record<string, unknown> = {}) {
     last_scan_at: null,
     snapshot_taken_at: null,
     is_stale: false,
-    preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
+    preferences: { trash_by_default: true, skip_recently_used: true, safe_only: true, warn_below_goal: true, goal_bytes: 80e9, checks: { enabled: true, frequency: "daily" }, agent: "claude", scheduled_scan: "weekly", excluded: [] },
     large_files_count: 3,
     skipped_paths: 0,
     categories: [
@@ -119,7 +119,8 @@ async function rendersExactlyTheEngineCategories() {
   expect(rows[1]).toHaveTextContent("Review");
   expect(rows[1]).toHaveTextContent("600 MB");
   expect(within(rows[1]).getByTestId("category-size")).toHaveClass("num");
-  expect(invoke).toHaveBeenCalledWith("load_cleanup_view", { snapshot: null, goalBytes: null });
+  // The goal comes from the engine's preferences store (REQ-DSCR-001.A5), never from the GUI.
+  expect(invoke).toHaveBeenCalledWith("load_cleanup_view", { snapshot: null });
 }
 
 async function malformedDataShowsTheErrorStateNotAPartialList() {
@@ -286,7 +287,7 @@ async function safeOnlyPreferencePreselectsSafeCategories() {
 
 async function safeOnlyOffPreselectsEverything() {
   await startScanAndFinish(
-    itemsView({ preferences: { trash_by_default: true, safe_only: false, notifications: true, assistant: true } }),
+    itemsView({ preferences: { trash_by_default: true, skip_recently_used: true, safe_only: false, warn_below_goal: true, goal_bytes: 80e9, checks: { enabled: true, frequency: "daily" }, agent: "claude", scheduled_scan: "weekly", excluded: [] } }),
   );
   expect(checkedIds()).toEqual(["engine_cat_a", "engine_cat_b"]);
   expect(cleanButton()).toHaveTextContent(/^Clean 4.8 GB$/);
@@ -330,7 +331,7 @@ async function footerNoteFollowsTrashByDefault() {
   cleanup();
   resetDiskState();
   await startScanAndFinish(
-    itemsView({ preferences: { trash_by_default: false, safe_only: true, notifications: true, assistant: true } }),
+    itemsView({ preferences: { trash_by_default: false, skip_recently_used: true, safe_only: true, warn_below_goal: true, goal_bytes: 80e9, checks: { enabled: true, frequency: "daily" }, agent: "claude", scheduled_scan: "weekly", excluded: [] } }),
   );
   expect(screen.getByTestId("safety-note")).toHaveTextContent(
     /^Trash is off in Settings, so items will be deleted permanently\.$/,
@@ -603,7 +604,7 @@ async function largeFilesCountComesFromTheEngine() {
 async function descriptionIsTruthfulWhenTrashIsOff() {
   engine({
     load_cleanup_view: () =>
-      engineView({ preferences: { trash_by_default: false, safe_only: true, notifications: true, assistant: true } }),
+      engineView({ preferences: { trash_by_default: false, skip_recently_used: true, safe_only: true, warn_below_goal: true, goal_bytes: 80e9, checks: { enabled: true, frequency: "daily" }, agent: "claude", scheduled_scan: "weekly", excluded: [] } }),
   });
   renderApp();
   const desc = within(await idle()).getByTestId("idle-description");
@@ -659,7 +660,7 @@ async function cleanUpdatesRingTagAndSidebar() {
 
 // ── Confirm dialog (REQ-DCLEAN-007, REQ-DCLEAN-022) ──────────────
 
-const TRASH_OFF = { preferences: { trash_by_default: false, safe_only: true, notifications: true, assistant: true } };
+const TRASH_OFF = { preferences: { trash_by_default: false, skip_recently_used: true, safe_only: true, warn_below_goal: true, goal_bytes: 80e9, checks: { enabled: true, frequency: "daily" }, agent: "claude", scheduled_scan: "weekly", excluded: [] } };
 
 /** Focus "Clean <total>" (as a real click would) and activate it. */
 function openDialog() {
@@ -1301,11 +1302,11 @@ async function notificationHiddenUnlessEveryConditionHolds() {
       renderSmartClean(false);
     }],
     ["notifications preference off", () => {
-      engine({ load_cleanup_view: () => belowGoalView({ preferences: { trash_by_default: true, safe_only: true, notifications: false, assistant: true } }) });
+      engine({ load_cleanup_view: () => belowGoalView({ preferences: { trash_by_default: true, skip_recently_used: true, safe_only: true, warn_below_goal: false, goal_bytes: 80e9, checks: { enabled: true, frequency: "daily" }, agent: "claude", scheduled_scan: "weekly", excluded: [] } }) });
       renderApp();
     }],
     ["assistant off", () => {
-      engine({ load_cleanup_view: () => belowGoalView({ preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: false } }) });
+      engine({ load_cleanup_view: () => belowGoalView({ preferences: { trash_by_default: true, skip_recently_used: true, safe_only: true, warn_below_goal: true, goal_bytes: 80e9, checks: { enabled: false, frequency: "daily" }, agent: "claude", scheduled_scan: "weekly", excluded: [] } }) });
       renderApp();
     }],
     ["free space at the goal", () => {

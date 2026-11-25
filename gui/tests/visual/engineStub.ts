@@ -30,7 +30,7 @@ export function idleFixtureView() {
     last_scan_at: new Date(Date.now() - 7 * 86_400_000 - 60_000).toISOString(),
     snapshot_taken_at: null,
     is_stale: false,
-    preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
+    preferences: { trash_by_default: true, skip_recently_used: true, safe_only: true, warn_below_goal: true, goal_bytes: 80e9, checks: { enabled: true, frequency: "daily" }, agent: "claude", scheduled_scan: "weekly", excluded: [] },
     large_files_count: 8,
     skipped_paths: 0,
     categories: [],
@@ -142,4 +142,55 @@ export async function appToResults(page: Page, scanned: unknown = reviewFixtureV
   await openApp(page);
   await page.getByTestId("idle").getByRole("button", { name: "Start scan" }).click();
   await page.getByTestId("results").waitFor();
+}
+
+/**
+ * The snapshot's Settings state as the engine's preferences store: every
+ * toggle on, scheduled scan Weekly, and its three excluded folders.
+ */
+export function snapshotSettingsPrefs() {
+  return {
+    trash_by_default: true,
+    skip_recently_used: true,
+    safe_only: true,
+    warn_below_goal: true,
+    goal_bytes: 80e9,
+    checks: { enabled: true, frequency: "daily" },
+    agent: "claude",
+    scheduled_scan: "weekly",
+    excluded: ["~/Projects/active", "~/Pictures/RAW", "~/Library/Mobile Documents"],
+  };
+}
+
+/**
+ * Answer the Settings screen's commands from an in-page preferences store
+ * (`window.__prefsStore`), as `disky prefs` would: `get_prefs` reads it and
+ * `set_prefs` writes one key. Each `set_prefs` call is recorded in
+ * `window.__prefsSets`.
+ */
+export async function stubPrefs(page: Page, prefs: unknown = snapshotSettingsPrefs(), picked: string | null = null) {
+  await page.addInitScript(
+    ([initial, folder]) => {
+      const w = window as any;
+      w.__prefsStore = structuredClone(initial);
+      w.__prefsSets = [];
+      w.__TAURI_INTERNALS__ = {
+        invoke: async (cmd: string, args: any) => {
+          const store = w.__prefsStore;
+          if (cmd === "get_prefs") return structuredClone(store);
+          if (cmd === "pick_folder") return folder;
+          if (cmd === "set_prefs") {
+            w.__prefsSets.push(args);
+            if (args.key === "excluded") store.excluded = JSON.parse(args.value);
+            else if (args.key === "scheduled_scan") store.scheduled_scan = args.value;
+            else store[args.key] = args.value === "true";
+            return structuredClone(store);
+          }
+          throw new Error(`visual stub: ${cmd} is not available`);
+        },
+        transformCallback: () => 0,
+      };
+    },
+    [prefs, picked] as const,
+  );
 }

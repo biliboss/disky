@@ -147,8 +147,8 @@ export function SmartClean(props: { showNotification?: boolean } = {}) {
     const show = notificationVisible({
       phase: state().phase,
       dismissed: state().notificationDismissed,
-      showNotification: props.showNotification ?? v.preferences.notifications,
-      assistant: v.preferences.assistant,
+      showNotification: props.showNotification ?? v.preferences.warn_below_goal,
+      assistant: v.preferences.checks.enabled,
       free: d.disk.free_bytes,
       goal: d.goalBytes,
       safeTotal: safe,

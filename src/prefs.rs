@@ -136,6 +136,26 @@ impl Prefs {
     }
 }
 
+/// A picked folder in the store's display form: under `home` it reads
+/// `~/…` (as the Settings chips show it), elsewhere it stays absolute.
+pub fn abbreviate_home(folder: &Path, home: Option<&Path>) -> String {
+    let full = folder.to_string_lossy();
+    let full = normalise_folder(&full);
+    let Some(home) = home.map(|h| h.to_string_lossy().trim_end_matches('/').to_string()) else {
+        return full;
+    };
+    if home.is_empty() {
+        return full;
+    }
+    if full == home {
+        "~".to_string()
+    } else if let Some(rest) = full.strip_prefix(&format!("{home}/")) {
+        format!("~/{rest}")
+    } else {
+        full
+    }
+}
+
 fn expand_home(entry: &str, home: Option<&Path>) -> Option<String> {
     let rest = if entry == "~" {
         Some("")
@@ -588,6 +608,26 @@ mod tests {
         assert_eq!(p.recent_cutoff(100 * 86_400), Some(70 * 86_400));
         p.skip_recently_used = false;
         assert_eq!(p.recent_cutoff(100 * 86_400), None);
+    }
+
+    #[test]
+    fn picked_folders_abbreviate_home() {
+        let home = Some(Path::new("/Users/me/"));
+        assert_eq!(
+            abbreviate_home(Path::new("/Users/me/Projects/x/"), home),
+            "~/Projects/x"
+        );
+        assert_eq!(abbreviate_home(Path::new("/Users/me"), home), "~");
+        assert_eq!(
+            abbreviate_home(Path::new("/Users/meow/x"), home),
+            "/Users/meow/x"
+        );
+        assert_eq!(abbreviate_home(Path::new("/Volumes/a"), None), "/Volumes/a");
+        let p = Prefs {
+            excluded: vec![abbreviate_home(Path::new("/Users/me/a"), home)],
+            ..Prefs::default()
+        };
+        assert_eq!(p.expanded_excluded(home), ["/Users/me/a"], "round-trips");
     }
 
     #[test]

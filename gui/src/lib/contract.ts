@@ -22,12 +22,32 @@ export interface Disk {
   free_bytes: number;
 }
 
+/** How often the Assistant's proactive checks run. */
+export type CheckFrequency = "hourly" | "daily" | "weekly";
+/** The scheduled-scan period. */
+export type ScanSchedule = "off" | "weekly" | "monthly";
+export const SCAN_SCHEDULES: readonly ScanSchedule[] = ["off", "weekly", "monthly"];
+
+/**
+ * Every preference, as the engine's shared store holds it (REQ-DSCR-001,
+ * `src/prefs.rs`). The GUI reads these and never supplies defaults of its
+ * own (A5); Settings changes them one key at a time through `setPrefs`.
+ */
 export interface Preferences {
   trash_by_default: boolean;
+  skip_recently_used: boolean;
   safe_only: boolean;
-  notifications: boolean;
-  assistant: boolean;
+  warn_below_goal: boolean;
+  goal_bytes: number;
+  checks: { enabled: boolean; frequency: CheckFrequency };
+  agent: string;
+  scheduled_scan: ScanSchedule;
+  /** Folders never touched, as entered (`~/…` or absolute). */
+  excluded: string[];
 }
+
+/** The four Settings toggles, by store key. */
+export type ToggleKey = "trash_by_default" | "skip_recently_used" | "safe_only" | "warn_below_goal";
 
 export interface ItemView {
   name: string;
@@ -271,21 +291,42 @@ function parseDisk(v: unknown, path: string): Disk {
   };
 }
 
+function oneOf<T extends string>(v: unknown, allowed: readonly T[], path: string): T {
+  if (typeof v !== "string" || !allowed.includes(v as T)) {
+    throw new ContractError(path, `expected one of ${allowed.join(", ")}, got ${JSON.stringify(v)}`);
+  }
+  return v as T;
+}
+
+/** The preferences record (`disky prefs`), validated field by field. */
+export function parsePreferences(raw: unknown, path = "prefs"): Preferences {
+  const p = obj(raw, path);
+  const c = obj(p.checks, `${path}.checks`);
+  return {
+    trash_by_default: bool(p.trash_by_default, `${path}.trash_by_default`),
+    skip_recently_used: bool(p.skip_recently_used, `${path}.skip_recently_used`),
+    safe_only: bool(p.safe_only, `${path}.safe_only`),
+    warn_below_goal: bool(p.warn_below_goal, `${path}.warn_below_goal`),
+    goal_bytes: bytes(p.goal_bytes, `${path}.goal_bytes`),
+    checks: {
+      enabled: bool(c.enabled, `${path}.checks.enabled`),
+      frequency: oneOf(c.frequency, ["hourly", "daily", "weekly"] as const, `${path}.checks.frequency`),
+    },
+    agent: str(p.agent, `${path}.agent`),
+    scheduled_scan: oneOf(p.scheduled_scan, SCAN_SCHEDULES, `${path}.scheduled_scan`),
+    excluded: arr(p.excluded, `${path}.excluded`).map((e, i) => str(e, `${path}.excluded[${i}]`)),
+  };
+}
+
 export function parseCleanupView(raw: unknown): CleanupView {
   const o = obj(raw, "view");
-  const p = obj(o.preferences, "view.preferences");
   return {
     disk: parseDisk(o.disk, "view.disk"),
     goal_bytes: bytes(o.goal_bytes, "view.goal_bytes"),
     last_scan_at: strOrNull(o.last_scan_at, "view.last_scan_at"),
     snapshot_taken_at: strOrNull(o.snapshot_taken_at, "view.snapshot_taken_at"),
     is_stale: bool(o.is_stale, "view.is_stale"),
-    preferences: {
-      trash_by_default: bool(p.trash_by_default, "view.preferences.trash_by_default"),
-      safe_only: bool(p.safe_only, "view.preferences.safe_only"),
-      notifications: bool(p.notifications, "view.preferences.notifications"),
-      assistant: bool(p.assistant, "view.preferences.assistant"),
-    },
+    preferences: parsePreferences(o.preferences, "view.preferences"),
     large_files_count: count(o.large_files_count, "view.large_files_count"),
     categories: arr(o.categories, "view.categories").map((c, i) => parseCategory(c, `view.categories[${i}]`)),
     catalogue: arr(o.catalogue, "view.catalogue").map((c, i) => {

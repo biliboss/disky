@@ -51,7 +51,7 @@ async function trafficLightSlotSitsWhereSnapshotDrawsDots({ page }: { page: Page
 async function placeholderScreensKeepTheShell({ page }: { page: Page }) {
   for (const [hash, title] of [
     ["#/assistant", "Assistant"],
-    ["#/settings", "Settings"],
+    ["#/history", "History"],
   ]) {
     await openApp(page, hash);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);

@@ -18,6 +18,9 @@ tauri = { version = "=2.12.7", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
+# Native folder picker for Settings → "Add folder" (REQ-DSCR-016.A3). Called
+# from the backend only; the frontend gets no dialog capability.
+tauri-plugin-dialog = "=2.7.3"
 # The engine. Scan / query / cleanup / history come from here and are never
 # reimplemented in the GUI (REQ-DCLEAN-001).
 disky = { path = "../.." }

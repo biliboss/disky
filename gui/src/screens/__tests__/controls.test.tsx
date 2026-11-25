@@ -41,7 +41,7 @@ function view(overrides: Record<string, unknown> = {}) {
     last_scan_at: new Date(Date.now() - 86_400_000).toISOString(),
     snapshot_taken_at: null,
     is_stale: false,
-    preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
+    preferences: { trash_by_default: true, skip_recently_used: true, safe_only: true, warn_below_goal: true, goal_bytes: 80e9, checks: { enabled: true, frequency: "daily" }, agent: "claude", scheduled_scan: "weekly", excluded: [] },
     large_files_count: 3,
     skipped_paths: 0,
     categories: [

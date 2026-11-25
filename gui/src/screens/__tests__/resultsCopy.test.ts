@@ -83,7 +83,7 @@ function itemSizesAddUpToTheCategorySize() {
     last_scan_at: null,
     snapshot_taken_at: null,
     is_stale: false,
-    preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
+    preferences: { trash_by_default: true, skip_recently_used: true, safe_only: true, warn_below_goal: true, goal_bytes: 80e9, checks: { enabled: true, frequency: "daily" }, agent: "claude", scheduled_scan: "weekly", excluded: [] },
     large_files_count: 0,
     skipped_paths: 0,
     categories: snapshotReviewCategories(),

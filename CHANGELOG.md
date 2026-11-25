@@ -7,7 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Behaviour change:** `disky cleanup` now leaves out anything modified in
+  the last 30 days by default (`skip_recently_used`). Run
+  `disky prefs --set skip_recently_used=false` for the previous behaviour.
+
 ### Added
+- Preferences store (REQ-DSCR-001): one `prefs.json` in the data dir, shared
+  by the CLI and the desktop GUI. `disky prefs [--format json]` prints every
+  preference (`kind:"prefs"`); `disky prefs --set <key>=<value>` (repeatable,
+  all-or-nothing) changes them. Unknown keys and invalid values exit 2 and
+  write nothing; a malformed file is an error and is never replaced. Writes
+  hold `flock` on `prefs.lock` and swap the file in atomically.
+- `disky cleanup` and the GUI honour the store (REQ-DSCR-002): hits inside an
+  excluded folder (`~` expanded, matched on whole path components) are
+  dropped, and with `skip_recently_used` on — the default — so is any hit
+  whose newest mtime is within 30 days. A missing excluded folder stays
+  listed and matches nothing.
+- Desktop GUI Settings screen (REQ-DSCR-016): the four toggles, the
+  scheduled-scan period and the "Never touch these folders" list, each saved
+  immediately through the store; "Add folder" opens the native folder
+  picker (`tauri-plugin-dialog` 2.7.3). The GUI's goal and toggles now come
+  from the store instead of hard-coded defaults.
 - Clean-history log (REQ-DCLEAN-034): every `cleanup --apply` appends an entry
   (id, timestamp, mode, categories, bytes, and per item the original path,
   Trash path and status) to `history.json` in the data dir. Writes hold an

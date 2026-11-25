@@ -132,6 +132,44 @@ with temp + rename, so concurrent GUI/CLI writers never lose an entry. Tests
 pass a `trash_root` to `cleanup::apply_with` (crate-private), and the CLI
 tests set a temp `HOME`. No test touches the real `~/.Trash` or log.
 
+## Preferences (REQ-DSCR-001/002)
+
+One store, `<data dir>/prefs.json` (next to the snapshots; the `.json`
+extension keeps it out of `@latest`), shared by the CLI and the GUI — no
+copies. `disky::prefs` owns it.
+
+```
+disky prefs --format json                         # kind:"prefs", records:[Prefs]
+disky prefs --set safe_only=false --set goal_bytes=100GB
+disky prefs --set excluded='~/Projects/active,/Volumes/Archive'   # or a JSON array
+```
+
+`Prefs = {trash_by_default, skip_recently_used, safe_only, warn_below_goal,
+goal_bytes, checks:{enabled, frequency: hourly|daily|weekly}, agent:
+claude|codex|gemini, scheduled_scan: off|weekly|monthly, excluded:[string]}`.
+Defaults are the design snapshot's: toggles on, 80 GB (decimal — `80GB` is
+80 000 000 000, unlike `disky filter`'s binary `GB`), checks on daily,
+`claude`, weekly, no exclusions.
+
+Rules: a missing file is the defaults; a malformed one is an error and is
+never replaced. An unknown key or invalid value exits 2 and writes nothing
+(several `--set`s are all-or-nothing). Writes hold `flock` on `prefs.lock`
+(the history log's `Lock`) and swap in with temp + rename.
+
+`disky cleanup` and the GUI's `contract::load` both apply the store through
+`ScanContext::with_prefs`: hits inside an excluded folder (`~` expanded,
+whole path components) are dropped, and with `skip_recently_used` on (the
+default) so is any hit whose newest mtime is within 30 days, or unknown. The
+library's `cleanup::scan` stays prefs-free. CLI tests that build fresh trees
+must run under a temp `HOME` with `skip_recently_used=false`
+(`tests/agentic.rs::home_including_recent`).
+
+GUI mapping: the below-goal notification reads `warn_below_goal` and
+`checks.enabled` (formerly `notifications` / `assistant`). Settings saves
+every change with the `set_prefs` Tauri command; "Add folder" calls
+`pick_folder` (native picker, `tauri-plugin-dialog`, backend only) and then
+`set_prefs`.
+
 ## `.diskyignore` loader (v0.11.0)
 
 Module `src/ignore.rs` (170 LOC, std-only) provides:
