@@ -331,6 +331,90 @@ async function resultsPhaseMatchesSnapshot({ page }: { page: Page }) {
 
 test("Smart Clean results phase matches the snapshot within 1% (REQ-DCLEAN-032.A1, REQ-DCLEAN-005)", resultsPhaseMatchesSnapshot);
 
+/**
+ * Live numbers on the confirm dialog, masked on both sides: the title total
+ * and each listed category's size (the prototype formats MB with 1024).
+ */
+const SNAPSHOT_CONFIRM_LIVE = (page: Page) => {
+  const dialog = page.locator('[role="dialog"]');
+  return [dialog.locator(".dialog-title"), dialog.locator(".dialog-body > div > span:last-child")];
+};
+const APP_CONFIRM_LIVE = [".confirm-title", ".confirm-row > span:last-child"];
+
+async function confirmDialogMatchesSnapshot({ page }: { page: Page }) {
+  const at = await openSnapshot(page);
+  await page.getByRole("button", { name: "Later" }).click();
+  await page.locator('[data-screen-label="Smart clean · home"]').waitFor();
+  await page.locator("main").getByRole("button", { name: "Start scan" }).click();
+  const review = page.locator(SNAPSHOT_REVIEW);
+  await review.waitFor({ timeout: 15_000 });
+  await page.locator("main").getByRole("button", { name: /^Clean / }).click();
+  await page.locator('[role="dialog"]').waitFor();
+  await page.screenshot({
+    path: baselinePath("confirm-dialog.png"),
+    clip: offset(WINDOW, at),
+    mask: [
+      page.locator(SNAPSHOT_LIGHTS),
+      ...SNAPSHOT_REVIEW_SIZES.map((t) => review.locator(`span:text-is("${t}")`).first().locator("xpath=..")),
+      ...SNAPSHOT_CONFIRM_LIVE(page),
+      page.locator('aside span:has-text("GB free")'),
+    ],
+    maskColor: MASK_COLOR,
+    animations: "disabled",
+  });
+
+  await page.setViewportSize(WINDOW);
+  await stubEngine(page, idleFixtureView(), false, reviewFixtureView());
+  await openApp(page);
+  await page.getByTestId("idle").getByRole("button", { name: "Start scan" }).click();
+  await page.getByTestId("results").waitFor();
+  await page.getByTestId("clean").click();
+  const dialog = page.getByRole("dialog");
+  await dialog.waitFor();
+  // REQ-DCLEAN-022.A2: focus opens on Cancel. Blur it for the pixel compare so
+  // neither side shows a focus ring the other lacks.
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await expect(page).toHaveScreenshot("confirm-dialog.png", {
+    ...SHELL_DIFF,
+    clip: WINDOW,
+    mask: [
+      page.locator(APP_LIGHTS),
+      page.locator('[data-testid="category-size"]'),
+      ...APP_CONFIRM_LIVE.map((s) => page.locator(s)),
+      page.locator(".meter-free"),
+    ],
+  });
+
+  // REQ-DCLEAN-020.A3 in a real browser: arrow keys move between the modes.
+  await dialog.getByRole("radio", { name: "Move to Trash" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(dialog.getByRole("radio", { name: "Delete permanently" })).toBeChecked();
+  await expect(dialog.getByRole("radio", { name: "Delete permanently" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Clean now" })).toHaveClass(/btn-danger/);
+  // REQ-DCLEAN-007.A6: the danger fill resolves to --color-accent-800.
+  const fills = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.style.background = "var(--color-accent-800)";
+    document.body.append(probe);
+    const accent800 = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    const now = [...document.querySelectorAll("[role=dialog] button")].find((b) => b.textContent === "Clean now")!;
+    return { accent800, now: getComputedStyle(now).backgroundColor };
+  });
+  expect(fills.now).toBe(fills.accent800);
+  // REQ-DCLEAN-022.A3: Tab stays inside the dialog.
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press("Tab");
+    expect(await dialog.evaluate((d) => d.contains(document.activeElement))).toBe(true);
+  }
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId("clean")).toBeFocused();
+}
+
+test("confirm dialog matches the snapshot within 1% (REQ-DCLEAN-032.A1, REQ-DCLEAN-007, REQ-DCLEAN-022)", confirmDialogMatchesSnapshot);
+
 // Full-phase comparisons (REQ-DCLEAN-032.A1). Parked until each Smart Clean
 // phase REQ is implemented; un-fixme as the phase lands.
 const PHASES = [

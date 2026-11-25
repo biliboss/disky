@@ -651,6 +651,226 @@ async function cleanUpdatesRingTagAndSidebar() {
   expect(invoke.mock.calls.filter(([cmd]) => cmd === "load_cleanup_view")).toHaveLength(1);
 }
 
+// ── Confirm dialog (REQ-DCLEAN-007, REQ-DCLEAN-022) ──────────────
+
+const TRASH_OFF = { preferences: { trash_by_default: false, safe_only: true, notifications: true, assistant: true } };
+
+/** Focus "Clean <total>" (as a real click would) and activate it. */
+function openDialog() {
+  cleanButton().focus();
+  fireEvent.click(cleanButton());
+  return screen.getByRole("dialog");
+}
+
+function modeRadio(name: "Move to Trash" | "Delete permanently") {
+  return within(screen.getByRole("radiogroup", { name: "Clean mode" })).getByRole("radio", { name });
+}
+
+function cleanCalls() {
+  return invoke.mock.calls.filter(([cmd]) => cmd === "clean");
+}
+
+async function cleanOpensTheDialogTitledWithTheTotal() {
+  await startScanAndFinish(itemsView());
+  expect(screen.queryByRole("dialog")).toBeNull();
+  const dialog = openDialog();
+  expect(dialog).toHaveAttribute("aria-modal", "true");
+  expect(within(dialog).getByRole("heading", { level: 2 })).toHaveTextContent(/^Clean 4.2 GB\?$/);
+  expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  expect(within(dialog).getByRole("button", { name: "Clean now" })).toBeInTheDocument();
+}
+
+async function dialogListsExactlyTheSelectedCategories() {
+  await startScanAndFinish(itemsView());
+  fireEvent.click(within(resultRows()[1]).getByRole("checkbox", { name: "Engine label B" }));
+  const footer = cleanButton().textContent;
+  const dialog = openDialog();
+  const rows = within(within(dialog).getByTestId("confirm-categories")).getAllByRole("listitem");
+  expect(rows.map((r) => r.getAttribute("data-category-id"))).toEqual(["engine_cat_a", "engine_cat_b"]);
+  expect(rows[0]).toHaveTextContent("Engine label A4.2 GB");
+  expect(rows[1]).toHaveTextContent("Engine label B600 MB");
+  expect(within(dialog).getByRole("heading", { level: 2 }).textContent).toBe(`${footer}?`);
+}
+
+async function modeStartsAtTheTrashPreference() {
+  await startScanAndFinish(itemsView());
+  openDialog();
+  expect(modeRadio("Move to Trash")).toBeChecked();
+  expect(modeRadio("Delete permanently")).not.toBeChecked();
+  cleanup();
+  resetDiskState();
+  await startScanAndFinish(itemsView(TRASH_OFF));
+  openDialog();
+  expect(modeRadio("Delete permanently")).toBeChecked();
+  expect(modeRadio("Move to Trash")).not.toBeChecked();
+}
+
+async function noteFollowsTheChosenMode() {
+  await startScanAndFinish(itemsView());
+  openDialog();
+  expect(screen.getByTestId("mode-note")).toHaveTextContent(/^You can restore everything from History for 30 days\.$/);
+  fireEvent.click(modeRadio("Delete permanently"));
+  expect(screen.getByTestId("mode-note")).toHaveTextContent(/^This can't be undone\.$/);
+  fireEvent.click(modeRadio("Move to Trash"));
+  expect(screen.getByTestId("mode-note")).toHaveTextContent(/^You can restore everything from History for 30 days\.$/);
+}
+
+async function cancelEscapeAndBackdropCloseWithTheSelectionUnchanged() {
+  await startScanAndFinish(itemsView());
+  fireEvent.click(within(resultRows()[1]).getByRole("checkbox", { name: "Engine label B" }));
+  const close: [string, () => void][] = [
+    ["Cancel", () => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }))],
+    ["Escape", () => fireEvent.keyDown(document, { key: "Escape" })],
+    ["backdrop", () => fireEvent.click(screen.getByTestId("confirm-backdrop"))],
+  ];
+  for (const [how, act] of close) {
+    openDialog();
+    // A click inside the dialog panel is not a backdrop click.
+    fireEvent.click(screen.getByRole("dialog"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    act();
+    expect(screen.queryByRole("dialog"), how).toBeNull();
+    expect(screen.getByTestId("results")).toBeInTheDocument();
+    expect(checkedIds(), how).toEqual(["engine_cat_a", "engine_cat_b"]);
+    expect(cleanButton()).toHaveTextContent(/^Clean 4.8 GB$/);
+  }
+  expect(cleanCalls()).toEqual([]);
+}
+
+async function nothingIsCleanedBeforeCleanNow() {
+  await startScanAndFinish(itemsView());
+  const dialog = openDialog();
+  fireEvent.click(modeRadio("Delete permanently"));
+  fireEvent.click(modeRadio("Move to Trash"));
+  expect(cleanCalls()).toEqual([]);
+  fireEvent.click(within(dialog).getByRole("button", { name: "Clean now" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(await screen.findByTestId("cleaning")).toBeInTheDocument();
+  // REQ-DCLEAN-008 runs the clean; this change stops at the cleaning phase.
+  expect(cleanCalls()).toEqual([]);
+  expect(invoke.mock.calls.map(([cmd]) => cmd)).toEqual(["load_cleanup_view", "scan"]);
+}
+
+async function deleteModeGivesCleanNowTheDangerFill() {
+  await startScanAndFinish(itemsView());
+  const now = within(openDialog()).getByRole("button", { name: "Clean now" });
+  expect(now).toHaveClass("btn", "btn-primary");
+  expect(now).not.toHaveClass("btn-danger");
+  fireEvent.click(modeRadio("Delete permanently"));
+  expect(now).toHaveClass("btn", "btn-primary", "btn-danger");
+  fireEvent.click(modeRadio("Move to Trash"));
+  expect(now).not.toHaveClass("btn-danger");
+}
+
+function dangerAndBackdropUseTheirTokens() {
+  const tokens = readFileSync(resolve(__dirname, "../../styles/gui-tokens.css"), "utf8");
+  expect(tokens).toMatch(/--color-danger:\s*var\(--color-accent-800\);/);
+  const verbatim = readFileSync(resolve(__dirname, "../../styles/tokens.css"), "utf8");
+  expect(verbatim).not.toMatch(/--color-danger/); // tokens.css stays a verbatim copy
+  const css = readFileSync(resolve(__dirname, "../smartClean/smartClean.css"), "utf8");
+  expect(css).toMatch(/\.confirm-backdrop\s*\{[^}]*background:\s*var\(--overlay-backdrop\);/);
+  expect(css).toMatch(/\.btn\.btn-danger\s*\{[^}]*background:\s*var\(--color-danger\);/);
+}
+
+async function modeSwitchIsARadiogroupWithArrowKeys() {
+  await startScanAndFinish(itemsView());
+  openDialog();
+  const group = screen.getByRole("radiogroup", { name: "Clean mode" });
+  expect(group).toHaveClass("seg");
+  const opts = group.querySelectorAll(".seg-opt");
+  expect(opts).toHaveLength(2);
+  expect([...opts].map((o) => o.textContent)).toEqual(["Move to Trash", "Delete permanently"]);
+  fireEvent.keyDown(modeRadio("Move to Trash"), { key: "ArrowRight" });
+  expect(modeRadio("Delete permanently")).toBeChecked();
+  expect(modeRadio("Delete permanently")).toHaveFocus();
+  fireEvent.keyDown(modeRadio("Delete permanently"), { key: "ArrowRight" });
+  expect(modeRadio("Move to Trash")).toBeChecked();
+  fireEvent.keyDown(modeRadio("Move to Trash"), { key: "ArrowLeft" });
+  expect(modeRadio("Delete permanently")).toBeChecked();
+  expect(screen.getByTestId("mode-note")).toHaveTextContent("This can't be undone.");
+}
+
+// REQ-DCLEAN-022
+
+async function dialogIsModalAndLabelledByItsTitle() {
+  await startScanAndFinish(itemsView());
+  const dialog = openDialog();
+  expect(dialog).toHaveAttribute("aria-modal", "true");
+  const title = within(dialog).getByRole("heading", { level: 2 });
+  expect(dialog).toHaveAttribute("aria-labelledby", title.id);
+  expect(screen.getByRole("dialog", { name: "Clean 4.2 GB?" })).toBe(dialog);
+}
+
+async function focusOpensOnCancel() {
+  await startScanAndFinish(itemsView());
+  const dialog = openDialog();
+  expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+}
+
+async function focusIsTrappedInsideTheDialog() {
+  await startScanAndFinish(itemsView());
+  const dialog = openDialog();
+  const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+  const now = within(dialog).getByRole("button", { name: "Clean now" });
+  const radio = modeRadio("Move to Trash");
+  // Tab from the last stop wraps to the first; Shift+Tab from the first wraps to the last.
+  now.focus();
+  fireEvent.keyDown(document.activeElement!, { key: "Tab" });
+  expect(radio).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: "Tab", shiftKey: true });
+  expect(now).toHaveFocus();
+  // Focus that escapes is pulled back in, and the page behind is inert.
+  cleanButton().focus();
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  expect(cancel).toHaveFocus();
+  expect(screen.getByTestId("results").closest("[inert]")).not.toBeNull();
+  expect(dialog.closest("[inert]")).toBeNull();
+}
+
+async function focusReturnsToTheOpener() {
+  await startScanAndFinish(itemsView());
+  for (const close of [
+    () => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" })),
+    () => fireEvent.keyDown(document, { key: "Escape" }),
+    () => fireEvent.click(screen.getByTestId("confirm-backdrop")),
+  ]) {
+    openDialog();
+    close();
+    expect(cleanButton()).toHaveFocus();
+    expect(screen.getByTestId("results").closest("[inert]")).toBeNull();
+  }
+}
+
+async function focusFallsBackToTheResultsHeadingWithoutAnOpener() {
+  await startScanAndFinish(itemsView());
+  // The notification path opens the dialog without a control on the results screen.
+  (document.activeElement as HTMLElement | null)?.blur();
+  fireEvent.click(cleanButton());
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.getByTestId("results-heading")).toHaveFocus();
+}
+
+describe("Smart Clean confirm dialog (REQ-DCLEAN-007)", () => {
+  it("Clean opens a dialog titled Clean <total>? (REQ-DCLEAN-007)", cleanOpensTheDialogTitledWithTheTotal);
+  it("nothing is cleaned before Clean now (REQ-DCLEAN-007.A1)", nothingIsCleanedBeforeCleanNow);
+  it("the mode starts at trash-by-default (REQ-DCLEAN-007.A2)", modeStartsAtTheTrashPreference);
+  it("the note follows the chosen mode (REQ-DCLEAN-007.A3)", noteFollowsTheChosenMode);
+  it("Cancel, Escape and the backdrop close it with the selection unchanged (REQ-DCLEAN-007.A4)", cancelEscapeAndBackdropCloseWithTheSelectionUnchanged);
+  it("lists exactly the selected categories; title total equals the footer (REQ-DCLEAN-007.A5)", dialogListsExactlyTheSelectedCategories);
+  it("Delete permanently gives Clean now the danger fill (REQ-DCLEAN-007.A6)", deleteModeGivesCleanNowTheDangerFill);
+  it("--color-danger aliases --color-accent-800 and the backdrop uses --overlay-backdrop (REQ-DCLEAN-007.A6, A7)", dangerAndBackdropUseTheirTokens);
+  it("the mode switch is a .seg radiogroup driven by arrow keys (REQ-DCLEAN-020.A3)", modeSwitchIsARadiogroupWithArrowKeys);
+});
+
+describe("confirm dialog focus (REQ-DCLEAN-022)", () => {
+  it("is a modal labelled by its title (REQ-DCLEAN-022.A1)", dialogIsModalAndLabelledByItsTitle);
+  it("opens with focus on Cancel (REQ-DCLEAN-022.A2)", focusOpensOnCancel);
+  it("traps focus and makes the page inert (REQ-DCLEAN-022.A3)", focusIsTrappedInsideTheDialog);
+  it("returns focus to the opener on close (REQ-DCLEAN-022.A4)", focusReturnsToTheOpener);
+  it("falls back to the results heading without an opener (REQ-DCLEAN-022.A4)", focusFallsBackToTheResultsHeadingWithoutAnOpener);
+});
+
 describe("Smart Clean consumes the engine view", () => {
   it("renders exactly the engine's categories (REQ-DCLEAN-027.A4)", rendersExactlyTheEngineCategories);
   it("malformed data renders the error state, not a partial list (REQ-DCLEAN-029.A4)", malformedDataShowsTheErrorStateNotAPartialList);

@@ -4,8 +4,12 @@ import { parseCleanupView } from "../../lib/contract";
 import {
   EMPTY_RESULTS,
   NO_ITEMS,
+  MODE_LABELS,
   cleanLabel,
+  confirmTitle,
   disclosureLabel,
+  initialMode,
+  modeNote,
   resultsHeading,
   resultsKicker,
   safetyNote,
@@ -93,6 +97,32 @@ function itemSizesAddUpToTheCategorySize() {
     expect(Math.abs(sum - category.bytes)).toBeLessThanOrEqual(slack + 1);
   }
 }
+
+// ── Confirm dialog (REQ-DCLEAN-007) ──────────────────────────────
+
+function confirmTitleTotalEqualsTheFooterTotal() {
+  for (const bytes of [0, 600_000_000, 4_200_000_000, 4_800_000_000, 1_234_567_890_123]) {
+    expect(confirmTitle(bytes)).toBe(`${cleanLabel(bytes)}?`);
+  }
+  expect(confirmTitle(4_200_000_000)).toBe("Clean 4.2 GB?");
+}
+
+function modeNoteCoversBothModes() {
+  expect(modeNote("trash")).toBe("You can restore everything from History for 30 days.");
+  expect(modeNote("delete")).toBe("This can't be undone.");
+  expect(MODE_LABELS).toEqual({ trash: "Move to Trash", delete: "Delete permanently" });
+}
+
+function initialModeFollowsTrashByDefault() {
+  expect(initialMode(true)).toBe("trash");
+  expect(initialMode(false)).toBe("delete");
+}
+
+describe("confirm dialog copy (REQ-DCLEAN-007)", () => {
+  it("title total equals the footer total (REQ-DCLEAN-007.A5)", confirmTitleTotalEqualsTheFooterTotal);
+  it("the note names each mode's consequence (REQ-DCLEAN-007.A3)", modeNoteCoversBothModes);
+  it("the mode starts at the trash-by-default preference (REQ-DCLEAN-007.A2)", initialModeFollowsTrashByDefault);
+});
 
 describe("results copy (REQ-DCLEAN-005, REQ-DCLEAN-006, REQ-DCLEAN-019)", () => {
   it("heading total is the sum of the listed categories (REQ-DCLEAN-005)", headingTotalIsTheSumOfListedCategories);

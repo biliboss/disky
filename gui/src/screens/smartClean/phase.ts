@@ -29,6 +29,12 @@ export interface SmartCleanState {
   openedBy: string | null;
   /** Category ids selected for cleaning on the results list (REQ-DCLEAN-006). */
   selected: readonly string[];
+  /**
+   * The confirm-clean dialog is open over the results (REQ-DCLEAN-007). Not
+   * a phase: the results stay rendered underneath, and the selection is
+   * frozen while it is open.
+   */
+  confirming: boolean;
 }
 
 /** What selection needs from a category. */
@@ -44,6 +50,7 @@ export const INITIAL_STATE: SmartCleanState = {
   completedBytes: {},
   openedBy: null,
   selected: [],
+  confirming: false,
 };
 
 /** Highest progress a running scan shows: 100% means finished (REQ-DCLEAN-004.A1). */
@@ -68,6 +75,7 @@ export function startScan(s: SmartCleanState): SmartCleanState {
     notificationDismissed: true,
     openedBy: null,
     selected: [],
+    confirming: false,
   };
 }
 
@@ -139,6 +147,11 @@ export function toggleExpanded(s: SmartCleanState, id: string): SmartCleanState 
   return { ...s, expanded: s.expanded === id ? null : id };
 }
 
+/** Selection changes only on the results list, never under the confirm dialog. */
+function canSelect(s: SmartCleanState): boolean {
+  return s.phase === "results" && !s.confirming;
+}
+
 /**
  * A category's selection control (REQ-DCLEAN-006.A3): flips `id` and
  * nothing else.
@@ -146,7 +159,7 @@ export function toggleExpanded(s: SmartCleanState, id: string): SmartCleanState 
  * @implements REQ-DCLEAN-006
  */
 export function toggleSelected(s: SmartCleanState, id: string): SmartCleanState {
-  if (s.phase !== "results") return s;
+  if (!canSelect(s)) return s;
   const selected = s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id];
   return { ...s, selected };
 }
@@ -157,7 +170,7 @@ export function toggleSelected(s: SmartCleanState, id: string): SmartCleanState 
  * @implements REQ-DCLEAN-006
  */
 export function selectSafeOnly(s: SmartCleanState, categories: readonly Selectable[]): SmartCleanState {
-  if (s.phase !== "results") return s;
+  if (!canSelect(s)) return s;
   return { ...s, selected: preselect(categories, true) };
 }
 
@@ -167,7 +180,7 @@ export function selectSafeOnly(s: SmartCleanState, categories: readonly Selectab
  * @implements REQ-DCLEAN-006
  */
 export function selectAll(s: SmartCleanState, categories: readonly Selectable[]): SmartCleanState {
-  if (s.phase !== "results") return s;
+  if (!canSelect(s)) return s;
   return { ...s, selected: preselect(categories, false) };
 }
 
@@ -179,7 +192,41 @@ export function selectAll(s: SmartCleanState, categories: readonly Selectable[])
  */
 export function backHome(s: SmartCleanState): SmartCleanState {
   if (s.phase !== "results") return s;
-  return { ...s, ...NO_SCAN, phase: "idle", expanded: null, selected: [], openedBy: null };
+  if (s.confirming) return s;
+  return { ...s, ...NO_SCAN, phase: "idle", expanded: null, selected: [], openedBy: null, confirming: false };
+}
+
+/**
+ * "Clean <total>" (REQ-DCLEAN-007): open the confirm dialog. Only on the
+ * results list with something selected; nothing is cleaned yet (A1).
+ *
+ * @implements REQ-DCLEAN-007
+ */
+export function openConfirm(s: SmartCleanState): SmartCleanState {
+  if (s.phase !== "results" || s.confirming || s.selected.length === 0) return s;
+  return { ...s, confirming: true };
+}
+
+/**
+ * "Cancel", Escape or the backdrop (REQ-DCLEAN-007.A4): close the dialog
+ * with the selection exactly as it was.
+ *
+ * @implements REQ-DCLEAN-007
+ */
+export function cancelConfirm(s: SmartCleanState): SmartCleanState {
+  if (!s.confirming) return s;
+  return { ...s, confirming: false };
+}
+
+/**
+ * "Clean now" (REQ-DCLEAN-007.A1): the only way into the cleaning phase.
+ * Refused unless the dialog is open.
+ *
+ * @implements REQ-DCLEAN-007
+ */
+export function confirmClean(s: SmartCleanState): SmartCleanState {
+  if (s.phase !== "results" || !s.confirming) return s;
+  return { ...s, phase: "cleaning", progress: 0, confirming: false };
 }
 
 /** "Stop", or a scan that failed: back to idle, no results (REQ-DCLEAN-004.A3). */

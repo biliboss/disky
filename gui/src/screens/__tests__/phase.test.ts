@@ -4,6 +4,9 @@ import {
   INITIAL_STATE,
   SCANNING_PROGRESS_CAP,
   backHome,
+  cancelConfirm,
+  confirmClean,
+  openConfirm,
   categoryRowStatus,
   listedCategories,
   preselect,
@@ -178,6 +181,60 @@ describe("Smart Clean results transitions (REQ-DCLEAN-005, REQ-DCLEAN-006, REQ-D
   it("toggling flips only that category (REQ-DCLEAN-006.A3)", toggleSelectedFlipsOnlyThatCategory);
   it("zero-size categories are omitted (REQ-DCLEAN-019.A2)", zeroSizeCategoriesAreNotListed);
   it("Back to home returns to idle with nothing selected (REQ-DCLEAN-019.A1)", backHomeReturnsToIdleWithNothingSelected);
+});
+
+// ── Confirm dialog (REQ-DCLEAN-007) ──────────────────────────────
+
+function openConfirmNeedsResultsAndASelection() {
+  const s: SmartCleanState = { ...RESULTS, selected: ["a"] };
+  expect(openConfirm(s)).toEqual({ ...s, confirming: true });
+  const none: SmartCleanState = { ...RESULTS, selected: [] };
+  expect(openConfirm(none)).toBe(none);
+  for (const phase of ["idle", "scanning", "cleaning", "done"] as const) {
+    const other: SmartCleanState = { ...INITIAL_STATE, phase, selected: ["a"] };
+    expect(openConfirm(other)).toBe(other);
+  }
+}
+
+function cancelConfirmKeepsTheSelection() {
+  const s: SmartCleanState = { ...RESULTS, selected: ["b", "a"], expanded: "a", confirming: true };
+  expect(cancelConfirm(s)).toEqual({ ...s, confirming: false });
+  expect(cancelConfirm(s).selected).toEqual(["b", "a"]);
+  const closed: SmartCleanState = { ...RESULTS, selected: ["a"] };
+  expect(cancelConfirm(closed)).toBe(closed);
+}
+
+function confirmCleanEntersCleaningOnlyFromTheDialog() {
+  const s: SmartCleanState = { ...RESULTS, selected: ["a"], progress: 1 };
+  expect(confirmClean(s)).toBe(s); // dialog not open: refused
+  const open = openConfirm(s);
+  const cleaning = confirmClean(open);
+  expect(cleaning.phase).toBe("cleaning");
+  expect(cleaning.progress).toBe(0);
+  expect(cleaning.confirming).toBe(false);
+  expect(cleaning.selected).toEqual(["a"]);
+  const idleOpen: SmartCleanState = { ...INITIAL_STATE, confirming: true };
+  expect(confirmClean(idleOpen)).toBe(idleOpen);
+}
+
+function selectionIsFrozenWhileConfirming() {
+  const cats = [
+    { id: "a", safety: "safe", bytes: 1 },
+    { id: "b", safety: "review", bytes: 2 },
+  ] as const;
+  const s: SmartCleanState = { ...RESULTS, selected: ["a"], confirming: true };
+  expect(toggleSelected(s, "a")).toBe(s);
+  expect(toggleSelected(s, "b")).toBe(s);
+  expect(selectAll(s, cats)).toBe(s);
+  expect(selectSafeOnly(s, cats)).toBe(s);
+  expect(backHome(s)).toBe(s);
+}
+
+describe("Smart Clean confirm dialog transitions (REQ-DCLEAN-007)", () => {
+  it("opens only on results with something selected (REQ-DCLEAN-007)", openConfirmNeedsResultsAndASelection);
+  it("Cancel closes with the selection unchanged (REQ-DCLEAN-007.A4)", cancelConfirmKeepsTheSelection);
+  it("Clean now is the only way into cleaning (REQ-DCLEAN-007.A1)", confirmCleanEntersCleaningOnlyFromTheDialog);
+  it("the selection cannot change under the dialog (REQ-DCLEAN-007.A5)", selectionIsFrozenWhileConfirming);
 });
 
 describe("Smart Clean phase machine", () => {

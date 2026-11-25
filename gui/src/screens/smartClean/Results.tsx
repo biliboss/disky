@@ -28,7 +28,7 @@ export interface ResultsProps {
   onSelectAll: () => void;
   /** "Back to home" / "Cancel": return to idle, nothing cleaned. */
   onBack: () => void;
-  /** "Clean <total>". The confirmation dialog is REQ-DCLEAN-007's. */
+  /** "Clean <total>": opens the confirm dialog (REQ-DCLEAN-007); never cleans by itself. */
   onClean?: () => void;
 }
 
@@ -64,7 +64,10 @@ export function Results(props: ResultsProps) {
             <div class="results-kicker" data-testid="results-kicker">
               {resultsKicker(listed().length, props.state.openedBy)}
             </div>
-            <h1 class="results-title">{resultsHeading(listed())}</h1>
+            {/* tabindex -1: the confirm dialog's fallback focus target (REQ-DCLEAN-022.A4). */}
+            <h1 class="results-title" tabIndex={-1} data-testid="results-heading">
+              {resultsHeading(listed())}
+            </h1>
           </div>
           <button type="button" class="btn btn-ghost" onClick={() => props.onSelectSafe()}>
             Safe only

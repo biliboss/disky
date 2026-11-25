@@ -1,14 +1,19 @@
 import { Match, Show, Switch, createEffect, createResource, createSignal, onCleanup } from "solid-js";
 import { useDelayedBusy } from "../lib/busy";
 import { loadCleanupView, onScanProgress, scan, stopScan } from "../lib/engine";
-import type { CleanupView } from "../lib/contract";
+import type { CleanMode, CleanupView } from "../lib/contract";
 import { diskState, setFromView } from "../lib/diskState";
+import { ConfirmClean } from "./smartClean/ConfirmClean";
 import { Idle } from "./smartClean/Idle";
 import { Results } from "./smartClean/Results";
 import { Scanning } from "./smartClean/Scanning";
 import {
   INITIAL_STATE,
   backHome,
+  cancelConfirm,
+  confirmClean,
+  listedCategories,
+  openConfirm,
   scanFinished,
   scanProgress,
   scanStopped,
@@ -19,6 +24,7 @@ import {
   toggleSelected,
   type SmartCleanState,
 } from "./smartClean/phase";
+import { selectedBytes } from "./smartClean/resultsCopy";
 import "./smartClean/smartClean.css";
 
 /**
@@ -28,7 +34,10 @@ import "./smartClean/smartClean.css";
  * parsed at the boundary, and disk usage goes through the shared disk state
  * (REQ-DCLEAN-002). Results (REQ-DCLEAN-005) list the engine's categories
  * with the safe-only preselection (REQ-DCLEAN-006), or the empty state
- * (REQ-DCLEAN-019).
+ * (REQ-DCLEAN-019). "Clean <total>" opens the confirm dialog
+ * (REQ-DCLEAN-007, focus per REQ-DCLEAN-022) over the results, fed the same
+ * selected categories and total as the footer; only "Clean now" enters the
+ * cleaning phase.
  *
  * Loading (REQ-DCLEAN-017): the scanning screen is the scan's loading state;
  * loading the view shows a busy indicator only past the spinner threshold;
@@ -38,6 +47,7 @@ import "./smartClean/smartClean.css";
  * @implements REQ-DCLEAN-004
  * @implements REQ-DCLEAN-005
  * @implements REQ-DCLEAN-006
+ * @implements REQ-DCLEAN-007
  * @implements REQ-DCLEAN-017
  * @implements REQ-DCLEAN-019
  */
@@ -89,6 +99,15 @@ export function SmartClean() {
     }
   }
 
+  /**
+   * "Clean now" (REQ-DCLEAN-007.A1): the only path into cleaning.
+   * REQ-DCLEAN-008: run `clean(paths, mode)` here and drive the cleaning
+   * phase's progress from it. Until then no file is touched.
+   */
+  function runClean(_mode: CleanMode) {
+    setState(confirmClean);
+  }
+
   /** "Stop" (REQ-DCLEAN-004.A3): back to idle now; the engine cancels the walk. */
   function endScan() {
     setState(scanStopped);
@@ -120,8 +139,13 @@ export function SmartClean() {
               onSelectSafe={() => setState((s) => selectSafeOnly(s, v().categories))}
               onSelectAll={() => setState((s) => selectAll(s, v().categories))}
               onBack={() => setState(backHome)}
+              onClean={() => setState(openConfirm)}
             />
           )}
+        </Match>
+        <Match when={state().phase === "cleaning"}>
+          {/* REQ-DCLEAN-008 renders the cleaning phase here. */}
+          <div class="screen" data-testid="cleaning" />
         </Match>
         <Match when={view() && diskState()}>
           <Show when={scanError()}>
@@ -138,6 +162,21 @@ export function SmartClean() {
           </div>
         </Match>
       </Switch>
+      <Show when={state().phase === "results" && state().confirming && view()}>
+        {(v) => {
+          const chosen = () => listedCategories(v().categories).filter((c) => state().selected.includes(c.id));
+          return (
+            <ConfirmClean
+              categories={chosen()}
+              total={selectedBytes(listedCategories(v().categories), state().selected)}
+              trashByDefault={v().preferences.trash_by_default}
+              fallbackFocus={() => document.querySelector<HTMLElement>('[data-testid="results-heading"]')}
+              onCancel={() => setState(cancelConfirm)}
+              onConfirm={runClean}
+            />
+          );
+        }}
+      </Show>
     </section>
   );
 }

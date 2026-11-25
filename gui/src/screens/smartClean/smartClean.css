@@ -499,3 +499,62 @@
   flex-direction: column;
   gap: var(--results-empty-gap);
 }
+
+.results-title:focus {
+  outline: none; /* programmatic focus target only (REQ-DCLEAN-022.A4) */
+}
+
+/* ── Confirm clean (REQ-DCLEAN-007/022) ───────────────────────── */
+/* Geometry from snapshot.html's confirm dialog; the .dialog* classes come
+ * from the design system. */
+.confirm-backdrop {
+  background: var(--overlay-backdrop);
+  z-index: 1;
+}
+
+.confirm-dialog {
+  width: min(var(--confirm-w), 100%);
+}
+
+/* An h2 for semantics; the snapshot's title is a div, so it keeps body
+ * text metrics rather than the design system's heading line-height. */
+.confirm-title {
+  margin: 0;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
+.confirm-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--confirm-list-gap);
+}
+
+.confirm-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.confirm-seg {
+  align-self: flex-start;
+  background: var(--color-bg);
+}
+
+.confirm-note {
+  margin: 0;
+  font-size: var(--fs-confirm-note);
+  color: var(--color-neutral-700);
+}
+
+/* Destructive primary (REQ-DCLEAN-007.A6): outranks .btn-primary's states. */
+.btn.btn-danger {
+  background: var(--color-danger);
+}
+
+.btn.btn-danger:hover,
+.btn.btn-danger:active {
+  background: var(--color-danger-hover);
+}

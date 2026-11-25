@@ -338,6 +338,34 @@ verifies:
 
 Activating "Clean <total>" opens a modal titled "Clean <total>?". It lists each selected category with its size, a two-option mode switch ("Move to Trash" / "Delete permanently"), a note for the chosen mode, and "Cancel" / "Clean now" actions.
 
+implementations:
+  - gui/src/screens/smartClean/ConfirmClean.tsx:ConfirmClean
+  - gui/src/screens/smartClean/phase.ts:openConfirm
+  - gui/src/screens/smartClean/phase.ts:cancelConfirm
+  - gui/src/screens/smartClean/phase.ts:confirmClean
+  - gui/src/screens/smartClean/resultsCopy.ts:confirmTitle
+  - gui/src/screens/smartClean/resultsCopy.ts:modeNote
+  - gui/src/screens/SmartClean.tsx:SmartClean
+
+verifies:
+  - gui/src/screens/__tests__/phase.test.ts:openConfirmNeedsResultsAndASelection
+  - gui/src/screens/__tests__/phase.test.ts:cancelConfirmKeepsTheSelection
+  - gui/src/screens/__tests__/phase.test.ts:confirmCleanEntersCleaningOnlyFromTheDialog
+  - gui/src/screens/__tests__/phase.test.ts:selectionIsFrozenWhileConfirming
+  - gui/src/screens/__tests__/resultsCopy.test.ts:confirmTitleTotalEqualsTheFooterTotal
+  - gui/src/screens/__tests__/resultsCopy.test.ts:modeNoteCoversBothModes
+  - gui/src/screens/__tests__/resultsCopy.test.ts:initialModeFollowsTrashByDefault
+  - gui/src/screens/__tests__/SmartClean.test.tsx:cleanOpensTheDialogTitledWithTheTotal
+  - gui/src/screens/__tests__/SmartClean.test.tsx:nothingIsCleanedBeforeCleanNow
+  - gui/src/screens/__tests__/SmartClean.test.tsx:modeStartsAtTheTrashPreference
+  - gui/src/screens/__tests__/SmartClean.test.tsx:noteFollowsTheChosenMode
+  - gui/src/screens/__tests__/SmartClean.test.tsx:cancelEscapeAndBackdropCloseWithTheSelectionUnchanged
+  - gui/src/screens/__tests__/SmartClean.test.tsx:dialogListsExactlyTheSelectedCategories
+  - gui/src/screens/__tests__/SmartClean.test.tsx:deleteModeGivesCleanNowTheDangerFill
+  - gui/src/screens/__tests__/SmartClean.test.tsx:dangerAndBackdropUseTheirTokens
+  - gui/src/screens/__tests__/SmartClean.test.tsx:modeSwitchIsARadiogroupWithArrowKeys
+  - gui/tests/visual/shell.spec.ts:confirmDialogMatchesSnapshot
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-007.A1 -->
 - No file is moved or removed before "Clean now" is activated.
@@ -577,6 +605,17 @@ verifies:
 
 <!-- id: REQ-DCLEAN-022 -->
 ## The confirmation dialog MUST manage focus as a modal
+
+implementations:
+  - gui/src/screens/smartClean/ConfirmClean.tsx:ConfirmClean
+
+verifies:
+  - gui/src/screens/__tests__/SmartClean.test.tsx:dialogIsModalAndLabelledByItsTitle
+  - gui/src/screens/__tests__/SmartClean.test.tsx:focusOpensOnCancel
+  - gui/src/screens/__tests__/SmartClean.test.tsx:focusIsTrappedInsideTheDialog
+  - gui/src/screens/__tests__/SmartClean.test.tsx:focusReturnsToTheOpener
+  - gui/src/screens/__tests__/SmartClean.test.tsx:focusFallsBackToTheResultsHeadingWithoutAnOpener
+  - gui/tests/visual/shell.spec.ts:confirmDialogMatchesSnapshot
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-022.A1 -->

@@ -4,7 +4,7 @@
  * an engine byte count; this module only adds up the categories the user can
  * see or has selected, and formats at the end (REQ-DCLEAN-028).
  */
-import type { CategoryView, Safety } from "../../lib/contract";
+import type { CategoryView, CleanMode, Safety } from "../../lib/contract";
 import { formatBytes } from "../../lib/format";
 
 type Sized = Pick<CategoryView, "id" | "bytes">;
@@ -77,6 +77,36 @@ export function safetyNote(trashByDefault: boolean): string {
   return trashByDefault
     ? "Items move to the Trash and can be restored from History for 30 days."
     : "Trash is off in Settings, so items will be deleted permanently.";
+}
+
+/**
+ * The confirm dialog's title, "Clean <total>?" (REQ-DCLEAN-007). Formatted
+ * exactly as the footer's {@link cleanLabel}, so the two totals match (A5).
+ *
+ * @implements REQ-DCLEAN-007
+ */
+export function confirmTitle(selectedTotal: number): string {
+  return `${cleanLabel(selectedTotal)}?`;
+}
+
+/** The dialog's two clean modes, in the snapshot's order. */
+export const MODE_LABELS: Readonly<Record<CleanMode, string>> = {
+  trash: "Move to Trash",
+  delete: "Delete permanently",
+};
+
+/** The mode the dialog opens with: the trash-by-default preference (REQ-DCLEAN-007.A2). */
+export function initialMode(trashByDefault: boolean): CleanMode {
+  return trashByDefault ? "trash" : "delete"; // lint-boundary-allow: clean mode, not a category
+}
+
+/**
+ * The note under the mode switch (REQ-DCLEAN-007.A3).
+ *
+ * @implements REQ-DCLEAN-007
+ */
+export function modeNote(mode: CleanMode): string {
+  return mode === "trash" ? "You can restore everything from History for 30 days." : "This can't be undone."; // lint-boundary-allow: clean mode, not a category
 }
 
 /** Empty results (REQ-DCLEAN-019.A1). */

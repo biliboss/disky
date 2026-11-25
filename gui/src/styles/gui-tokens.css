@@ -137,6 +137,13 @@
   --btn-clean-px: 24px;
   --results-empty-gap: var(--idle-stack-gap); /* 20px */
 
+  /* ── Smart Clean · confirm dialog (REQ-DCLEAN-007/022) ──────── */
+  --color-danger: var(--color-accent-800); /* destructive primary fill (REQ-DCLEAN-007.A6) */
+  --color-danger-hover: color-mix(in srgb, var(--color-danger) 85%, var(--color-text));
+  --confirm-w: 460px;                 /* snapshot: .dialog width:460px */
+  --confirm-list-gap: 6px;            /* snapshot: dialog-body gap:6px */
+  --fs-confirm-note: var(--fs-small); /* 13px */
+
   /* ── Busy indicator (REQ-DCLEAN-017.A2) ─────────────────────── */
   --busy-size: 18px;
   --busy-stroke: 2px;
