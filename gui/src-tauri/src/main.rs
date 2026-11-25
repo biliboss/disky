@@ -328,11 +328,14 @@ async fn reveal_in_finder(app: AppHandle, path: String) -> CmdResult<()> {
             )
             .into());
         }
+        // The map shows the last scan: a folder deleted since is still drawn,
+        // but Finder can't reveal it. Say so instead of "open -R exited 1".
+        contract::check_on_disk(&path)?;
         let status = std::process::Command::new("open")
             .arg("-R")
             .arg(&path)
             .status()?;
-        anyhow::ensure!(status.success(), "open -R exited with {status}");
+        anyhow::ensure!(status.success(), "Finder could not reveal {path}");
         Ok(())
     })
     .await

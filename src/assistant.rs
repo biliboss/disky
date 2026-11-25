@@ -463,7 +463,7 @@ pub fn latest_scan_secs() -> Option<i64> {
     {
         return Some(t.timestamp());
     }
-    let conn = crate::db::open(&path).ok()?;
+    let conn = crate::db::open_read(&path).ok()?;
     crate::db::read_scan_meta(&conn).map(|m| m.started_at)
 }
 

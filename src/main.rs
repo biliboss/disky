@@ -67,7 +67,7 @@ fn emit_error(err: &DiskyError, format: Format) {
 
 fn open_snapshot(spec: &str) -> anyhow::Result<duckdb::Connection> {
     let path = snapshots::resolve(spec)?;
-    db::open(&path)
+    db::open_read(&path)
 }
 
 fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {

@@ -519,6 +519,7 @@ verifies:
 ## Proactive checks and scheduled scans MUST run only while the app runs and MUST never clean
 
 implementations:
+  - src/db.rs:open_read
   - gui/src-tauri/src/scheduler.rs:Scheduler
   - gui/src-tauri/src/scheduler.rs:Action
   - gui/src-tauri/src/scheduler.rs:Clock
@@ -539,6 +540,7 @@ implementations:
   - gui/src/lib/engine.ts:onFocusHome
 
 verifies:
+  - tests/agentic.rs:snapshot_stays_readable_while_another_reader_holds_it
   - gui/src-tauri/src/scheduler.rs:checks_reload_once_per_period_and_not_when_paused
   - gui/src-tauri/src/scheduler.rs:scheduled_scan_starts_at_launch_and_at_checks_when_the_snapshot_is_old
   - gui/src-tauri/src/scheduler.rs:no_background_scan_while_smart_clean_scans_or_cleans
@@ -557,11 +559,14 @@ verifies:
 - With warn-below-goal on and free space below the goal, a macOS notification is posted once per below-goal episode while the app runs. Clicking it brings the window forward on Smart Clean.
 <!-- id: REQ-DSCR-011.A4 -->
 - No check, scan or notification ever cleans, trashes or deletes anything.
+<!-- id: REQ-DSCR-011.A5 -->
+- Reading a snapshot never locks anyone else out. Background checks, the screens and the CLI read a snapshot read-only, so all of them can read it at the same time. None of them fails with `lock-held` because another one is reading. Only a scan, while it writes a snapshot, holds it exclusively.
 
 <!-- id: REQ-DSCR-012 -->
 ## The Space map screen MUST show a treemap of the selected folder and let the user drill in
 
 implementations:
+  - src/contract.rs:check_on_disk
   - gui/src/screens/SpaceMap.tsx:SpaceMap
   - gui/src/screens/spaceMap/treemap.ts:layout
   - gui/src/screens/spaceMap/treemap.ts:tileColor
@@ -575,6 +580,8 @@ implementations:
   - gui/src/App.tsx:ROUTES
 
 verifies:
+  - src/contract.rs:a_path_gone_since_the_scan_is_explained
+  - gui/tests/visual/spaceMap.spec.ts:sliverBlockStaysInsideItsSlot
   - gui/src/screens/__tests__/treemap.test.ts:matchesTheSnapshotSplitExactly
   - gui/src/screens/__tests__/treemap.test.ts:areaIsProportionalToWeight
   - gui/src/screens/__tests__/treemap.test.ts:tilesCycleTheSnapshotsSevenTokens
@@ -617,7 +624,7 @@ verifies:
 <!-- id: REQ-DSCR-012.A4 -->
 - **Selected card:** shows the name, full path, size and share of disk (one decimal).
   - "Open folder" appears only when the selection has children.
-  - "Reveal in Finder" reveals the path in Finder via the backend.
+  - "Reveal in Finder" reveals the path in Finder via the backend. A path removed since the scan is not revealed: the screen says "<name> was removed after the last scan. Scan again to refresh the map." It never shows a raw `open` exit status.
 <!-- id: REQ-DSCR-012.A5 -->
 - **Keyboard:** tiles are buttons with an accessible name of "<name>, <size>". Enter or Space selects, and Enter on the selected tile opens it.
 - **No snapshot:** shows "No scans yet" with a "Start scan" action that goes to Smart Clean.

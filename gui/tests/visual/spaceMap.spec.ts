@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { MASK_COLOR, baselinePath, offset, openSnapshot } from "./snapshot";
-import { WINDOW, crowdedMapFolder, openApp, stubMap } from "./engineStub";
+import { WINDOW, crowdedMapFolder, openApp, sliverMapFolder, stubMap } from "./engineStub";
 
 /**
  * REQ-DSCR-012 in a real browser: the Space map against the snapshot
@@ -62,9 +62,14 @@ async function crowdedFolderStaysInsideTheTreemap({ page }: { page: Page }) {
         return r.left < box.left - 0.5 || r.top < box.top - 0.5 || r.right > box.right + 0.5 || r.bottom > box.bottom + 0.5;
       })
       .map((t) => t.getAttribute("aria-label"));
+    // A shown label must fit the text area: the body's width minus its padding.
+    const room = (el: HTMLElement) => {
+      const cs = getComputedStyle(el);
+      return el.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    };
     const overflowing = tiles
-      .flatMap((t) => [...t.querySelectorAll<HTMLElement>("span")])
-      .filter((s) => s.offsetParent !== null && s.getBoundingClientRect().width > s.parentElement!.clientWidth + 0.5)
+      .flatMap((t) => [...t.querySelectorAll<HTMLElement>(".map-tile-name, .map-tile-size")])
+      .filter((s) => s.offsetParent !== null && s.getBoundingClientRect().width > room(s.parentElement!) + 0.5)
       .map((s) => s.textContent);
     return { count: tiles.length, last: tiles.at(-1)?.getAttribute("aria-label"), outside, overflowing };
   });
@@ -73,6 +78,40 @@ async function crowdedFolderStaysInsideTheTreemap({ page }: { page: Page }) {
   expect(report.outside).toEqual([]);
   expect(report.overflowing).toEqual([]);
   await page.screenshot({ path: test.info().outputPath("crowded-map.png"), clip: WINDOW });
+}
+
+/** Every `.map-tile` lies inside `.map-tiles` (half-pixel tolerance). */
+async function tilesOutsideTheTreemap(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const box = document.querySelector(".map-tiles")!.getBoundingClientRect();
+    return [...document.querySelectorAll<HTMLElement>(".map-tile")]
+      .filter((t) => {
+        const r = t.getBoundingClientRect();
+        return r.left < box.left - 0.5 || r.top < box.top - 0.5 || r.right > box.right + 0.5 || r.bottom > box.bottom + 0.5;
+      })
+      .map((t) => t.getAttribute("aria-label") ?? "");
+  });
+}
+
+/**
+ * A sliver block (bug: a 1 MB child next to 24.7 GB kept its 14 px padding,
+ * grew wider than its slot and slid under the Selected card) stays inside
+ * the treemap, and its block is no wider than its share.
+ */
+async function sliverBlockStaysInsideItsSlot({ page }: { page: Page }) {
+  await stubMap(page, false, sliverMapFolder());
+  await page.setViewportSize(WINDOW);
+  await openApp(page, "#/space-map");
+  // At 0.004% of the folder the gutter eats the whole slot: the block has no
+  // width (so Playwright calls it hidden), yet it stays in the accessibility
+  // tree and the tab order.
+  const sliver = page.getByRole("button", { name: "manifests, 1 MB" });
+  await sliver.waitFor({ state: "attached" });
+  expect(await tilesOutsideTheTreemap(page)).toEqual([]);
+  const tiles = await page.locator(".map-tiles").boundingBox();
+  const box = await sliver.boundingBox();
+  // 1 MB of 24.7 GB: a hairline, never the padding's 28 px.
+  expect(box!.width).toBeLessThan(tiles!.width * 0.01 + 1);
 }
 
 async function spaceMapPassesAxe({ page }: { page: Page }) {
@@ -122,3 +161,4 @@ test("Space map has zero serious or critical axe violations (REQ-DSCR-017.A2)", 
 test("the keyboard selects and drills into a folder (REQ-DSCR-012.A5, REQ-DSCR-017.A2)", keyboardDrillsIntoAFolder);
 test("no snapshot shows No scans yet with Start scan (REQ-DSCR-012.A5)", noSnapshotOffersStartScan);
 test("a crowded folder stays inside the treemap with an Other block (REQ-DSCR-012.A2)", crowdedFolderStaysInsideTheTreemap);
+test("a sliver block stays inside its slot (REQ-DSCR-012.A2)", sliverBlockStaysInsideItsSlot);

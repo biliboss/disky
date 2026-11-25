@@ -1028,7 +1028,8 @@ pub fn scan_with(
          );",
     )?;
     {
-        let mut app = conn.appender("_cleanup_targets")?;
+        // The temp catalog, not the snapshot: queries open it read-only.
+        let mut app = conn.appender_to_catalog_and_db("_cleanup_targets", "temp", "main")?;
         for (i, r) in roots.iter().enumerate() {
             let (lo, hi) = if r.is_dir {
                 (format!("{}/", r.path), format!("{}0", r.path))

@@ -1311,3 +1311,34 @@ fn schema_lists_the_agents_and_suggest_commands() {
     assert!(v["records"]["Suggestion"].is_object());
     assert!(v["records"]["Agent"].is_object());
 }
+
+/// A snapshot another process is reading stays readable (bug: every query
+/// opened the snapshot read-write, so DuckDB's exclusive lock made the CLI,
+/// and the GUI's own screens, fail with `lock-held` while the GUI's
+/// background checks read it). Here a read-only connection stays open while
+/// the CLI maps and cleans the same file.
+#[test]
+fn snapshot_stays_readable_while_another_reader_holds_it() {
+    let home = temp_dir();
+    let root = home.join("tree");
+    fs::create_dir_all(root.join("app/node_modules/x")).unwrap();
+    fs::write(root.join("app/node_modules/x/i.js"), vec![1u8; 4096]).unwrap();
+    let db = home.join("snap.db");
+    let out = run_in_home(
+        &home,
+        &["scan", root.to_str().unwrap(), "--db", db.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "scan: {:?}", out);
+
+    let held = disky::db::open_read(db.to_str().unwrap()).unwrap();
+    let n: i64 = held
+        .query_row("SELECT count(*) FROM files", [], |r| r.get(0))
+        .unwrap();
+    assert!(n > 0);
+    let snap = db.to_str().unwrap();
+    let m = json_in_home(&home, &["map", "--snapshot", snap, "--format", "json"]);
+    assert_eq!(m["kind"], "map");
+    let c = json_in_home(&home, &["cleanup", "--snapshot", snap, "--format", "json"]);
+    assert_eq!(c["kind"], "cleanup");
+    drop(held);
+}

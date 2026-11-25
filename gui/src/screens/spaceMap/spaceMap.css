@@ -56,8 +56,8 @@
    is one of the seven tile tokens, set per tile. */
 .map-tile {
   position: absolute;
-  /* Padding sits inside the slot: a block never outgrows its rectangle, so
-     small blocks stay rectangles and never spill past the treemap. */
+  /* No padding here (see .map-tile-body): the block is exactly its slot,
+     however thin, and never spills past the treemap or under the side card. */
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
@@ -65,12 +65,7 @@
   container-type: size;
   border-radius: var(--radius-md);
   border: none;
-  padding: var(--map-tile-pad);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: var(--map-tile-gap);
+  padding: 0;
   overflow: hidden;
   text-align: left;
   font: inherit;
@@ -97,6 +92,19 @@
   outline-offset: var(--focus-ring-inset-offset);
 }
 
+.map-tile-body {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: var(--map-tile-pad);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: var(--map-tile-gap);
+  overflow: hidden;
+}
+
 .map-tile-name,
 .map-tile-size {
   max-width: 100%;
@@ -116,16 +124,17 @@
 
 /* A block too small to read keeps its colour and accessible name but shows
    no text: the side card names it once selected. The query measures the
-   block's content box (inside its padding). Container query sizes cannot
-   read custom properties, so the thresholds are plain rem: one line of
-   text needs ~1.25rem, both lines ~2.4rem, a readable word ~2.5rem. */
-@container (max-width: 2.5rem) or (max-height: 2.4rem) {
+   whole block; its text sits inside 0.875rem of padding on each side.
+   Container query sizes cannot read custom properties, so the thresholds
+   are plain rem: padding (1.75rem) plus one line of text (~1.25rem), both
+   lines (~2.4rem), a readable word (~2.5rem). */
+@container (max-width: 4.25rem) or (max-height: 4.15rem) {
   .map-tile-size {
     display: none;
   }
 }
 
-@container (max-width: 2.5rem) or (max-height: 1.25rem) {
+@container (max-width: 4.25rem) or (max-height: 3rem) {
   .map-tile-name {
     display: none;
   }

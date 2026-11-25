@@ -1,8 +1,22 @@
 use anyhow::Result;
 use duckdb::Connection;
 
+/// Open a snapshot for writing (scans). DuckDB takes an exclusive lock:
+/// nothing else, in any process, can open the file until this closes.
 pub fn open(path: &str) -> Result<Connection> {
     let conn = Connection::open(path)?;
+    let cpus = num_cpus::get();
+    conn.execute_batch(&format!("PRAGMA threads={cpus};"))?;
+    Ok(conn)
+}
+
+/// Open a finished snapshot for queries. Read-only opens share the file
+/// lock, so the GUI's background checks, its screens and the CLI can all
+/// read the same snapshot at once instead of failing with `lock-held`.
+/// Temporary tables still work (they live outside the file).
+pub fn open_read(path: &str) -> Result<Connection> {
+    let config = duckdb::Config::default().access_mode(duckdb::AccessMode::ReadOnly)?;
+    let conn = Connection::open_with_flags(path, config)?;
     let cpus = num_cpus::get();
     conn.execute_batch(&format!("PRAGMA threads={cpus};"))?;
     Ok(conn)

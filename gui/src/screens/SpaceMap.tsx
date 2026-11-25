@@ -165,8 +165,10 @@ export function SpaceMap() {
                 classList={{ "map-tile-other": t.other != null, "map-tile-thin": Math.min(t.w, t.h) < THIN_PERCENT }}
                 aria-pressed={i() === pick() ? "true" : "false"}
                 style={{
-                  left: `calc(${t.x}% + var(--map-tile-inset))`,
-                  top: `calc(${t.y}% + var(--map-tile-inset))`,
+                  // Clamped to the slot's far edge: a slot thinner than the gutter
+                  // collapses to nothing inside itself, never past the treemap.
+                  left: `min(calc(${t.x}% + var(--map-tile-inset)), ${t.x + t.w}%)`,
+                  top: `min(calc(${t.y}% + var(--map-tile-inset)), ${t.y + t.h}%)`,
                   width: `calc(${t.w}% - var(--map-tile-gutter))`,
                   height: `calc(${t.h}% - var(--map-tile-gutter))`,
                   "background-color": tileColor(i()),
@@ -175,11 +177,16 @@ export function SpaceMap() {
                 onDblClick={() => open(t)}
                 onKeyDown={(e) => onTileKey(e, i(), t)}
               >
-                <span class="map-tile-name">{t.name}</span>
-                {/* A space between the spans so the visible text ("Users 212 GB") sits
-                    inside the accessible name; flex layout never renders it. */}
-                {" "}
-                <span class={`map-tile-size ${NUMERIC_CLASS}`}>{formatBytes(t.bytes)}</span>
+                {/* The padding lives on this inner box, never on the button: a
+                    padded button can't shrink below its padding, so a thin block
+                    would outgrow its slot. The button is exactly its slot. */}
+                <span class="map-tile-body">
+                  <span class="map-tile-name">{t.name}</span>
+                  {/* A space between the spans so the visible text ("Users 212 GB")
+                      sits inside the accessible name; flex layout never renders it. */}
+                  {" "}
+                  <span class={`map-tile-size ${NUMERIC_CLASS}`}>{formatBytes(t.bytes)}</span>
+                </span>
               </button>
             )}
           </For>

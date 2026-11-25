@@ -369,7 +369,7 @@ pub fn empty_view(prefs: &Preferences) -> Result<CleanupView> {
 /// the hits behind the view too: they are what the user reviews, and the
 /// only paths [`clean`] will act on.
 pub fn load(snapshot_path: &str, prefs: &Preferences) -> Result<(CleanupView, Vec<CleanupHit>)> {
-    let conn = crate::db::open(snapshot_path)?;
+    let conn = crate::db::open_read(snapshot_path)?;
     let meta = crate::db::read_scan_meta(&conn);
     let root = meta.as_ref().map_or("/", |m| m.root.as_str());
     let disk = disk_near(Path::new(root))?;
@@ -389,11 +389,27 @@ pub use crate::map::{MapChild, MapView};
 /// excluded folders left out (REQ-DSCR-002.A1), and the capacity of the
 /// scan root's volume for share of disk. CLI: `disky map [<path>]`.
 pub fn map_view(snapshot_path: &str, path: Option<&str>, prefs: &Preferences) -> Result<MapView> {
-    let conn = crate::db::open(snapshot_path)?;
+    let conn = crate::db::open_read(snapshot_path)?;
     let ctx = cleanup::ScanContext::from_snapshot(&conn).with_prefs(prefs);
     let root = ctx.scan_root.clone().unwrap_or_else(|| "/".to_string());
     let capacity = disk_near(Path::new(&root))?.capacity_bytes;
     crate::map::map(&conn, path, &ctx.excluded, capacity)
+}
+
+/// A path the last scan listed must still be on disk before Finder is asked
+/// to reveal it (REQ-DSCR-012.A4). A path removed since the scan is
+/// not-found, worded for the screen.
+pub fn check_on_disk(path: &str) -> Result<()> {
+    if std::fs::symlink_metadata(path).is_ok() {
+        return Ok(());
+    }
+    let name = path.rsplit('/').find(|p| !p.is_empty()).unwrap_or(path);
+    Err(crate::exit::DiskyError::new(
+        crate::exit::ExitCode::NotFound,
+        "no longer on disk",
+        format!("{name} was removed after the last scan. Scan again to refresh the map."),
+    )
+    .into())
 }
 
 pub use crate::large::{LargeFile, LargeFilter, LargeView};
@@ -409,7 +425,7 @@ pub fn large_view(
     filter: LargeFilter,
     prefs: &Preferences,
 ) -> Result<LargeView> {
-    let conn = crate::db::open(snapshot_path)?;
+    let conn = crate::db::open_read(snapshot_path)?;
     let ctx = cleanup::ScanContext::from_snapshot(&conn).with_prefs(prefs);
     crate::large::large(&conn, filter, &ctx, ctx.now_secs)
 }
@@ -422,7 +438,7 @@ pub use crate::dupes::{DupeCopy, DupeGroup, DupesView};
 /// and, with skip-recently-used on, so are files modified in the last 30
 /// days (REQ-DSCR-002.A1, A2). CLI: `disky dupes [--min-size …]`.
 pub fn dupes_view(snapshot_path: &str, min_size: u64, prefs: &Preferences) -> Result<DupesView> {
-    let conn = crate::db::open(snapshot_path)?;
+    let conn = crate::db::open_read(snapshot_path)?;
     let ctx = cleanup::ScanContext::from_snapshot(&conn).with_prefs(prefs);
     crate::dupes::dupes(&conn, min_size, &ctx)
 }
@@ -2052,5 +2068,21 @@ mod assistant_tests {
         let s = suggestions_for(&v, &hits, None, 0);
         let dev = s.iter().find(|s| s.key == SuggestionKey::Dev).unwrap();
         assert_eq!(dev.bytes, Some(2_000_000_000));
+    }
+
+    #[test]
+    fn a_path_gone_since_the_scan_is_explained() {
+        let dir = std::env::temp_dir().join(format!("disky-ondisk-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(check_on_disk(dir.to_str().unwrap()).is_ok());
+        let gone = dir.join("blobs");
+        let err = check_on_disk(gone.to_str().unwrap()).unwrap_err();
+        let e = err.downcast_ref::<crate::exit::DiskyError>().unwrap();
+        assert_eq!(e.code, crate::exit::ExitCode::NotFound);
+        assert_eq!(
+            e.detail,
+            "blobs was removed after the last scan. Scan again to refresh the map."
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

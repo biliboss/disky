@@ -50,7 +50,7 @@ pub fn predict(physical: bool, free_bytes_now: Option<u64>) -> Result<PredictRec
             Some(d) => d,
             None => continue,
         };
-        let conn = match db::open(path) {
+        let conn = match db::open_read(path) {
             Ok(c) => c,
             Err(_) => continue,
         };

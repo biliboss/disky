@@ -278,6 +278,27 @@ export function snapshotMapFolders() {
 }
 
 /**
+ * A folder with one big child and one 1 MB sliver (the bug report's
+ * ~/.ollama/models): the sliver is kept as itself (REQ-DSCR-003.A5), so its
+ * block is only a few pixels wide.
+ */
+export function sliverMapFolder() {
+  const records = [
+    { name: "blobs", path: "/Users/me/.ollama/models/blobs", bytes: 24_700_000_000, has_children: true },
+    { name: "manifests", path: "/Users/me/.ollama/models/manifests", bytes: 1_000_000, has_children: true },
+  ];
+  return {
+    path: "/Users/me/.ollama/models",
+    name: "models",
+    root: "/Users/me/.ollama/models",
+    total_bytes: records.reduce((a, r) => a + r.bytes, 0),
+    capacity_bytes: 994 * GB,
+    records,
+    other: null,
+  };
+}
+
+/**
  * A crowded home folder (the bug report's shape): 19 children the engine
  * kept, largest first, and the 200+ it folded into `other`, as
  * `MapView.fold(MAX_TILES, MIN_TILE_SHARE)` returns it.
