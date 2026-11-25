@@ -1,0 +1,16 @@
+import type { SidebarProps } from "./Sidebar";
+
+/**
+ * Shell fixture data, equal to the snapshot's prototype state (used 438 of
+ * 512 GB, goal 80 GB, 4 pending Assistant suggestions). Replaced by live
+ * engine data when REQ-DCLEAN-002 (meter) and the Assistant spec land.
+ */
+export const SHELL_FIXTURE: SidebarProps = {
+  meter: {
+    volume: "Macintosh HD",
+    capacityBytes: 512e9,
+    freeBytes: 74e9,
+    goalBytes: 80e9,
+  },
+  assistantPending: 4,
+};

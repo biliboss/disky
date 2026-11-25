@@ -487,6 +487,38 @@ Clean result: `mode` (`trash` or `delete`), `freed_bytes`, `succeeded[]` paths, 
 
 The shell is the frame around every screen: a title bar of `--layout-titlebar-h`, a sidebar of `--layout-sidebar-w` with the brand, seven navigation entries (Smart Clean, Assistant, Space Map, Large files, Duplicates, History, Settings), the assistant badge, and the disk-usage meter (REQ-DCLEAN-002).
 
+implementations:
+  - gui/src/shell/AppShell.tsx:AppShell
+  - gui/src/shell/TitleBar.tsx:TitleBar
+  - gui/src/shell/Sidebar.tsx:Sidebar
+  - gui/src/shell/Brand.tsx:Brand
+  - gui/src/shell/nav.ts:NAV_ITEMS
+  - gui/src/shell/NavItem.tsx:NavItem
+  - gui/src/shell/DiskMeter.tsx:DiskMeter
+  - gui/src/lib/meter.ts:goalPos
+  - gui/src/screens/Placeholder.tsx:Placeholder
+  - gui/src/App.tsx:ROUTES
+  - gui/src-tauri/src/main.rs:main
+
+verifies:
+  - gui/src/shell/__tests__/nav.test.ts:navHasSevenEntriesInSnapshotOrder
+  - gui/src/shell/__tests__/nav.test.ts:onlyAssistantCarriesBadge
+  - gui/src/shell/__tests__/nav.test.ts:navRoutesAreUniqueAndSmartCleanIsHome
+  - gui/src/shell/__tests__/Shell.test.tsx:brandAndTitleBarReadDisky
+  - gui/src/shell/__tests__/Shell.test.tsx:windowTitleIsDisky
+  - gui/src/shell/__tests__/Shell.test.tsx:secondaryEntriesOpenComingSoonPlaceholders
+  - gui/src/shell/__tests__/Shell.test.tsx:sidebarShowsSevenEntriesAndAssistantBadge
+  - gui/src/shell/__tests__/Shell.test.tsx:meterShowsFixtureFreeSpaceAndGoal
+  - gui/src/shell/__tests__/meter.test.ts:goalPosMatchesSnapshotFixture
+  - gui/src/shell/__tests__/meter.test.ts:goalPosClampsToTheBar
+  - gui/src/shell/__tests__/meter.test.ts:goalPosIsZeroWithoutCapacity
+  - gui/tests/visual/shell.spec.ts:snapshotBaselineRenders
+  - gui/tests/visual/shell.spec.ts:titleBarMatchesSnapshot
+  - gui/tests/visual/shell.spec.ts:sidebarMatchesSnapshot
+  - gui/tests/visual/shell.spec.ts:trafficLightSlotSitsWhereSnapshotDrawsDots
+  - gui/tests/visual/shell.spec.ts:placeholderScreensKeepTheShell
+  - gui/tests/visual/shell.spec.ts:rendersOfflineWithBundledFontsAndIcons
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-032.A1 -->
 - At 1200 × 780, a screenshot of each Smart Clean phase matches the corresponding `snapshot.html` screen. The only allowed differences are the brand text, live data in place of fixture data, and font antialiasing. The comparison threshold is 1% of differing pixels.

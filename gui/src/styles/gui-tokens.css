@@ -1,0 +1,57 @@
+/* GUI token sheet — named tokens for values the snapshot writes inline that
+ * tokens.css does not carry (REQ-DCLEAN-031: component code holds no literals).
+ * tokens.css stays a verbatim copy of specs/disk-cleanup/tokens.css; additions
+ * live here and alias an existing token wherever the value already exists.
+ * Source for every value: specs/disk-cleanup/snapshot.html (app shell). */
+:root {
+  /* ── Type ───────────────────────────────────────────────────── */
+  --fs-titlebar: var(--fs-xs);        /* title bar "disky" — 12px */
+  --fs-brand: 22px;                   /* sidebar brand word */
+  --tracking-brand: -0.01em;
+  --fs-nav: 14px;                     /* navigation entries */
+  --fs-badge: var(--fs-xs);           /* nav badge — 12px */
+  --fw-badge: 600;
+  --fw-nav-active: 600;
+  --fs-meter: var(--fs-small);        /* meter volume / free row — 13px */
+  --fs-meter-goal: var(--fs-xs);      /* "Goal: keep … free" — 12px */
+  --fw-meter-volume: 600;
+
+  /* ── Title bar ──────────────────────────────────────────────── */
+  --titlebar-px: 16px;
+  --titlebar-gap: 12px;
+  --titlebar-light: 12px;             /* native traffic-light diameter */
+  --titlebar-lights-w: 52px;          /* 3 × 12px lights + 2 × 8px gaps */
+  --titlebar-title-pr: 52px;          /* balances the lights so the title centres */
+
+  /* ── Sidebar ────────────────────────────────────────────────── */
+  --sidebar-pt: 12px;
+  --sidebar-px: 14px;
+  --sidebar-pb: 16px;
+  --sidebar-gap: 4px;
+
+  --brand-gap: 10px;
+  --brand-pt: 6px;
+  --brand-px: 8px;
+  --brand-pb: 18px;
+  --brand-logo: 34px;
+
+  --nav-gap: 12px;
+  --nav-py: 10px;
+  --nav-px: 12px;
+  --nav-icon: 18px;
+  --icon-stroke: 2.75;                /* Lucide stroke width, every icon */
+
+  --badge-size: 20px;
+  --badge-px: 6px;
+
+  /* ── Disk meter ─────────────────────────────────────────────── */
+  --meter-pad: 14px;
+  --meter-gap: 8px;
+  --meter-marker-w: 3px;
+  --meter-marker-overhang: 3px;       /* marker extends above/below the bar */
+  --meter-marker-nudge: 1px;          /* snapshot: left = calc(pos − 1px) */
+
+  /* ── Screens ────────────────────────────────────────────────── */
+  --screen-py: 36px;                  /* secondary-screen top/bottom padding */
+  --screen-gap: 6px;                  /* kicker ↔ title stack */
+}

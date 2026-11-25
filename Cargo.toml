@@ -10,6 +10,8 @@ documentation = "https://docs.rs/disky"
 keywords = ["disk-usage", "disk-analyzer", "ncdu", "macos", "cli"]
 categories = ["command-line-utilities", "filesystem"]
 readme = "README.md"
+# The desktop GUI is a separate Tauri build with its own workspace.
+exclude = ["gui"]
 rust-version = "1.75"
 
 [lib]

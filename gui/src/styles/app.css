@@ -1,0 +1,29 @@
+/* Global base for the GUI window — mirrors the snapshot's <helmet> rules. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  font-family: var(--font-body);
+  color: var(--color-text);
+}
+
+a {
+  color: var(--color-accent-700);
+}
+
+a:hover {
+  color: var(--color-accent-800);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+  }
+}

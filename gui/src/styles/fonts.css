@@ -1,0 +1,7 @@
+/* Fonts are bundled from @fontsource so the app renders identically offline.
+ * No Google Fonts link anywhere (REQ-DCLEAN-032.A4).
+ * Weights match the Organic system: Caprasimo 400, Figtree 400/600/700. */
+@import "@fontsource/caprasimo/400.css";
+@import "@fontsource/figtree/400.css";
+@import "@fontsource/figtree/600.css";
+@import "@fontsource/figtree/700.css";

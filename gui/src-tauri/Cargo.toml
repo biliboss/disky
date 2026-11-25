@@ -1,0 +1,22 @@
+[package]
+name = "disky-gui"
+version = "0.1.0"
+edition = "2021"
+description = "disky desktop GUI — Tauri backend over the disky engine"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Standalone workspace: keeps the GUI out of the CLI's build, CI and
+# `cargo publish` (the root package also excludes `gui/`).
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "=2.7.6", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.7", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The engine. Scan / query / cleanup / history come from here and are never
+# reimplemented in the GUI (REQ-DCLEAN-001).
+disky = { path = "../.." }
