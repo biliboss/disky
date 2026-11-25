@@ -268,7 +268,7 @@
   color: var(--color-neutral-700);
 }
 
-/* ── Placeholder screens ──────────────────────────────────────── */
+/* ── Plain screens (No scans yet / empty states) ────────────────── */
 .screen {
   flex: 1;
   min-height: 0;
