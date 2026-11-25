@@ -179,6 +179,39 @@ verifies:
 <!-- id: REQ-DSCR-004 -->
 ## The engine MUST list large files with their last-opened time
 
+implementations:
+  - src/db.rs:FileRecord
+  - src/db.rs:create_schema
+  - src/db.rs:append_batch
+  - src/scan.rs:run_observed
+  - src/large.rs:LargeFilter
+  - src/large.rs:LargeFile
+  - src/large.rs:LargeView
+  - src/large.rs:has_atime
+  - src/large.rs:is_unused
+  - src/large.rs:large
+  - src/contract.rs:large_view
+  - src/render.rs:large
+  - src/cli.rs:Command
+  - src/schema.rs:commands
+  - gui/src-tauri/src/main.rs:load_large
+  - gui/src/lib/contract.ts:parseLargeView
+  - gui/src/lib/engine.ts:loadLarge
+
+verifies:
+  - src/large.rs:large_lists_files_of_2gb_and_up_largest_first
+  - src/large.rs:large_filters_over_10gb_and_unused_1y
+  - src/large.rs:unused_1y_is_strictly_more_than_365_days
+  - src/large.rs:large_honours_exclusions_and_skip_recently_used
+  - src/large.rs:snapshot_without_atime_lists_null_last_opened
+  - src/large.rs:filter_parses_and_serialises_kebab_case
+  - src/contract.rs:large_view_reads_the_snapshot_with_prefs
+  - tests/lib_integration.rs:scan_records_each_files_access_time
+  - tests/agentic.rs:large_lists_files_over_2gb_with_filters_and_counts
+  - tests/agentic.rs:large_bad_filter_exits_usage_and_unknown_snapshot_exits_not_found
+  - tests/agentic.rs:schema_lists_the_large_and_trash_commands
+  - gui/src/lib/contract.test.ts:parsesALargeViewAndRejectsBadFields
+
 **Acceptance**
 <!-- id: REQ-DSCR-004.A1 -->
 - Scans record each file's last access time.
@@ -212,6 +245,27 @@ verifies:
 
 <!-- id: REQ-DSCR-006 -->
 ## The engine MUST move reviewed files to the Trash and record a titled history entry
+
+implementations:
+  - src/contract.rs:TrashResult
+  - src/contract.rs:trash_reviewed
+  - src/contract.rs:user_trash_root
+  - src/contract.rs:physical_bytes_on_disk
+  - src/cleanup.rs:apply_observed
+  - src/render.rs:trash
+  - src/cli.rs:Command
+  - src/schema.rs:commands
+  - gui/src-tauri/src/main.rs:trash_large
+  - gui/src/lib/contract.ts:parseTrashResult
+  - gui/src/lib/engine.ts:trashLarge
+
+verifies:
+  - src/contract.rs:trash_reviewed_moves_listed_files_and_writes_one_titled_entry
+  - src/contract.rs:trash_reviewed_refuses_a_path_not_listed
+  - src/contract.rs:trash_reviewed_refuses_every_copy_of_a_group
+  - tests/agentic.rs:trash_moves_named_paths_and_records_one_titled_entry
+  - tests/agentic.rs:schema_lists_the_large_and_trash_commands
+  - gui/src/lib/contract.test.ts:parsesATrashResult
 
 **Acceptance**
 <!-- id: REQ-DSCR-006.A1 -->
@@ -371,6 +425,29 @@ verifies:
 
 <!-- id: REQ-DSCR-013 -->
 ## The Large files screen MUST list large files with filters and move the selected ones to the Trash
+
+implementations:
+  - gui/src/screens/LargeFiles.tsx:LargeFiles
+  - gui/src/screens/largeFiles/largeCopy.ts:kicker
+  - gui/src/screens/largeFiles/largeCopy.ts:rowsBytes
+  - gui/src/screens/largeFiles/largeCopy.ts:selectionNote
+  - gui/src/screens/largeFiles/largeCopy.ts:trashLabel
+  - gui/src/screens/largeFiles/largeCopy.ts:openedLabel
+  - gui/src/screens/largeFiles/largeCopy.ts:openedTagClass
+  - gui/src/screens/largeFiles/largeCopy.ts:failureMessage
+  - gui/src/App.tsx:SCREENS
+
+verifies:
+  - gui/src/screens/__tests__/LargeFiles.test.tsx:listsTheEnginesRowsWithHeaderAndColumns
+  - gui/src/screens/__tests__/LargeFiles.test.tsx:filtersReQueryTheEngine
+  - gui/src/screens/__tests__/LargeFiles.test.tsx:rowOrCheckTogglesSelectionAndFooter
+  - gui/src/screens/__tests__/LargeFiles.test.tsx:trashSendsExactlyTheSelectionAndRemovesHandledRows
+  - gui/src/screens/__tests__/LargeFiles.test.tsx:emptyListAndNoSnapshotStates
+  - gui/src/screens/__tests__/LargeFiles.test.tsx:copyIsWordedFromEngineFigures
+  - gui/tests/visual/largeFiles.spec.ts:largeFilesMatchesSnapshot
+  - gui/tests/visual/largeFiles.spec.ts:largeFilesPassesAxe
+  - gui/tests/visual/largeFiles.spec.ts:keyboardSelectsTwoRowsAndTrashesThem
+  - gui/tests/visual/largeFiles.spec.ts:noSnapshotOffersStartScan
 
 **Acceptance**
 <!-- id: REQ-DSCR-013.A1 -->

@@ -309,4 +309,15 @@
   --map-card-actions-mt: 8px;
   --fs-map-hint: var(--fs-xs);        /* 12px */
   --map-hint-px: 6px;
+
+  /* ── Large files (REQ-DSCR-013; snapshot Large files markup) ── */
+  --large-head-pb: 16px;              /* header padding: 36px 56px 16px */
+  --large-head-gap: 20px;
+  --large-body-pb: 16px;              /* table area padding: 0 56px 16px */
+  --large-check-col: 40px;            /* <th style="width:40px"> */
+  --color-table-head: var(--color-neutral-700); /* column headers: Organic's 60% ink is < 4.5:1 */
+  --large-check-raise: 2px;           /* baseline lift of the snapshot's inline check: 49.3 px rows */
+  --large-error-mb: 12px;             /* gap-fill: engine error above the table */
+  --fw-large-name: 600;
+  --fw-large-size: 600;
 }

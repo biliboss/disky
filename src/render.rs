@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::cleanup::CleanupHit;
-use crate::contract::{HistoryView, MapView};
+use crate::contract::{HistoryView, LargeView, MapView, TrashResult};
 use crate::history::RestoreReport;
 use crate::query::{DiffRow, DirRow, ExtRow, FileRow, Stats, SCHEMA_VERSION};
 
@@ -568,5 +568,73 @@ tr:hover{{background:#222}}h1{{color:#0ff}}</style></head>
     fs::write(&out, html)?;
     std::process::Command::new("open").arg(&out).spawn()?;
     eprintln!("Report: {}", out);
+    Ok(())
+}
+
+/// `disky large` (REQ-DSCR-004): one envelope `{kind:"large", filter, count,
+/// total_bytes, records:[LargeFile]}`, or a table with `*` marking files
+/// unused for over a year.
+pub fn large(view: &LargeView, format: Format) -> Result<()> {
+    match format {
+        Format::Json => {
+            let mut payload = serde_json::to_value(view)?;
+            payload["schema_version"] = json!(SCHEMA_VERSION);
+            payload["kind"] = json!("large");
+            println!("{}", serde_json::to_string(&payload)?);
+            return Ok(());
+        }
+        Format::Ndjson => return emit_records(&view.records, "large", format),
+        Format::Text => {}
+    }
+    if view.records.is_empty() {
+        println!("No files over 2 GB.");
+        return Ok(());
+    }
+    println!(
+        "{} files · {} (physical, filter {})",
+        view.count,
+        format_size(view.total_bytes, BINARY),
+        view.filter.as_str()
+    );
+    println!("{:>12}  {:<22} PATH", "SIZE", "LAST OPENED");
+    println!("{}", "-".repeat(100));
+    for f in &view.records {
+        let opened = f.last_opened.as_deref().unwrap_or("unknown");
+        let mark = if f.unused_1y { "*" } else { " " };
+        println!(
+            "{:>12}  {:<20}{mark}  {}",
+            format_size(f.bytes, BINARY),
+            opened,
+            truncate(&f.path, 64)
+        );
+    }
+    println!("* last opened more than a year ago");
+    Ok(())
+}
+
+/// `disky trash` (REQ-DSCR-006): one envelope `{kind:"trash", handled,
+/// failed, freed_physical_bytes, history_id, disk}`, or a summary.
+pub fn trash(r: &TrashResult, format: Format) -> Result<()> {
+    if format.is_machine() {
+        let mut payload = serde_json::to_value(r)?;
+        payload["schema_version"] = json!(SCHEMA_VERSION);
+        payload["kind"] = json!("trash");
+        println!("{}", serde_json::to_string(&payload)?);
+        return Ok(());
+    }
+    for p in &r.handled {
+        println!("trashed  {p}");
+    }
+    for f in &r.failed {
+        println!("failed   {} ({})", f.path, f.reason);
+    }
+    println!(
+        "{} freed{}",
+        format_size(r.freed_physical_bytes, BINARY),
+        r.history_id
+            .as_deref()
+            .map(|id| format!(" · undo with `disky restore {id}`"))
+            .unwrap_or_default()
+    );
     Ok(())
 }

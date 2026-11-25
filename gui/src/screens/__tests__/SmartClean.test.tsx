@@ -626,7 +626,9 @@ async function shortcutsOpenTheirScreens() {
   engine({ load_cleanup_view: () => engineView() });
   renderApp();
   fireEvent.click(within(await idle()).getByTestId("shortcut-large"));
-  expect(await within(screen.getByRole("main")).findByRole("heading", { level: 1, name: "Large files" })).toBeInTheDocument();
+  // The real Large files screen (REQ-DSCR-013).
+  expect(await within(screen.getByRole("main")).findByTestId("large-files")).toBeInTheDocument();
+  expect(within(screen.getByRole("main")).queryByText("Coming soon")).toBeNull();
 }
 
 async function cleanUpdatesRingTagAndSidebar() {

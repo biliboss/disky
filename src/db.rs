@@ -20,7 +20,8 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
             physical_size  BIGINT,
             mtime          BIGINT,
             is_dir         BOOLEAN NOT NULL DEFAULT false,
-            depth          INTEGER NOT NULL DEFAULT 0
+            depth          INTEGER NOT NULL DEFAULT 0,
+            atime          BIGINT
         );
         DROP TABLE IF EXISTS scan_meta;
         CREATE TABLE scan_meta (
@@ -141,6 +142,11 @@ pub struct FileRecord {
     pub mtime: Option<i64>,
     pub is_dir: bool,
     pub depth: i32,
+    /// Last access time (`st_atime`, unix seconds) — the Large files screen's
+    /// "last opened" (REQ-DSCR-004.A1). APFS updates it lazily, so it is
+    /// approximate. The last column, since [`append_batch`] appends by
+    /// position.
+    pub atime: Option<i64>,
 }
 
 pub fn append_batch(conn: &Connection, records: &[FileRecord]) -> Result<()> {
@@ -155,6 +161,7 @@ pub fn append_batch(conn: &Connection, records: &[FileRecord]) -> Result<()> {
             r.mtime,
             r.is_dir,
             r.depth,
+            r.atime,
         ])?;
     }
     app.flush()?;

@@ -48,7 +48,7 @@ pub struct Stats {
     pub scanned_at: Option<String>,
 }
 
-fn rfc3339(mtime: Option<i64>) -> Option<String> {
+pub(crate) fn rfc3339(mtime: Option<i64>) -> Option<String> {
     let secs = mtime?;
     let dt = DateTime::<Utc>::from_timestamp(secs, 0)?;
     Some(dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))

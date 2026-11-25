@@ -162,6 +162,40 @@ ported verbatim to `gui/src/screens/spaceMap/treemap.ts::layout`. A unit
 test checks it against the `layout()` in `snapshot.html`. `reveal_in_finder`
 runs `open -R` only for a path the last `load_map` listed.
 
+## Large files & trash (REQ-DSCR-004/006/013)
+
+```
+disky large [--filter all|over-10gb|unused-1y] --snapshot @latest --format json
+disky trash <path>... --title "Large files" --format json
+```
+
+`large` lists regular files of at least 2 GB physical (decimal, the Smart
+Clean shortcut's `LARGE_FILE_BYTES`), largest first. Envelope `{kind:"large",
+filter, count, total_bytes, records:[LargeFile {name, path, location, bytes,
+last_opened, unused_1y}]}`; `count`/`total_bytes` cover the filtered list.
+`last_opened` is the file's `atime` (RFC 3339), recorded by scans in the
+`files.atime` column (the **last** column — `append_batch` is positional).
+APFS updates atime lazily, so it is approximate. `unused_1y` is strictly
+more than 365 days before now. A snapshot without the column lists
+`last_opened: null`, `unused_1y: false`. Excluded folders and
+skip-recently-used (mtime within 30 days, or unknown) apply exactly as in
+`contract::large_files_count_in`, so the screen's All count equals the
+Smart Clean shortcut. `location` is the parent folder with home as `~`.
+
+`trash` moves paths to the Trash through `cleanup::apply_observed` and
+writes ONE history entry with `--title` (no categories). Envelope
+`{kind:"trash", handled, failed:[{path, reason}], freed_physical_bytes,
+history_id, disk}`. Library: `contract::trash_reviewed(listed, paths,
+groups, title, log, trash_root)` refuses the whole call (exit 1, titles
+`path not reviewed` / `every copy selected`) when a path is not in `listed`
+or when `paths` cover every copy of a duplicate group. The CLI passes its own
+arguments as `listed` (named = reviewed); the GUI's `trash_large` passes the
+paths its last `load_large` listed.
+
+The GUI's Large files screen re-queries `load_large` per filter, and always
+trashes (whatever `trash_by_default` says). Handled rows leave the list, the
+meter follows the result's `disk`, and failed paths stay with their reason.
+
 ## Preferences (REQ-DSCR-001/002)
 
 One store, `<data dir>/prefs.json` (next to the snapshots; the `.json`

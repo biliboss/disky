@@ -98,6 +98,17 @@ fn commands() -> Value {
             "output": "history envelope: {kind:'history', total_bytes:u64 (physical, freed over the whole log), records:[HistoryRow]} newest first. HistoryRow = HistoryEntry + {detail:string, state:restorable|restored|emptied|deleted}: the rows the desktop GUI's History screen shows. Log file: <data dir>/history.json"
         },
         {
+            "name": "large",
+            "args": { "filter": "all|over-10gb|unused-1y (default all)", "snapshot": "@latest|<id>|<path>" },
+            "output": "large envelope: {kind:'large', filter, count:u64, total_bytes:u64 (physical, over the filtered list), records:[LargeFile]} — regular files >= 2 GB physical (over-10gb: >= 10 GB; unused-1y: last opened > 365 days ago), largest first; excluded folders and skip_recently_used (prefs) apply",
+            "errors": "not-found (snapshot)"
+        },
+        {
+            "name": "trash",
+            "args": { "paths": "string[] (required; named paths count as reviewed)", "title": "string (history entry title, default 'Cleanup')" },
+            "output": "trash envelope: {kind:'trash', handled:[string], failed:[{path, reason}], freed_physical_bytes:u64, history_id:string?, disk:{volume, capacity_bytes, free_bytes}} — one history entry with the given title; restorable via `disky restore <id>`"
+        },
+        {
             "name": "map",
             "args": { "path": "string? (absolute folder; default the scan root)", "snapshot": "@latest|<id>|<path>" },
             "output": "map envelope: {kind:'map', path, name, root (scan root), total_bytes:u64 (physical), capacity_bytes:u64 (volume), records:[MapChild]} — immediate children, largest first; excluded folders (prefs) left out",
@@ -190,6 +201,7 @@ fn records() -> Value {
         "CategorySummary": { "category": "string", "safety": "safe|review (review if any hit is)", "paths": "u64", "bytes": "u64 (logical)", "physical_bytes": "u64 (on disk)", "files": "u64" },
         "HistoryEntry":    { "id": "string (YYYY-MM-DD_HH-MM-SS-xxxx)", "title": "Smart Clean|Assistant cleanup|Large files|Duplicates|Cleanup", "ts": "string (RFC3339 UTC)", "mode": "trash|delete", "categories": "string[]", "bytes": "u64", "items": "HistoryItem[]", "restored_at": "string? (RFC3339 UTC, set once every item is restored)" },
         "HistoryRow":      { "...": "every HistoryEntry field", "detail": "string (category names, or file names for 'Large files' / 'Duplicates'; '<n> files' past three)", "state": "restorable|restored|emptied|deleted (emptied: trash entry 30+ days old)" },
+        "LargeFile":       { "name": "string", "path": "string (absolute)", "location": "string (parent folder, home as ~)", "bytes": "u64 (physical)", "last_opened": "string? (RFC3339 UTC access time; null for snapshots taken before access times were recorded)", "unused_1y": "bool (last opened more than 365 days ago)" },
         "MapChild":        { "name": "string", "path": "string (absolute)", "bytes": "u64 (physical, recursive)", "has_children": "bool" },
         "HistoryItem":     { "original_path": "string", "trash_path": "string? (null in delete mode)", "bytes": "u64", "status": "in_trash|restored|conflict|missing|deleted" },
         "RestoreReport":   { "id": "string", "restored": "string[]", "conflicts": "string[]", "missing": "string[] (no longer in Trash)" },
@@ -292,6 +304,7 @@ mod tests {
             "HistoryItem",
             "HistoryRow",
             "MapChild",
+            "LargeFile",
             "RestoreReport",
             "Prefs",
         ] {

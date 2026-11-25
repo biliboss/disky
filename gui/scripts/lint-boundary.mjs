@@ -34,6 +34,8 @@ const COMMANDS = [
   "list_history",
   "load_map",
   "reveal_in_finder",
+  "load_large",
+  "trash_large",
 ];
 
 /** Category ids, read from the engine's single table. */

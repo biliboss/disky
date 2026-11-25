@@ -13,19 +13,24 @@ import {
   parseCleanupView,
   parseEngineError,
   parseHistoryView,
+  parseLargeView,
   parseMapView,
   parsePreferences,
   parseRestoreResult,
   parseScanProgress,
+  parseTrashResult,
   type CleanMode,
   type CleanProgress,
   type CleanResult,
   type CleanupView,
   type HistoryView,
+  type LargeFilter,
+  type LargeView,
   type MapView,
   type Preferences,
   type RestoreResult,
   type ScanProgress,
+  type TrashResult,
 } from "./contract";
 import { setDisk, setFromClean } from "./diskState";
 
@@ -159,4 +164,27 @@ export async function loadMap(path: string | null = null): Promise<MapView | nul
  */
 export async function revealInFinder(path: string): Promise<void> {
   await call("reveal_in_finder", { path });
+}
+
+/**
+ * Files of at least 2 GB for `filter`, largest first, with last-opened
+ * times (REQ-DSCR-004). The backend remembers the listed paths: they are
+ * the only ones `trashLarge` may move (REQ-DSCR-006.A2). Resolves null when
+ * there is no snapshot yet. CLI: `disky large --filter <f> --format json`.
+ */
+export async function loadLarge(filter: LargeFilter): Promise<LargeView | null> {
+  const raw = await call("load_large", { filter });
+  return raw === null ? null : parseLargeView(raw);
+}
+
+/**
+ * Move exactly `paths` (from the last `loadLarge`) to the Trash with one
+ * "Large files" history entry (REQ-DSCR-006, REQ-DSCR-013.A4). Always the
+ * Trash. The meter follows the post-move disk. CLI: `disky trash <path>...
+ * --title "Large files"`.
+ */
+export async function trashLarge(paths: string[]): Promise<TrashResult> {
+  const result = parseTrashResult(await call("trash_large", { paths }));
+  setDisk(result.disk);
+  return result;
 }

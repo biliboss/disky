@@ -18,6 +18,10 @@
 //!   the same rows.
 //! * [`MapView`] — a folder's immediate children for the Space map
 //!   (REQ-DSCR-003), the same as `disky map`.
+//! * [`LargeView`] — the Large files screen's rows (REQ-DSCR-004), the same
+//!   as `disky large`.
+//! * [`TrashResult`] — what moving reviewed files to the Trash did
+//!   (REQ-DSCR-006), the same as `disky trash`.
 //! * [`EngineError`] — a failed command, typed by disky's exit-code slug so
 //!   the GUI never matches on message text (REQ-DCLEAN-018).
 //!
@@ -37,6 +41,8 @@
 //! @implements REQ-DSCR-001
 //! @implements REQ-DSCR-002
 //! @implements REQ-DSCR-003
+//! @implements REQ-DSCR-004
+//! @implements REQ-DSCR-006
 //! @implements REQ-DSCR-015
 
 use anyhow::Result;
@@ -44,7 +50,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use duckdb::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::cleanup::{self, ApplyMode, ApplyOutcome, CleanupHit, Failure, Safety, CATEGORIES};
 use crate::history;
@@ -402,6 +408,164 @@ pub fn map_view(snapshot_path: &str, path: Option<&str>, prefs: &Preferences) ->
     let root = ctx.scan_root.clone().unwrap_or_else(|| "/".to_string());
     let capacity = disk_near(Path::new(&root))?.capacity_bytes;
     crate::map::map(&conn, path, &ctx.excluded, capacity)
+}
+
+pub use crate::large::{LargeFile, LargeFilter, LargeView};
+
+/// The Large files screen's list for `filter` in the snapshot at
+/// `snapshot_path` (REQ-DSCR-004): files of at least 2 GB physical, largest
+/// first. Excluded folders are left out and, with skip-recently-used on, so
+/// are files modified in the last 30 days (REQ-DSCR-002.A1, A2) — the same
+/// scope as the Smart Clean shortcut's [`large_files_count_in`], so the two
+/// counts agree. CLI: `disky large [--filter …]`.
+pub fn large_view(
+    snapshot_path: &str,
+    filter: LargeFilter,
+    prefs: &Preferences,
+) -> Result<LargeView> {
+    let conn = crate::db::open(snapshot_path)?;
+    let ctx = cleanup::ScanContext::from_snapshot(&conn).with_prefs(prefs);
+    crate::large::large(&conn, filter, &ctx, ctx.now_secs)
+}
+
+/// What moving reviewed files to the Trash did (REQ-DSCR-006.A1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrashResult {
+    /// Paths moved to the Trash.
+    pub handled: Vec<String>,
+    /// Paths left untouched, with the reason (missing, move failed, …).
+    pub failed: Vec<Failure>,
+    /// Physical bytes of the handled paths, measured just before the move.
+    pub freed_physical_bytes: u64,
+    /// The one history entry written; `None` when nothing was handled.
+    pub history_id: Option<String>,
+    /// The volume's usage read after the move.
+    pub disk: Disk,
+}
+
+/// Title of a refusal because a path was not in the reviewed list.
+pub const REFUSED_NOT_LISTED: &str = "path not reviewed";
+/// Title of a refusal because every copy of a duplicate group was selected.
+pub const REFUSED_EVERY_COPY: &str = "every copy selected";
+
+/// `~/.Trash`, the Trash root outside tests.
+pub fn user_trash_root() -> Result<PathBuf> {
+    cleanup::default_trash(ApplyMode::Trash)
+}
+
+/// Physical bytes (`st_blocks * 512`) of `path` and, for a folder,
+/// everything beneath it. Symlinks are not followed. Unreadable → 0.
+fn physical_bytes_on_disk(path: &Path) -> u64 {
+    let Ok(meta) = path.symlink_metadata() else {
+        return 0;
+    };
+    #[cfg(unix)]
+    let own = {
+        use std::os::unix::fs::MetadataExt;
+        meta.blocks() * 512
+    };
+    #[cfg(not(unix))]
+    let own = meta.len();
+    if !meta.is_dir() {
+        return own;
+    }
+    let children: u64 = std::fs::read_dir(path)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| physical_bytes_on_disk(&e.path()))
+                .sum()
+        })
+        .unwrap_or(0);
+    own + children
+}
+
+/// Move reviewed files to the Trash at `trash_root` and append ONE history
+/// entry titled `title` to `log` (REQ-DSCR-006.A1, REQ-DCLEAN-034), through
+/// the same machinery as a clean ([`cleanup::apply_observed`]).
+///
+/// * `listed` — the paths the engine listed in the view the user is looking
+///   at (the last large-files or duplicates result). A path in `paths` that
+///   is not in `listed` refuses the whole call, before anything moves
+///   (A2). `disky trash` passes its own arguments: paths named on the
+///   command line count as reviewed by the user.
+/// * `groups` — the duplicate groups the paths came from. Selecting every
+///   copy of a group refuses the whole call, so one copy always stays (A3).
+///
+/// A path that vanished or cannot be moved is reported in `failed`; the rest
+/// still go (REQ-DCLEAN-018.A3). Tests pass a temporary `trash_root` and
+/// `log` (A4).
+pub fn trash_reviewed(
+    listed: &[String],
+    paths: &[String],
+    groups: Option<&[Vec<String>]>,
+    title: &str,
+    log: &Path,
+    trash_root: &Path,
+) -> Result<TrashResult> {
+    use crate::exit::{DiskyError, ExitCode};
+    let mut selected: Vec<&String> = Vec::new();
+    for p in paths {
+        if !listed.contains(p) {
+            return Err(DiskyError::new(
+                ExitCode::Generic,
+                REFUSED_NOT_LISTED,
+                format!("{p} is not in the list you reviewed; nothing was moved"),
+            )
+            .into());
+        }
+        if !selected.contains(&p) {
+            selected.push(p);
+        }
+    }
+    for g in groups.unwrap_or_default() {
+        if !g.is_empty() && g.iter().all(|c| selected.contains(&c)) {
+            return Err(DiskyError::new(
+                ExitCode::Generic,
+                REFUSED_EVERY_COPY,
+                format!(
+                    "every copy of {} is selected; keep at least one. Nothing was moved",
+                    basename(&g[0])
+                ),
+            )
+            .into());
+        }
+    }
+    let hits: Vec<CleanupHit> = selected
+        .iter()
+        .map(|p| {
+            let physical = physical_bytes_on_disk(Path::new(p.as_str()));
+            CleanupHit {
+                category: String::new(),
+                safety: Safety::Review,
+                path: (*p).clone(),
+                bytes: physical,
+                physical_bytes: physical,
+                files: 1,
+                note: None,
+            }
+        })
+        .collect();
+    let outcome = cleanup::apply_observed(
+        &hits,
+        ApplyMode::Trash,
+        Some(log),
+        trash_root,
+        title,
+        &mut |_, _| {},
+    )?;
+    let freed_physical_bytes = hits
+        .iter()
+        .filter(|h| outcome.handled.contains(&h.path))
+        .map(|h| h.physical_bytes)
+        .sum();
+    let near = hits.first().map_or("/", |h| h.path.as_str());
+    Ok(TrashResult {
+        disk: disk_near(Path::new(near))?,
+        freed_physical_bytes,
+        history_id: outcome.entry.map(|e| e.id),
+        handled: outcome.handled,
+        failed: outcome.failed,
+    })
 }
 
 /// Progress event for a running scan. The walk's total is unknown up front,
@@ -988,6 +1152,151 @@ mod tests {
             "trash mode is reversible"
         );
         assert_eq!(history::load(&log).unwrap(), [entry]);
+    }
+
+    fn write_file(path: &Path, len: usize) -> String {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, vec![7u8; len]).unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn trash_reviewed_moves_listed_files_and_writes_one_titled_entry() {
+        let tmp = tempfile::tempdir().unwrap();
+        let trash = tmp.path().join("Trash");
+        let log = tmp.path().join("history.json");
+        let a = write_file(&tmp.path().join("u/a.img"), 64 * 1024);
+        let b = write_file(&tmp.path().join("u/b.iso"), 8 * 1024);
+        let gone = tmp.path().join("u/gone.dmg").to_string_lossy().into_owned();
+        let listed = vec![a.clone(), b.clone(), gone.clone()];
+        let paths = vec![a.clone(), gone.clone(), b.clone(), a.clone()];
+
+        let r = trash_reviewed(
+            &listed,
+            &paths,
+            None,
+            history::TITLE_LARGE_FILES,
+            &log,
+            &trash,
+        )
+        .unwrap();
+        assert_eq!(r.handled, [a.clone(), b.clone()], "duplicates collapse");
+        assert_eq!(
+            r.failed,
+            [Failure {
+                path: gone,
+                reason: cleanup::FAILURE_MISSING.into()
+            }]
+        );
+        assert!(!Path::new(&a).exists() && !Path::new(&b).exists());
+        assert!(r.freed_physical_bytes >= 72 * 1024, "physical bytes freed");
+        assert!(r.disk.capacity_bytes > 0);
+        let entries = history::load(&log).unwrap();
+        assert_eq!(entries.len(), 1, "one history entry");
+        let e = &entries[0];
+        assert_eq!(Some(e.id.clone()), r.history_id);
+        assert_eq!(e.title, history::TITLE_LARGE_FILES);
+        assert_eq!(e.mode, history::Mode::Trash);
+        assert!(e.categories.is_empty(), "reviewed files carry no category");
+        assert_eq!(e.bytes, r.freed_physical_bytes);
+        assert!(e.items.iter().all(|i| i
+            .trash_path
+            .as_deref()
+            .is_some_and(|t| t.starts_with(trash.to_str().unwrap()))));
+        assert_eq!(history_detail(e), "a.img, b.iso");
+    }
+
+    #[test]
+    fn trash_reviewed_refuses_a_path_not_listed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let trash = tmp.path().join("Trash");
+        let log = tmp.path().join("history.json");
+        let a = write_file(&tmp.path().join("u/a.img"), 10);
+        let other = write_file(&tmp.path().join("u/other.img"), 10);
+        let err = trash_reviewed(
+            std::slice::from_ref(&a),
+            &[a.clone(), other.clone()],
+            None,
+            history::TITLE_LARGE_FILES,
+            &log,
+            &trash,
+        )
+        .unwrap_err();
+        let e = EngineError::from(err);
+        assert_eq!(
+            (e.code.as_str(), e.title.as_str()),
+            ("generic", REFUSED_NOT_LISTED)
+        );
+        assert!(
+            Path::new(&a).exists() && Path::new(&other).exists(),
+            "nothing moved"
+        );
+        assert!(!log.exists(), "no history entry");
+    }
+
+    #[test]
+    fn trash_reviewed_refuses_every_copy_of_a_group() {
+        let tmp = tempfile::tempdir().unwrap();
+        let trash = tmp.path().join("Trash");
+        let log = tmp.path().join("history.json");
+        let a = write_file(&tmp.path().join("x/dup.bin"), 10);
+        let b = write_file(&tmp.path().join("y/dup.bin"), 10);
+        let groups = vec![vec![a.clone(), b.clone()]];
+        let listed = vec![a.clone(), b.clone()];
+        let err = trash_reviewed(
+            &listed,
+            &listed,
+            Some(&groups),
+            history::TITLE_DUPLICATES,
+            &log,
+            &trash,
+        )
+        .unwrap_err();
+        assert_eq!(EngineError::from(err).title, REFUSED_EVERY_COPY);
+        assert!(Path::new(&a).exists() && Path::new(&b).exists());
+        // One copy kept: allowed.
+        let r = trash_reviewed(
+            &listed,
+            std::slice::from_ref(&b),
+            Some(&groups),
+            history::TITLE_DUPLICATES,
+            &log,
+            &trash,
+        )
+        .unwrap();
+        assert_eq!(r.handled, [b]);
+        assert!(Path::new(&a).exists());
+    }
+
+    #[test]
+    fn large_view_reads_the_snapshot_with_prefs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = tmp.path().join("s.db");
+        let db = db.to_str().unwrap();
+        {
+            let conn = crate::db::open(db).unwrap();
+            crate::db::create_schema(&conn).unwrap();
+            let old = Utc::now().timestamp() - 400 * 86_400;
+            for (p, gb) in [("/u/ex/a.img", 9), ("/u/b.img", 3), ("/u/c.img", 1)] {
+                conn.execute(
+                    "INSERT INTO files (path, name, size, physical_size, mtime, is_dir, depth, atime)
+                     VALUES (?, ?, 0, ?, ?, false, 2, ?)",
+                    duckdb::params![p, basename(p), gb * 1_000_000_000i64, old, old],
+                )
+                .unwrap();
+            }
+            crate::db::write_scan_meta(&conn, "/u", 0, Some(1), true, 0, 0).unwrap();
+        }
+        let prefs = Preferences {
+            excluded: vec!["/u/ex".into()],
+            ..Preferences::default()
+        };
+        let v = large_view(db, LargeFilter::All, &prefs).unwrap();
+        assert_eq!(v.count, 1);
+        assert_eq!(v.records[0].path, "/u/b.img");
+        assert!(v.records[0].unused_1y);
+        let all = large_view(db, LargeFilter::All, &Preferences::default()).unwrap();
+        assert_eq!(all.count, 2);
     }
 
     #[test]

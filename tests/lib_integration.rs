@@ -223,6 +223,7 @@ impl<'a> Batch<'a> {
             mtime: Some(mtime),
             is_dir,
             depth: path.matches('/').count() as i32,
+            atime: None,
         });
         if self.rows.len() >= 50_000 {
             self.flush();
@@ -931,4 +932,32 @@ fn map_view_honours_excluded_folders() {
     assert!(v.capacity_bytes > 0);
     let all = disky::contract::map_view(&path, None, &disky::prefs::Prefs::default()).unwrap();
     assert_eq!(all.records[0].name, "private");
+}
+
+#[test]
+fn scan_records_each_files_access_time() {
+    // REQ-DSCR-004.A1 — the scan stores `st_atime`, and only `stat`s, so the
+    // recorded value is the one set before the scan.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("tree");
+    fs::create_dir_all(&root).unwrap();
+    let file = root.join("old.img");
+    fs::write(&file, vec![1u8; 4096]).unwrap();
+    let accessed = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_500_000_000);
+    fs::File::options()
+        .write(true)
+        .open(&file)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_accessed(accessed))
+        .unwrap();
+    let db_path = dir.path().join("snap.db");
+    disky::scan::run(root.to_str().unwrap(), db_path.to_str().unwrap()).unwrap();
+    let conn = db::open(db_path.to_str().unwrap()).unwrap();
+    let atime: Option<i64> = conn
+        .query_row("SELECT atime FROM files WHERE name = 'old.img'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(atime, Some(1_500_000_000));
+    assert!(disky::large::has_atime(&conn).unwrap());
 }

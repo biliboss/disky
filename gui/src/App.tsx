@@ -3,6 +3,7 @@ import type { JSX } from "solid-js";
 import { AppShell } from "./shell/AppShell";
 import { NAV_ITEMS } from "./shell/nav";
 import { History } from "./screens/History";
+import { LargeFiles } from "./screens/LargeFiles";
 import { Placeholder } from "./screens/Placeholder";
 import { Settings } from "./screens/Settings";
 import { SmartClean } from "./screens/SmartClean";
@@ -13,6 +14,7 @@ import type { NavId } from "./shell/nav";
 const SCREENS: Partial<Record<NavId, () => JSX.Element>> = {
   clean: () => <SmartClean />,
   map: () => <SpaceMap />,
+  large: () => <LargeFiles />,
   history: () => <History />,
   settings: () => <Settings />,
 };

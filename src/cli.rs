@@ -300,6 +300,32 @@ pub enum Command {
         snapshot: String,
     },
 
+    /// Regular files of at least 2 GB physical, largest first, with their
+    /// last-opened time — the desktop GUI's Large files screen. Excluded
+    /// folders and skip-recently-used (`disky prefs`) apply.
+    Large {
+        /// all (>= 2 GB) | over-10gb (>= 10 GB) | unused-1y (last opened
+        /// more than 365 days ago).
+        #[arg(long, value_enum, default_value = "all")]
+        filter: disky::large::LargeFilter,
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
+    },
+
+    /// Move the named files or folders to the Trash and record one history
+    /// entry (restorable with `disky restore <id>`). Paths named here count
+    /// as reviewed. A path that is missing or cannot be moved is reported
+    /// and the rest still go.
+    Trash {
+        /// Paths to move (`~/` is expanded; relative paths are resolved
+        /// against the current directory).
+        #[arg(required = true)]
+        paths: Vec<String>,
+        /// History entry title, e.g. "Large files".
+        #[arg(long, default_value = "Cleanup")]
+        title: String,
+    },
+
     /// List the clean-history log (every applied `cleanup`), newest first,
     /// with each entry's detail and state and the total cleared.
     History {

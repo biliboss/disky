@@ -260,6 +260,14 @@ pub fn run_observed(
                     .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
                     .map(|d| d.as_secs() as i64);
 
+                // Last access (REQ-DSCR-004.A1). `stat` itself never
+                // updates it, so the scan leaves it as it found it.
+                let atime = meta
+                    .accessed()
+                    .ok()
+                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64);
+
                 batch.push(FileRecord {
                     path: path_owned,
                     name,
@@ -269,6 +277,7 @@ pub fn run_observed(
                     mtime,
                     is_dir,
                     depth: entry.depth() as i32,
+                    atime,
                 });
 
                 counter_clone.fetch_add(1, Ordering::Relaxed);

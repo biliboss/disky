@@ -25,7 +25,7 @@ export const THEMED_EXCEPTIONS = [
 
 export const THEMED_EXCEPTION_CLASSES = THEMED_EXCEPTIONS.map((e) => e.cls);
 
-/** The one themed selection control (REQ-DCLEAN-012.A2). */
+/** The one themed selection control (REQ-DCLEAN-012.A2): Smart Clean results and the Large files rows (REQ-DSCR-013). */
 export const CHECKBOX_CLASS = "result-check";
 
 /** Classes that must declare both a :hover and an :active rule (REQ-DCLEAN-013, -015). */

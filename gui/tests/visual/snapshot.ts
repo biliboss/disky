@@ -77,6 +77,29 @@ export async function openSnapshot(
     }, opts.startScreen);
   }
 
+  // The HTML parser foster-parents a `<sc-for>` written directly inside
+  // `<tbody>` out of the table, leaving its row template behind as one static
+  // empty row (the Large files table). Put the template back inside its loop,
+  // and the loop inside the tbody, before the prototype's runtime boots — the
+  // markup as authored, which only the parser rearranged.
+  await page.addInitScript(() => {
+    document.addEventListener(
+      "DOMContentLoaded",
+      () => {
+        for (const loop of document.querySelectorAll("sc-for")) {
+          const table = loop.nextElementSibling;
+          if (loop.children.length > 0 || table?.tagName !== "TABLE") continue;
+          const body = table.querySelector("tbody");
+          const row = body?.querySelector(":scope > tr");
+          if (!body || !row) continue;
+          loop.append(row);
+          body.append(loop);
+        }
+      },
+      { capture: true, once: true },
+    );
+  });
+
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.route("https://fonts.googleapis.com/**", (route) =>
     route.fulfill({ contentType: "text/css", body: fontCss, headers: { "access-control-allow-origin": "*" } }),

@@ -1,0 +1,118 @@
+/* Large files (REQ-DSCR-013) — the snapshot's Large files markup, in tokens. */
+
+.large {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.large-head {
+  padding: var(--screen-py) var(--layout-screen-px) var(--large-head-pb);
+  display: flex;
+  align-items: flex-end;
+  gap: var(--large-head-gap);
+}
+
+.large-heading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--screen-gap);
+}
+
+.large-kicker {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+.large-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-screen-title);
+  margin: 0;
+}
+
+.large-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 var(--layout-screen-px) var(--large-body-pb);
+}
+
+.large-body .busy {
+  padding: 0;
+}
+
+.large-error {
+  margin: 0 0 var(--large-error-mb);
+  font-size: var(--fs-small);
+  color: var(--color-danger);
+}
+
+.large-empty {
+  margin: 0;
+  color: var(--color-neutral-700);
+}
+
+/* Organic's 60% header ink is under 4.5:1 at 11 px; the kicker's neutral-700
+   passes (REQ-DCLEAN-024 contrast rule). */
+.large .table th {
+  color: var(--color-table-head);
+}
+
+.large-check-col {
+  width: var(--large-check-col);
+}
+
+.large-row {
+  cursor: pointer;
+}
+
+/* The snapshot's check is an inline span in body text whose empty inline
+   child lifts its baseline; its line box sets the row height (49.3 px). The
+   button takes the table's font and the same lift to match. */
+.large-row .result-check {
+  font: inherit;
+  vertical-align: var(--large-check-raise);
+}
+
+.large-name {
+  font-weight: var(--fw-large-name);
+}
+
+.large-location {
+  color: var(--color-neutral-700);
+}
+
+.large .large-size {
+  text-align: right;
+  font-weight: var(--fw-large-size);
+}
+
+.large-row-error {
+  display: block;
+  font-weight: normal;
+  font-size: var(--fs-small);
+  color: var(--color-danger);
+}
+
+.large-foot {
+  padding: var(--results-foot-py) var(--layout-screen-px);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  gap: var(--results-foot-gap);
+}
+
+.large-foot-note {
+  flex: 1;
+  font-size: var(--fs-results-foot);
+  color: var(--color-neutral-800);
+}
+
+.large-trash {
+  padding: var(--btn-clean-py) var(--btn-clean-px);
+}
+

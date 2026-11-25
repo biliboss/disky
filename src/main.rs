@@ -662,6 +662,35 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             let view = contract::map_view(&db, path.as_deref(), &p)?;
             render::map(&view, format)?;
         }
+        Command::Large { filter, snapshot } => {
+            let db = snapshots::resolve(&snapshot)?;
+            let p = prefs::load(&prefs::prefs_path())?;
+            let view = contract::large_view(&db, filter, &p)?;
+            render::large(&view, format)?;
+        }
+        Command::Trash { paths, title } => {
+            let cwd = std::env::current_dir()?;
+            let paths: Vec<String> = paths
+                .into_iter()
+                .map(|p| {
+                    let expanded = match p.strip_prefix("~/") {
+                        Some(rest) => dirs::home_dir().map_or(p.clone().into(), |h| h.join(rest)),
+                        None => std::path::PathBuf::from(&p),
+                    };
+                    cwd.join(expanded).to_string_lossy().into_owned()
+                })
+                .collect();
+            // Named on the command line = reviewed by the user (REQ-DSCR-006).
+            let result = contract::trash_reviewed(
+                &paths,
+                &paths,
+                None,
+                &title,
+                &history::log_path(),
+                &contract::user_trash_root()?,
+            )?;
+            render::trash(&result, format)?;
+        }
         Command::Restore { id } => {
             let report = history::restore(&history::log_path(), &id)?;
             render::restore(&report, format)?;

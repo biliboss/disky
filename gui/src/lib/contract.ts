@@ -512,3 +512,74 @@ export function parseMapView(raw: unknown): MapView {
     }),
   };
 }
+
+/** Which large files to list (REQ-DSCR-004.A2): `disky large --filter`. */
+export type LargeFilter = "all" | "over-10gb" | "unused-1y";
+export const LARGE_FILTERS: readonly LargeFilter[] = ["all", "over-10gb", "unused-1y"];
+
+/** One large file (REQ-DSCR-004.A1). */
+export interface LargeFile {
+  name: string;
+  path: string;
+  /** Parent folder for display, home as `~` (engine-derived). */
+  location: string;
+  /** Physical bytes. */
+  bytes: number;
+  /** RFC 3339 access time, or null for snapshots taken before access times were recorded. */
+  last_opened: string | null;
+  /** True when last opened more than 365 days ago. */
+  unused_1y: boolean;
+}
+
+/** The Large files screen's list: `disky large --format json`. */
+export interface LargeView {
+  filter: LargeFilter;
+  count: number;
+  /** Physical bytes over `records`. */
+  total_bytes: number;
+  /** Largest first. */
+  records: LargeFile[];
+}
+
+export function parseLargeView(raw: unknown): LargeView {
+  const o = obj(raw, "large");
+  return {
+    filter: oneOf(o.filter, LARGE_FILTERS, "large.filter"),
+    count: count(o.count, "large.count"),
+    total_bytes: bytes(o.total_bytes, "large.total_bytes"),
+    records: arr(o.records, "large.records").map((f, i) => {
+      const fo = obj(f, `large.records[${i}]`);
+      return {
+        name: str(fo.name, `large.records[${i}].name`),
+        path: str(fo.path, `large.records[${i}].path`),
+        location: str(fo.location, `large.records[${i}].location`),
+        bytes: bytes(fo.bytes, `large.records[${i}].bytes`),
+        last_opened: strOrNull(fo.last_opened, `large.records[${i}].last_opened`),
+        unused_1y: bool(fo.unused_1y, `large.records[${i}].unused_1y`),
+      };
+    }),
+  };
+}
+
+/** What moving reviewed files to the Trash did (REQ-DSCR-006.A1): `disky trash`. */
+export interface TrashResult {
+  handled: string[];
+  failed: Failure[];
+  freed_physical_bytes: number;
+  history_id: string | null;
+  disk: Disk;
+}
+
+export function parseTrashResult(raw: unknown): TrashResult {
+  const o = obj(raw, "trashResult");
+  return {
+    handled: strArr(o.handled, "trashResult.handled"),
+    failed: arr(o.failed, "trashResult.failed").map((f, i) => {
+      const fo = obj(f, `trashResult.failed[${i}]`);
+      return { path: str(fo.path, `trashResult.failed[${i}].path`), reason: str(fo.reason, `trashResult.failed[${i}].reason`) };
+    }),
+    freed_physical_bytes: bytes(o.freed_physical_bytes, "trashResult.freed_physical_bytes"),
+    history_id: strOrNull(o.history_id, "trashResult.history_id"),
+    disk: parseDisk(o.disk, "trashResult.disk"),
+  };
+}

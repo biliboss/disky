@@ -1231,7 +1231,8 @@ pub(crate) fn apply_observed(
         match apply_one(h, mode, trash_root) {
             Ok(trash_path) => {
                 handled.push(h.path.clone());
-                if !categories.contains(&h.category) {
+                // Reviewed files (Large files, Duplicates) carry no category.
+                if !h.category.is_empty() && !categories.contains(&h.category) {
                     categories.push(h.category.clone());
                 }
                 items.push(Item {

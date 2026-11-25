@@ -12,7 +12,7 @@ import type { CleanResult, CleanupView } from "../../lib/contract";
 const guiFile = (rel: string) => resolve(process.cwd(), rel);
 
 /** Nav entries whose own screen is implemented, by the screen's test id. */
-const REAL_SCREENS: Partial<Record<NavId, string>> = { map: "space-map", history: "history", settings: "settings" };
+const REAL_SCREENS: Partial<Record<NavId, string>> = { map: "space-map", large: "large-files", history: "history", settings: "settings" };
 
 function renderApp() {
   render(() => <App />);
@@ -47,7 +47,7 @@ async function secondaryEntriesOpenComingSoonPlaceholders() {
     // Router navigation commits in a transition, so wait for the new screen.
     const real = REAL_SCREENS[item.id];
     if (real) {
-      // A real screen (REQ-DSCR-012, -015, -016), not a placeholder.
+      // A real screen (REQ-DSCR-012, -013, -015, -016), not a placeholder.
       expect(await within(main).findByTestId(real)).toBeInTheDocument();
       expect(within(main).queryByText("Coming soon")).toBeNull();
     } else {

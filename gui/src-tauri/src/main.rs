@@ -18,6 +18,8 @@
 //! | `list_history`      | `disky history --format json`                    |
 //! | `load_map`          | `disky map [<path>] --format json`               |
 //! | `reveal_in_finder`  | `open -R <path>` (a path `load_map` listed)      |
+//! | `load_large`        | `disky large [--filter …] --format json`         |
+//! | `trash_large`       | `disky trash <path>... --title "Large files"`    |
 //!
 //! Preferences live in the engine's one store (`disky::prefs`): every view
 //! reads its goal and toggles from it, and Settings writes it through
@@ -38,6 +40,9 @@
 //! @implements REQ-DSCR-003
 //! @implements REQ-DSCR-012
 //! @implements REQ-DSCR-015
+//! @implements REQ-DSCR-004
+//! @implements REQ-DSCR-006
+//! @implements REQ-DSCR-013
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -46,7 +51,8 @@ use std::time::{Duration, Instant};
 
 use disky::cleanup::CleanupHit;
 use disky::contract::{
-    self, CleanResult, CleanupView, EngineError, HistoryView, MapView, RestoreResult,
+    self, CleanResult, CleanupView, EngineError, HistoryView, LargeFilter, LargeView, MapView,
+    RestoreResult, TrashResult,
 };
 use disky::prefs::{self, Prefs};
 use disky::{history, scan as engine_scan, snapshots};
@@ -67,6 +73,9 @@ struct Engine {
     /// Paths the last Space map listed. `reveal_in_finder` reveals only
     /// these (REQ-DSCR-012.A4).
     mapped: Mutex<Vec<String>>,
+    /// Paths the last Large files list showed. `trash_large` trashes only
+    /// these (REQ-DSCR-006.A2).
+    large: Mutex<Vec<String>>,
 }
 
 type CmdResult<T> = Result<T, EngineError>;
@@ -264,6 +273,50 @@ async fn reveal_in_finder(app: AppHandle, path: String) -> CmdResult<()> {
     .await
 }
 
+/// The Large files list for `filter` in the latest snapshot (REQ-DSCR-004,
+/// REQ-DSCR-013); null when no snapshot exists yet. The listed paths become
+/// the only ones `trash_large` will move. CLI: `disky large --filter <f>`.
+#[tauri::command]
+async fn load_large(app: AppHandle, filter: LargeFilter) -> CmdResult<Option<LargeView>> {
+    blocking(move || {
+        let Some(snapshot) = snapshots::latest_snapshot() else {
+            app.state::<Engine>().large.lock().unwrap().clear();
+            return Ok(None);
+        };
+        let view = contract::large_view(&snapshot, filter, &read_prefs()?)?;
+        *app.state::<Engine>().large.lock().unwrap() =
+            view.records.iter().map(|f| f.path.clone()).collect();
+        Ok(Some(view))
+    })
+    .await
+}
+
+/// Move the selected large files to the Trash with one "Large files" history
+/// entry (REQ-DSCR-006, REQ-DSCR-013.A4). Always the Trash, whatever
+/// trash-by-default says. Handled paths leave the listed set. CLI: `disky
+/// trash <path>... --title "Large files"`.
+#[tauri::command]
+async fn trash_large(app: AppHandle, paths: Vec<String>) -> CmdResult<TrashResult> {
+    blocking(move || {
+        let listed = app.state::<Engine>().large.lock().unwrap().clone();
+        let result = contract::trash_reviewed(
+            &listed,
+            &paths,
+            None,
+            history::TITLE_LARGE_FILES,
+            &history::log_path(),
+            &contract::user_trash_root()?,
+        )?;
+        app.state::<Engine>()
+            .large
+            .lock()
+            .unwrap()
+            .retain(|p| !result.handled.contains(p));
+        Ok(result)
+    })
+    .await
+}
+
 /// Open System Settings at Full Disk Access (REQ-DCLEAN-018.A2).
 #[tauri::command]
 async fn open_full_disk_access() -> CmdResult<()> {
@@ -293,6 +346,8 @@ fn main() {
             list_history,
             load_map,
             reveal_in_finder,
+            load_large,
+            trash_large,
             open_full_disk_access
         ])
         .run(tauri::generate_context!())

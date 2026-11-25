@@ -8,9 +8,11 @@ import {
   parseCleanupView,
   parseEngineError,
   parseHistoryView,
+  parseLargeView,
   parseMapView,
   parseRestoreResult,
   parseScanProgress,
+  parseTrashResult,
 } from "./contract";
 
 /** A view as the engine's `contract::CleanupView` serialises it. */
@@ -294,4 +296,34 @@ describe("history and map views (REQ-DSCR-015, REQ-DSCR-003)", () => {
   it("parses history rows with derived fields (REQ-DSCR-015.A2)", parsesHistoryRowsWithDerivedFields);
   it("rejects an unknown history state (REQ-DSCR-015.A4)", rejectsAnUnknownHistoryState);
   it("parses a map view and rejects bad bytes (REQ-DSCR-003.A1)", parsesAMapViewAndRejectsBadBytes);
+});
+
+function parsesALargeViewAndRejectsBadFields() {
+  const large = {
+    filter: "unused-1y",
+    count: 1,
+    total_bytes: 3e9,
+    records: [{ name: "a.iso", path: "/Users/me/a.iso", location: "~", bytes: 3e9, last_opened: null, unused_1y: false }],
+  };
+  expect(parseLargeView(large)).toEqual(large);
+  expect(() => parseLargeView({ ...large, filter: "huge" })).toThrow(ContractError);
+  expect(() => parseLargeView({ ...large, records: [{ ...large.records[0], bytes: -1 }] })).toThrow(ContractError);
+  expect(() => parseLargeView({ ...large, records: [{ ...large.records[0], unused_1y: 1 }] })).toThrow(ContractError);
+}
+
+function parsesATrashResult() {
+  const r = {
+    handled: ["/a"],
+    failed: [{ path: "/b", reason: "missing" }],
+    freed_physical_bytes: 7,
+    history_id: "e1",
+    disk: { volume: "Macintosh HD", capacity_bytes: 512e9, free_bytes: 74e9 },
+  };
+  expect(parseTrashResult(r)).toEqual(r);
+  expect(() => parseTrashResult({ ...r, freed_physical_bytes: "7" })).toThrow(ContractError);
+}
+
+describe("large files and trash contract (REQ-DSCR-004, REQ-DSCR-006)", () => {
+  it("parses a large view and rejects bad fields", parsesALargeViewAndRejectsBadFields);
+  it("parses a trash result", parsesATrashResult);
 });

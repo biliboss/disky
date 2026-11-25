@@ -912,3 +912,195 @@ fn schema_lists_the_map_command_and_history_rows() {
     assert!(v["records"]["MapChild"].is_object());
     assert!(v["records"]["HistoryRow"].is_object());
 }
+
+/// A snapshot DB with large files (no real multi-GB files needed): rows
+/// `(path, physical GB, days since last access)` under `/data`, every mtime
+/// 400 days old so skip-recently-used keeps them.
+fn large_fixture(dir: &std::path::Path) -> PathBuf {
+    const GB: i64 = 1_000_000_000;
+    let db = dir.join("large.db");
+    let conn = disky::db::open(db.to_str().unwrap()).unwrap();
+    disky::db::create_schema(&conn).unwrap();
+    let now = chrono::Utc::now().timestamp();
+    let old = now - 400 * 86_400;
+    for (path, gb, days) in [
+        ("/data/vm.utm", 38, 240),
+        ("/data/master.mov", 18, 800),
+        ("/data/ubuntu.iso", 4, 400),
+        ("/data/tiny.bin", 1, 900),
+    ] {
+        conn.execute(
+            "INSERT INTO files (path, name, size, physical_size, mtime, is_dir, depth, atime)
+             VALUES (?, ?, ?, ?, ?, false, 2, ?)",
+            duckdb::params![
+                path,
+                path.rsplit('/').next().unwrap(),
+                gb * GB,
+                gb * GB,
+                old,
+                now - days * 86_400
+            ],
+        )
+        .unwrap();
+    }
+    disky::db::write_scan_meta(&conn, "/data", old, Some(old + 1), true, 4, 0).unwrap();
+    db
+}
+
+#[test]
+fn large_lists_files_over_2gb_with_filters_and_counts() {
+    // REQ-DSCR-004.A1, A2 through the CLI.
+    let home = temp_dir();
+    let db = large_fixture(&home);
+    let db = db.to_str().unwrap();
+    let v = json_in_home(&home, &["large", "--snapshot", db, "--format", "json"]);
+    assert_eq!(v["kind"], "large");
+    assert_eq!(v["schema_version"], 1);
+    assert_eq!(v["filter"], "all");
+    let paths: Vec<&str> = v["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        paths,
+        ["/data/vm.utm", "/data/master.mov", "/data/ubuntu.iso"]
+    );
+    assert_eq!(v["count"], 3);
+    assert_eq!(v["total_bytes"].as_u64().unwrap(), 60_000_000_000);
+    let first = &v["records"][0];
+    assert_eq!(first["name"], "vm.utm");
+    assert!(first["last_opened"].as_str().unwrap().ends_with('Z'));
+    assert_eq!(first["unused_1y"], false);
+
+    let u = json_in_home(
+        &home,
+        &[
+            "large",
+            "--filter",
+            "unused-1y",
+            "--snapshot",
+            db,
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(u["filter"], "unused-1y");
+    assert_eq!(u["count"], 2);
+    assert!(u["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|r| r["unused_1y"] == true));
+    let big = json_in_home(
+        &home,
+        &[
+            "large",
+            "--filter",
+            "over-10gb",
+            "--snapshot",
+            db,
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(
+        (big["count"].as_u64(), big["total_bytes"].as_u64()),
+        (Some(2), Some(56_000_000_000))
+    );
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn large_bad_filter_exits_usage_and_unknown_snapshot_exits_not_found() {
+    let home = temp_dir();
+    let db = large_fixture(&home);
+    let out = run_in_home(
+        &home,
+        &[
+            "large",
+            "--filter",
+            "huge",
+            "--snapshot",
+            db.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(out.status.code(), Some(2));
+    let out = run_in_home(
+        &home,
+        &[
+            "large",
+            "--snapshot",
+            "1999-01-01_00-00",
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(4));
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn trash_moves_named_paths_and_records_one_titled_entry() {
+    // REQ-DSCR-006.A1, A4: temp HOME → temp Trash and history log.
+    let home = temp_dir();
+    let a = home.join("files/a.img");
+    let b = home.join("files/b.iso");
+    fs::create_dir_all(a.parent().unwrap()).unwrap();
+    fs::write(&a, vec![1u8; 64 * 1024]).unwrap();
+    fs::write(&b, vec![1u8; 8 * 1024]).unwrap();
+    let gone = home.join("files/gone.dmg");
+    let v = json_in_home(
+        &home,
+        &[
+            "trash",
+            a.to_str().unwrap(),
+            b.to_str().unwrap(),
+            gone.to_str().unwrap(),
+            "--title",
+            "Large files",
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(v["kind"], "trash");
+    assert_eq!(v["handled"].as_array().unwrap().len(), 2, "{v}");
+    assert_eq!(v["failed"][0]["path"], gone.to_str().unwrap());
+    assert_eq!(v["failed"][0]["reason"], "missing");
+    assert!(v["freed_physical_bytes"].as_u64().unwrap() >= 72 * 1024);
+    assert!(v["disk"]["capacity_bytes"].as_u64().unwrap() > 0);
+    assert!(!a.exists() && !b.exists());
+    let in_trash = fs::read_dir(home.join(".Trash")).unwrap().count();
+    assert_eq!(in_trash, 2, "moved into the temp HOME's Trash");
+
+    let h = json_in_home(&home, &["history", "--format", "json"]);
+    let rows = h["records"].as_array().unwrap();
+    assert_eq!(rows.len(), 1, "one history entry");
+    assert_eq!(rows[0]["title"], "Large files");
+    assert_eq!(rows[0]["id"], v["history_id"]);
+    assert_eq!(rows[0]["detail"], "a.img, b.iso");
+
+    // Restorable through the same log.
+    let r = json_in_home(
+        &home,
+        &[
+            "restore",
+            v["history_id"].as_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(r["records"][0]["restored"].as_array().unwrap().len(), 2);
+    assert!(a.exists() && b.exists());
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn schema_lists_the_large_and_trash_commands() {
+    let v = run_json(&["schema"]);
+    let cmds = v["commands"].as_array().unwrap();
+    assert!(cmds.iter().any(|c| c["name"] == "large"));
+    assert!(cmds.iter().any(|c| c["name"] == "trash"));
+    assert!(v["records"]["LargeFile"].is_object());
+}

@@ -309,3 +309,70 @@ export async function stubMap(page: Page, noSnapshot = false) {
     [snapshotMapFolders(), noSnapshot] as const,
   );
 }
+
+/**
+ * The snapshot's LARGE rows as `disky large` lists them, largest first:
+ * name, location, GB, days since last opened (chosen so the relative time
+ * reads like the snapshot's label), unused for over a year.
+ */
+const SNAPSHOT_LARGE: [string, string, number, number, boolean][] = [
+  ["Windows 11 VM.utm", "~/Library/Containers/UTM", 38.2, 245, false],
+  ["Photo library backup.zip", "~/Documents/Backups", 22.6, 1100, true],
+  ["Wedding 4K master.mov", "~/Movies/Exports", 18.4, 800, true],
+  ["GoPro dump 2023", "~/Pictures", 14.9, 800, true],
+  ["dataset-train.parquet", "~/Developer/ml", 6.8, 14, false],
+  ["ubuntu-22.04-desktop.iso", "~/Downloads", 4.7, 400, true],
+  ["Xcode_15.dmg", "~/Downloads", 3.2, 400, true],
+  ["podcast-raw-ep42.wav", "~/Music/Recordings", 2.1, 155, false],
+];
+
+export function snapshotLargeFiles(now = Date.now()) {
+  return SNAPSHOT_LARGE.map(([name, location, gb, days, old]) => ({
+    name,
+    path: `/Users/me/${location.slice(2)}/${name}`,
+    location,
+    bytes: Math.round(gb * GB),
+    last_opened: new Date(now - days * 86_400_000).toISOString(),
+    unused_1y: old,
+  }));
+}
+
+/**
+ * Answer the Large files commands from the snapshot's LARGE rows:
+ * `load_large` filters them as the engine would (null with `noSnapshot`);
+ * `trash_large` records its paths in `window.__trashed` and reports them
+ * handled, freeing their bytes on a 74 GB-free disk.
+ */
+export async function stubLarge(page: Page, noSnapshot = false) {
+  await page.addInitScript(
+    ([files, none]) => {
+      const w = window as any;
+      w.__trashed = [];
+      w.__TAURI_INTERNALS__ = {
+        invoke: async (cmd: string, args: any) => {
+          if (cmd === "load_large") {
+            if (none) return null;
+            const records = (files as any[]).filter(
+              (f) => args.filter === "all" || (args.filter === "over-10gb" ? f.bytes >= 10e9 : f.unused_1y),
+            );
+            return { filter: args.filter, count: records.length, total_bytes: records.reduce((a, f) => a + f.bytes, 0), records };
+          }
+          if (cmd === "trash_large") {
+            w.__trashed.push(args.paths);
+            const freed = (files as any[]).filter((f) => args.paths.includes(f.path)).reduce((a, f) => a + f.bytes, 0);
+            return {
+              handled: args.paths,
+              failed: [],
+              freed_physical_bytes: freed,
+              history_id: "visual-large",
+              disk: { volume: "Macintosh HD", capacity_bytes: 512e9, free_bytes: 74e9 + freed },
+            };
+          }
+          throw new Error(`visual stub: ${cmd} is not available`);
+        },
+        transformCallback: () => 0,
+      };
+    },
+    [snapshotLargeFiles(), noSnapshot] as const,
+  );
+}
