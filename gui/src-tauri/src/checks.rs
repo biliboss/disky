@@ -92,14 +92,20 @@ fn perform(app: &AppHandle, action: Action) {
     }
 }
 
-/// The engine's Assistant view for the latest snapshot.
-fn assistant_view() -> anyhow::Result<contract::AssistantView> {
-    let p = prefs::load(&prefs::prefs_path())?;
-    contract::assistant_view(snapshots::latest_snapshot().as_deref(), &p)
+/// The engine's Assistant view for the latest snapshot, through the same
+/// cache the screens read (one build per snapshot and preferences).
+fn assistant_view(app: &AppHandle) -> anyhow::Result<contract::AssistantView> {
+    match snapshots::latest_snapshot() {
+        Some(path) => {
+            let (view, hits) = crate::cached_load(app, &path)?;
+            Ok(contract::assistant_view_from(&view, &hits))
+        }
+        None => contract::assistant_view(None, &prefs::load(&prefs::prefs_path())?),
+    }
 }
 
 fn emit_view(app: &AppHandle) {
-    if let Ok(view) = assistant_view() {
+    if let Ok(view) = assistant_view(app) {
         let _ = app.emit(VIEW_EVENT, view);
     }
 }
@@ -132,7 +138,7 @@ fn start_background_scan(app: &AppHandle) {
 }
 
 fn notify(app: &AppHandle, free_bytes: u64, goal_bytes: u64) {
-    let Ok(view) = assistant_view() else {
+    let Ok(view) = assistant_view(app) else {
         return;
     };
     // The offer is the engine's goal suggestion, when it has one.

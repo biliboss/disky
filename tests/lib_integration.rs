@@ -962,3 +962,45 @@ fn scan_records_each_files_access_time() {
     assert_eq!(atime, Some(1_500_000_000));
     assert!(disky::large::has_atime(&conn).unwrap());
 }
+
+/// Nested dev folders (bug: thousands of `node_modules` inside other
+/// `node_modules` made the cleanup view take 8–17 s on a real 10.9 M-row
+/// home, so the Assistant's Review looked dead). Roots are pruned to the
+/// outermost before summing, every file is counted once under its outermost
+/// root, and a nested root inside a recently used one is never reported on
+/// its own (deleting it would break a project in use). Also covers the
+/// path-component ordering: "/p/a b" must not hide "/p/a/…" nesting.
+#[test]
+fn nested_dev_folders_sum_once_under_the_outermost() {
+    let old = T0 - 400 * DAY;
+    let fresh = T0;
+    let rows: Vec<(&str, bool, i64, i64)> = vec![
+        ("/r/p/a/node_modules", true, 0, old),
+        ("/r/p/a/node_modules/x/index.js", false, 100, old),
+        ("/r/p/a/node_modules/x/node_modules", true, 0, old),
+        ("/r/p/a/node_modules/x/node_modules/y.js", false, 50, old),
+        ("/r/p/a b/node_modules", true, 0, old),
+        ("/r/p/a b/node_modules/z.js", false, 7, old),
+        // Recently used project: its nested old node_modules stays too.
+        ("/r/q/node_modules", true, 0, fresh),
+        ("/r/q/node_modules/new.js", false, 9, fresh),
+        ("/r/q/node_modules/old/node_modules", true, 0, old),
+        ("/r/q/node_modules/old/node_modules/o.js", false, 11, old),
+    ];
+    let (_dir, conn) = small_snapshot(&rows, "/r");
+    let mut ctx = synth_ctx("/r", "/r");
+    ctx.recent_cutoff = Some(T0 - 30 * DAY);
+    let hits = cleanup::scan_with(&conn, &["node_modules".to_string()], 100, &ctx).unwrap();
+    let mut got: Vec<(&str, u64, u64)> = hits
+        .iter()
+        .map(|h| (h.path.as_str(), h.bytes, h.files))
+        .collect();
+    got.sort();
+    assert_eq!(
+        got,
+        [
+            ("/r/p/a b/node_modules", 7, 1),
+            ("/r/p/a/node_modules", 150, 2)
+        ]
+    );
+}

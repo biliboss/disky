@@ -207,6 +207,11 @@ pub fn large(
     })
 }
 
+/// True while `path` exists (a symlink counts as itself).
+pub(crate) fn still_on_disk(path: &str) -> bool {
+    std::path::Path::new(path).symlink_metadata().is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

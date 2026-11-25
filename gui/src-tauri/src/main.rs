@@ -62,6 +62,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod cache;
 mod checks;
 mod scheduler;
 
@@ -85,6 +86,16 @@ pub(crate) struct Engine {
     /// Hits behind the last view the user was shown. `clean` acts only on
     /// paths found here (REQ-DCLEAN-007, REQ-DCLEAN-029.A1).
     reviewed: Mutex<Vec<CleanupHit>>,
+    /// The last cleanup view built, with its hits, keyed by
+    /// `contract::view_key`. The Assistant and Smart Clean's review read the
+    /// same view: on a large home it takes seconds to build, so "Review"
+    /// reuses the Assistant's instead of rebuilding it. Cleared by anything
+    /// that changes files (clean, trash, restore); a new scan is a new key.
+    view_cache: Mutex<cache::Keyed<(CleanupView, Vec<CleanupHit>)>>,
+    /// The last Duplicates result, keyed the same way. Hashing every
+    /// candidate reads tens of GB on a real home, so a revisit reuses it
+    /// (REQ-DSCR-014.A6). Cleared with the view.
+    dupes_cache: Mutex<cache::Keyed<DupesView>>,
     /// Cancel flag of the running scan, if any.
     cancel: Mutex<Option<Arc<AtomicBool>>>,
     /// Paths the last Space map listed. `reveal_in_finder` reveals only
@@ -146,8 +157,47 @@ fn read_prefs() -> anyhow::Result<Prefs> {
 
 /// Build a snapshot's view from the store's preferences and remember its hits
 /// as the reviewed set.
+const VIEW_CACHE_TTL: Duration = Duration::from_secs(120);
+
+/// The cleanup view and hits of `snapshot_path`, reusing the last one built
+/// when nothing it depends on changed.
+pub(crate) fn cached_load(
+    app: &AppHandle,
+    snapshot_path: &str,
+) -> anyhow::Result<(CleanupView, Vec<CleanupHit>)> {
+    let prefs = read_prefs()?;
+    let key = contract::view_key(snapshot_path, &prefs)?;
+    let engine = app.state::<Engine>();
+    if let Some(hit) = engine
+        .view_cache
+        .lock()
+        .unwrap()
+        .get(&key, VIEW_CACHE_TTL, Instant::now())
+    {
+        return Ok(hit);
+    }
+    let (view, hits) = contract::load(snapshot_path, &prefs)?;
+    engine
+        .view_cache
+        .lock()
+        .unwrap()
+        .put(key, Instant::now(), (view.clone(), hits.clone()));
+    Ok((view, hits))
+}
+
+/// Files changed: the next view is built afresh.
+fn forget_view(app: &AppHandle) {
+    let engine = app.state::<Engine>();
+    engine.view_cache.lock().unwrap().clear();
+    engine.dupes_cache.lock().unwrap().clear();
+}
+
+/// Duplicates take far longer to find than the view to build, so they keep
+/// longer; trashing anything still clears them at once.
+const DUPES_CACHE_TTL: Duration = Duration::from_secs(15 * 60);
+
 fn load_view(app: &AppHandle, snapshot_path: &str) -> anyhow::Result<CleanupView> {
-    let (view, hits) = contract::load(snapshot_path, &read_prefs()?)?;
+    let (view, hits) = cached_load(app, snapshot_path)?;
     *app.state::<Engine>().reviewed.lock().unwrap() = hits;
     Ok(view)
 }
@@ -266,6 +316,7 @@ async fn clean(
         engine.cleaning.store(true, Ordering::SeqCst);
         let _cleaning = Cleaning(&engine.cleaning);
         let reviewed = engine.reviewed.lock().unwrap().clone();
+        forget_view(&app);
         contract::clean_observed(
             &reviewed,
             &item_paths,
@@ -282,8 +333,12 @@ async fn clean(
 
 /// Undo a Trash clean (REQ-DCLEAN-009.A4): restore its history entry.
 #[tauri::command]
-async fn restore(history_id: String) -> CmdResult<RestoreResult> {
-    blocking(move || contract::restore(&history::log_path(), &history_id)).await
+async fn restore(app: AppHandle, history_id: String) -> CmdResult<RestoreResult> {
+    blocking(move || {
+        forget_view(&app);
+        contract::restore(&history::log_path(), &history_id)
+    })
+    .await
 }
 
 /// The History screen's rows (REQ-DSCR-015): the log newest first, each with
@@ -367,6 +422,7 @@ async fn load_large(app: AppHandle, filter: LargeFilter) -> CmdResult<Option<Lar
 async fn trash_large(app: AppHandle, paths: Vec<String>) -> CmdResult<TrashResult> {
     blocking(move || {
         let listed = app.state::<Engine>().large.lock().unwrap().clone();
+        forget_view(&app);
         let result = contract::trash_reviewed(
             &listed,
             &paths,
@@ -396,9 +452,27 @@ async fn load_dupes(app: AppHandle) -> CmdResult<Option<DupesView>> {
             app.state::<Engine>().dupes.lock().unwrap().clear();
             return Ok(None);
         };
-        let view =
-            contract::dupes_view(&snapshot, disky::dupes::DEFAULT_MIN_BYTES, &read_prefs()?)?;
-        *app.state::<Engine>().dupes.lock().unwrap() = view.group_paths();
+        let prefs = read_prefs()?;
+        let key = contract::view_key(&snapshot, &prefs)?;
+        let engine = app.state::<Engine>();
+        let cached = engine
+            .dupes_cache
+            .lock()
+            .unwrap()
+            .get(&key, DUPES_CACHE_TTL, Instant::now());
+        let view = match cached {
+            Some(v) => v,
+            None => {
+                let v = contract::dupes_view(&snapshot, disky::dupes::DEFAULT_MIN_BYTES, &prefs)?;
+                engine
+                    .dupes_cache
+                    .lock()
+                    .unwrap()
+                    .put(key, Instant::now(), v.clone());
+                v
+            }
+        };
+        *engine.dupes.lock().unwrap() = view.group_paths();
         Ok(Some(view))
     })
     .await
@@ -413,6 +487,7 @@ async fn load_dupes(app: AppHandle) -> CmdResult<Option<DupesView>> {
 async fn trash_dupes(app: AppHandle, paths: Vec<String>) -> CmdResult<TrashResult> {
     blocking(move || {
         let groups = app.state::<Engine>().dupes.lock().unwrap().clone();
+        forget_view(&app);
         let result = contract::trash_dupes(
             &groups,
             &paths,
@@ -433,9 +508,16 @@ async fn trash_dupes(app: AppHandle, paths: Vec<String>) -> CmdResult<TrashResul
 /// (REQ-DSCR-008) — an empty feed with checks off. CLI: `disky suggest`,
 /// `disky agents` and `disky prefs`.
 #[tauri::command]
-async fn load_assistant() -> CmdResult<AssistantView> {
-    blocking(|| contract::assistant_view(snapshots::latest_snapshot().as_deref(), &read_prefs()?))
-        .await
+async fn load_assistant(app: AppHandle) -> CmdResult<AssistantView> {
+    blocking(move || match snapshots::latest_snapshot() {
+        // Same view Smart Clean's review reads: built once, shared.
+        Some(path) => {
+            let (view, hits) = cached_load(&app, &path)?;
+            Ok(contract::assistant_view_from(&view, &hits))
+        }
+        None => contract::assistant_view(None, &read_prefs()?),
+    })
+    .await
 }
 
 /// Bring the window forward on Smart Clean: the below-goal notification was

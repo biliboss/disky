@@ -802,8 +802,10 @@ struct Root {
     path: String,
     category: &'static Category,
     safety: Safety,
-    is_dir: bool,
     self_mtime: Option<i64>,
+    /// Found by a location rule (a direct child of a known folder) rather
+    /// than by a directory basename; decides how its bytes are summed.
+    by_location: bool,
 }
 
 /// True when `path` is a direct child of a location `pattern` (segments of
@@ -876,7 +878,7 @@ fn location_roots(
 
     let mut apps: Option<InstalledApps> = ctx.installed_apps.clone();
     let mut out = Vec::new();
-    for (path, name, is_dir, mtime) in rows {
+    for (path, name, _is_dir, mtime) in rows {
         let Some((cat, safety)) = locs
             .iter()
             .find(|(_, _, p)| is_child_of(p, &path))
@@ -911,8 +913,8 @@ fn location_roots(
             path,
             category: cat,
             safety,
-            is_dir,
             self_mtime: mtime,
+            by_location: true,
         });
     }
     Ok(out)
@@ -963,8 +965,8 @@ fn basename_roots(
             path,
             category: cat,
             safety: cat.safety,
-            is_dir: true,
             self_mtime: mtime,
+            by_location: false,
         });
     }
     Ok(out)
@@ -994,83 +996,37 @@ pub fn scan_with(
     // A path matched by two rules is reported once (first rule wins).
     let mut seen: HashSet<String> = HashSet::new();
     roots.retain(|r| seen.insert(r.path.clone()));
+    // Outermost wins before the join, not only after it: a home with
+    // thousands of `node_modules` nested inside other `node_modules` (31 k
+    // dirs on a 10.9 M-row snapshot) otherwise joins every one of them, and
+    // the view takes seconds. A nested root's bytes are inside its
+    // ancestor's, and a nested root under a recently used one is never
+    // reported on its own (deleting it would break a project in use).
+    let roots = outermost(roots, |r| r.path.as_str());
     if roots.is_empty() {
         return Ok(vec![]);
     }
 
     // History (kept for context):
     //   v1: `LEFT JOIN files f ON f.path LIKE (t.path || '/%')` — 79 s on a
-    //       1.77 M-row snapshot. DuckDB planned a nested-loop join with
-    //       per-row LIKE evaluation.
-    //   v2: materialise target dirs in Rust, then issue ONE aggregation
-    //       query per target with a path-range predicate. Better than v1
-    //       but still O(N_targets × N_files / zone_maps): on real macOS
-    //       homes with thousands of `target` / `node_modules` dirs the
-    //       per-query overhead (DuckDB statement dispatch, FFI round-trip)
-    //       dominates and the whole call lands at 79–250 s.
-    //   v3: one grouped query. Stash target dirs in a temporary table
-    //       (DuckDB then computes its zone maps) and let the planner fuse
-    //       them with `files` via a single range-join + GROUP BY.
-    //       Brings 79 s → < 1 s on a 1 M-row synthetic snapshot.
-    //   v4 (this): same single join; location-rule roots join the same
-    //       TEMP table. A root that is a file uses the range
-    //       [path, path || '\x01'), which matches exactly itself.
-    //
-    // We materialise roots into a TEMP table (instead of an inline VALUES
-    // list) because DuckDB can build zone maps on it, which the IEJoin
-    // planner exploits; all filtering happens in Rust beforehand.
-    conn.execute_batch(
-        "DROP TABLE IF EXISTS _cleanup_targets;
-         CREATE TEMP TABLE _cleanup_targets (
-             idx  BIGINT NOT NULL,
-             lo   TEXT NOT NULL,
-             hi   TEXT NOT NULL
-         );",
-    )?;
-    {
-        // The temp catalog, not the snapshot: queries open it read-only.
-        let mut app = conn.appender_to_catalog_and_db("_cleanup_targets", "temp", "main")?;
-        for (i, r) in roots.iter().enumerate() {
-            let (lo, hi) = if r.is_dir {
-                (format!("{}/", r.path), format!("{}0", r.path))
-            } else {
-                (r.path.clone(), format!("{}\u{1}", r.path))
-            };
-            app.append_row(duckdb::params![i as i64, lo, hi])?;
-        }
-        app.flush()?;
-    }
-
-    // One grouped range-join. DuckDB plans this as an IEJoin (inequality
-    // join), which is roughly linear in N_files + N_targets.
-    let mut grouped = conn.prepare(
-        "SELECT t.idx,
-                COALESCE(SUM(f.size), 0) AS bytes,
-                COUNT(f.path)             AS files,
-                MAX(f.mtime)              AS newest,
-                COALESCE(SUM(COALESCE(f.physical_size, f.size)), 0) AS physical
-         FROM _cleanup_targets t
-         LEFT JOIN files f
-           ON f.is_dir = false
-          AND f.path >= t.lo
-          AND f.path <  t.hi
-         GROUP BY t.idx",
-    )?;
-    let rows = grouped.query_map([], |row| {
-        Ok((
-            row.get::<_, i64>(0)?,
-            row.get::<_, i64>(1)?,
-            row.get::<_, i64>(2)?,
-            row.get::<_, Option<i64>>(3)?,
-            row.get::<_, i64>(4)?,
-        ))
-    })?;
+    //       1.77 M-row snapshot (nested-loop join, per-row LIKE).
+    //   v2: one aggregation query per target with a path-range predicate —
+    //       79–250 s on homes with thousands of targets (dispatch overhead).
+    //   v3/v4: one grouped range-join against a TEMP table of targets
+    //       (IEJoin). < 1 s on 1 M rows, but the IEJoin sorts every path:
+    //       8–17 s on a real 10.9 M-row home, which made the GUI's review
+    //       look dead.
+    //   v5 (this): no join and no sort. Each file is keyed by the root it
+    //       belongs to, computed from its own path, and summed with a hash
+    //       GROUP BY — one linear pass for the basename rules (the outermost
+    //       `/<basename>/` segment, by regex) and one range scan per
+    //       location parent (the child name after `<parent>/`). Roots look
+    //       their sums up by path.
+    let sums = root_sums(conn, &roots)?;
 
     let mut out: Vec<CleanupHit> = Vec::with_capacity(roots.len());
-    for (idx, bytes, files, newest, physical) in rows.flatten() {
-        let Some(r) = roots.get(idx as usize) else {
-            continue;
-        };
+    for r in &roots {
+        let (bytes, files, newest, physical) = sums.get(&r.path).copied().unwrap_or_default();
         // Newest mtime of the root and everything beneath it.
         let newest = match (newest, r.self_mtime) {
             (Some(a), Some(b)) => Some(a.max(b)),
@@ -1108,29 +1064,145 @@ pub fn scan_with(
             newest_mtime: newest,
         });
     }
-    drop(grouped);
-    let _ = conn.execute_batch("DROP TABLE IF EXISTS _cleanup_targets;");
-
     let mut out = drop_nested(out);
     out.sort_by_key(|h| std::cmp::Reverse(h.bytes));
     out.truncate(limit);
     Ok(out)
 }
 
+/// `(logical bytes, files, newest mtime, physical bytes)` of the regular
+/// files beneath a root (or of the root itself, for a file root).
+type Sum = (i64, i64, Option<i64>, i64);
+
+/// Sum every root's files in linear passes (no join, no sort).
+///
+/// Basename roots: a file belongs to the outermost `/<basename>/` segment of
+/// its path (roots are outermost-pruned, and a filter that drops an outer
+/// match drops everything beneath it too, so the outermost match is the
+/// root). Location roots: a file under `<parent>/` belongs to
+/// `<parent>/<first segment>`; a file root keys to itself.
+fn root_sums(conn: &Connection, roots: &[Root]) -> Result<HashMap<String, Sum>> {
+    let mut sums: HashMap<String, Sum> = HashMap::new();
+    let mut collect = |sql: &str, params: Vec<duckdb::types::Value>| -> Result<()> {
+        let refs: Vec<&dyn duckdb::ToSql> =
+            params.iter().map(|v| v as &dyn duckdb::ToSql).collect();
+        let mut stmt = conn.prepare(sql)?;
+        let rows = stmt.query_map(refs.as_slice(), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                (
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                    row.get::<_, i64>(4)?,
+                ),
+            ))
+        })?;
+        for (k, v) in rows.flatten() {
+            sums.insert(k, v);
+        }
+        Ok(())
+    };
+    const AGG: &str =
+        "sum(size)::BIGINT, count(*), max(mtime), sum(coalesce(physical_size, size))::BIGINT";
+
+    let mut basenames: Vec<String> = roots
+        .iter()
+        .filter(|r| !r.by_location)
+        .filter_map(|r| r.path.rsplit('/').next().map(str::to_string))
+        .collect();
+    basenames.sort();
+    basenames.dedup();
+    if !basenames.is_empty() {
+        // The outermost `/<b>/` segment is the earliest one in the path:
+        // for each basename, the root's end is strpos + len('/<b>') - 1, and
+        // the key is the prefix up to the smallest such end. `contains`
+        // prefilters (a plain substring scan, far cheaper than a regex).
+        let mut ends: Vec<String> = Vec::new();
+        let mut filters: Vec<String> = Vec::new();
+        let mut params: Vec<duckdb::types::Value> = Vec::new();
+        for b in &basenames {
+            let seg = format!("/{b}/");
+            let tail = b.chars().count() as i64; // len('/<b>') - 1
+            ends.push(format!(
+                "CASE WHEN strpos(path, ?) > 0 THEN strpos(path, ?) + {tail} END"
+            ));
+            params.push(seg.clone().into());
+            params.push(seg.into());
+        }
+        for b in &basenames {
+            filters.push("contains(path, ?)".to_string());
+            params.push(format!("/{b}/").into());
+        }
+        let end = if ends.len() == 1 {
+            ends.remove(0)
+        } else {
+            format!("least({})", ends.join(", "))
+        };
+        collect(
+            &format!(
+                "SELECT k, {AGG} FROM (
+                   SELECT substr(path, 1, {end}) AS k, size, mtime, physical_size
+                   FROM files WHERE NOT is_dir AND ({}))
+                 GROUP BY k",
+                filters.join(" OR ")
+            ),
+            params,
+        )?;
+    }
+
+    let mut parents: Vec<&str> = roots
+        .iter()
+        .filter(|r| r.by_location)
+        .filter_map(|r| r.path.rsplit_once('/').map(|(p, _)| p))
+        .collect();
+    parents.sort();
+    parents.dedup();
+    for p in parents {
+        let lo = format!("{p}/");
+        // DuckDB's substr counts characters, not bytes.
+        let start = lo.chars().count() as i64 + 1;
+        collect(
+            &format!(
+                "SELECT ? || split_part(substr(path, ?), '/', 1) AS k, {AGG}
+                 FROM files WHERE NOT is_dir AND path >= ? AND path < ?
+                 GROUP BY k"
+            ),
+            vec![
+                lo.clone().into(),
+                duckdb::types::Value::BigInt(start),
+                lo.into(),
+                format!("{p}0").into(),
+            ],
+        )?;
+    }
+    Ok(sums)
+}
+
 /// Drop hits that sit inside another hit, so bytes are never counted twice
 /// and `apply` never removes a path twice (e.g. a `node_modules` inside an
 /// old download).
-fn drop_nested(mut hits: Vec<CleanupHit>) -> Vec<CleanupHit> {
-    hits.sort_by(|a, b| a.path.cmp(&b.path));
-    let mut out: Vec<CleanupHit> = Vec::with_capacity(hits.len());
-    for h in hits {
+fn drop_nested(hits: Vec<CleanupHit>) -> Vec<CleanupHit> {
+    outermost(hits, |h| h.path.as_str())
+}
+
+/// Keep only items not inside another item's path (outermost wins).
+///
+/// Sorted by path *component*, so every descendant directly follows its
+/// ancestor. A plain string sort would put `/a/b c` between `/a/b` and
+/// `/a/b/x` (space sorts before `/`), and `/a/b/x` would escape as "not
+/// nested".
+fn outermost<T>(mut items: Vec<T>, path: impl Fn(&T) -> &str) -> Vec<T> {
+    items.sort_by(|a, b| path(a).split('/').cmp(path(b).split('/')));
+    let mut out: Vec<T> = Vec::with_capacity(items.len());
+    for it in items {
         let nested = out.last().is_some_and(|k| {
-            h.path
-                .strip_prefix(k.path.as_str())
+            path(&it)
+                .strip_prefix(path(k))
                 .is_some_and(|r| r.starts_with('/'))
         });
         if !nested {
-            out.push(h);
+            out.push(it);
         }
     }
     out
@@ -1654,6 +1726,18 @@ mod tests {
         ]);
         let paths: Vec<_> = out.iter().map(|h| h.path.as_str()).collect();
         assert_eq!(paths, vec!["/a/b", "/a/bc", "/z"]);
+    }
+
+    #[test]
+    fn drop_nested_sees_through_a_sibling_with_a_space() {
+        // "/a/b c" sorts between "/a/b" and "/a/b/x" as plain strings.
+        let mk = |p: &str| CleanupHit {
+            path: p.into(),
+            ..hit("x", 1, 1)
+        };
+        let out = drop_nested(vec![mk("/a/b/x"), mk("/a/b c"), mk("/a/b")]);
+        let paths: Vec<_> = out.iter().map(|h| h.path.as_str()).collect();
+        assert_eq!(paths, vec!["/a/b", "/a/b c"]);
     }
 
     fn real_hit(category: &str, path: &Path, bytes: u64) -> CleanupHit {

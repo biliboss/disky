@@ -179,6 +179,51 @@ async function reviewLandsOnResultsWithTheCardsCategories() {
   expect(invoke.mock.calls.filter(([cmd]) => cmd === "clean")).toHaveLength(0);
 }
 
+/**
+ * A slow engine (a large home takes seconds to build the view): the card's
+ * Review shows the spinner after 200 ms and can't be pressed twice, then
+ * lands on results when the view arrives.
+ */
+async function slowReviewShowsTheSpinnerOnItsCard() {
+  fakeEngine();
+  const a = await renderAssistant();
+  const base = invoke.getMockImplementation()!;
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  invoke.mockImplementation(async (cmd: string, args: any) => {
+    if (cmd === "load_cleanup_view") await gate;
+    return base(cmd, args);
+  });
+  const card = within(a).getByTestId("suggestion-left");
+  const button = within(card).getByRole("button", { name: "Review" });
+  fireEvent.click(button);
+  expect(button).toHaveAttribute("aria-busy", "true");
+  expect(button).toBeDisabled();
+  await waitFor(() => expect(card.querySelector(".busy-spinner")).not.toBeNull(), { timeout: 1000 });
+  fireEvent.click(button);
+  expect(invoke.mock.calls.filter(([cmd]) => cmd === "load_cleanup_view")).toHaveLength(1);
+  release();
+  const results = await screen.findByTestId("results");
+  expect(within(results).getByTestId("results-kicker")).toHaveTextContent(/^Prepared by Claude Code/);
+}
+
+/** A failed review says why on the card that was clicked, not off-screen. */
+async function reviewFailureIsShownOnItsCard() {
+  fakeEngine();
+  const a = await renderAssistant();
+  const base = invoke.getMockImplementation()!;
+  invoke.mockImplementation(async (cmd: string, args: any) => {
+    if (cmd === "load_cleanup_view")
+      throw { code: "lock-held", title: "snapshot locked", detail: "The snapshot is busy. Try again in a moment.", retryable: true };
+    return base(cmd, args);
+  });
+  const card = within(a).getByTestId("suggestion-left");
+  fireEvent.click(within(card).getByRole("button", { name: "Review" }));
+  expect(await within(card).findByRole("alert")).toHaveTextContent("The snapshot is busy. Try again in a moment.");
+  expect(within(card).getByRole("button", { name: "Review" })).not.toBeDisabled();
+  expect(screen.queryByTestId("results")).toBeNull();
+}
+
 async function reviewAndConfirmOpensTheDialogAndCleansAsTheAgent() {
   fakeEngine();
   const a = await renderAssistant();
@@ -265,6 +310,8 @@ describe("Assistant feed (REQ-DSCR-009)", () => {
   it("the sidebar badge and Smart Clean shortcut count the actionable cards (A5)", badgeAndShortcutCountTheActionableCards);
   it("Review lands on results with the kicker and exactly the card's categories (A3)", reviewLandsOnResultsWithTheCardsCategories);
   it("Review & confirm opens the dialog; Clean now cleans as the agent (A3)", reviewAndConfirmOpensTheDialogAndCleansAsTheAgent);
+  it("a slow Review shows the spinner on its card and can't be pressed twice (A3)", slowReviewShowsTheSpinnerOnItsCard);
+  it("a failed Review says why on its card (A3)", reviewFailureIsShownOnItsCard);
   it("the below-goal notification reads Assistant · <agent>", belowGoalNotificationNamesTheAgent);
 });
 

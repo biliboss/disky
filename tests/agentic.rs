@@ -923,12 +923,18 @@ fn large_fixture(dir: &std::path::Path) -> PathBuf {
     disky::db::create_schema(&conn).unwrap();
     let now = chrono::Utc::now().timestamp();
     let old = now - 400 * 86_400;
-    for (path, gb, days) in [
-        ("/data/vm.utm", 38, 240),
-        ("/data/master.mov", 18, 800),
-        ("/data/ubuntu.iso", 4, 400),
-        ("/data/tiny.bin", 1, 900),
+    // Real (tiny) files: `large` leaves out files deleted since the scan.
+    let data = dir.join("data");
+    fs::create_dir_all(&data).unwrap();
+    for (name, gb, days) in [
+        ("vm.utm", 38, 240),
+        ("master.mov", 18, 800),
+        ("ubuntu.iso", 4, 400),
+        ("tiny.bin", 1, 900),
     ] {
+        fs::write(data.join(name), b"x").unwrap();
+        let path = data.join(name);
+        let path = path.to_str().unwrap();
         conn.execute(
             "INSERT INTO files (path, name, size, physical_size, mtime, is_dir, depth, atime)
              VALUES (?, ?, ?, ?, ?, false, 2, ?)",
@@ -943,7 +949,16 @@ fn large_fixture(dir: &std::path::Path) -> PathBuf {
         )
         .unwrap();
     }
-    disky::db::write_scan_meta(&conn, "/data", old, Some(old + 1), true, 4, 0).unwrap();
+    disky::db::write_scan_meta(
+        &conn,
+        data.to_str().unwrap(),
+        old,
+        Some(old + 1),
+        true,
+        4,
+        0,
+    )
+    .unwrap();
     db
 }
 
@@ -963,10 +978,9 @@ fn large_lists_files_over_2gb_with_filters_and_counts() {
         .iter()
         .map(|r| r["path"].as_str().unwrap())
         .collect();
-    assert_eq!(
-        paths,
-        ["/data/vm.utm", "/data/master.mov", "/data/ubuntu.iso"]
-    );
+    let data = home.join("data");
+    let at = |n: &str| data.join(n).to_str().unwrap().to_string();
+    assert_eq!(paths, [at("vm.utm"), at("master.mov"), at("ubuntu.iso")]);
     assert_eq!(v["count"], 3);
     assert_eq!(v["total_bytes"].as_u64().unwrap(), 60_000_000_000);
     let first = &v["records"][0];

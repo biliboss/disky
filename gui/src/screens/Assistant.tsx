@@ -5,6 +5,7 @@ import { loadCleanupView, setPrefs } from "../lib/engine";
 import { CHECK_FREQUENCIES, parseEngineError, type EngineError, type Suggestion } from "../lib/contract";
 import { diskState, setFromView, setGoal } from "../lib/diskState";
 import { NUMERIC_CLASS, formatBytes } from "../lib/format";
+import { useDelayedBusy } from "../lib/busy";
 import { GoalTag } from "../shell/GoalTag";
 import { reviewFromNotification, reviewSuggestion } from "./smartClean/phase";
 import { setSmartCleanState } from "./smartClean/store";
@@ -62,6 +63,11 @@ export function Assistant() {
   const navigate = useNavigate();
   const [error, setError] = createSignal<EngineError | null>(null);
   const [draftGb, setDraftGb] = createSignal<number | null>(null);
+  /** The card whose review is opening, and the error its review hit. */
+  const [opening, setOpening] = createSignal<string | null>(null);
+  const [reviewError, setReviewError] = createSignal<{ key: string; error: EngineError } | null>(null);
+  /** The spinner shows only once opening crosses 200 ms (REQ-DCLEAN-017). */
+  const openingBusy = useDelayedBusy(() => opening() !== null);
   onMount(() => void reloadAssistant());
 
   const view = () => assistantState().view;
@@ -74,8 +80,10 @@ export function Assistant() {
   /** Open the review the card offers (A3): the engine's view, then Smart Clean. */
   async function review(s: Suggestion) {
     const v = view();
-    if (!v) return;
+    if (!v || opening()) return;
     setError(null);
+    setReviewError(null);
+    setOpening(s.key);
     try {
       // Smart Clean acts only on what this view lists (REQ-DCLEAN-029.A1).
       const cleanup = await loadCleanupView();
@@ -87,7 +95,11 @@ export function Assistant() {
       );
       navigate("/");
     } catch (e) {
-      setError(parseEngineError(e));
+      // Shown on the card that was clicked: the feed's own alert can be
+      // scrolled out of sight.
+      setReviewError({ key: s.key, error: parseEngineError(e) });
+    } finally {
+      setOpening(null);
     }
   }
 
@@ -137,6 +149,9 @@ export function Assistant() {
                   <SuggestionCard
                     suggestion={s}
                     agentName={v().agent_name}
+                    opening={opening() === s.key}
+                    busy={openingBusy() && opening() === s.key}
+                    error={reviewError()?.key === s.key ? reviewError()!.error : null}
                     onReview={() => void review(s)}
                     onDismiss={() => dismiss(s.key)}
                   />
@@ -271,6 +286,12 @@ export function Assistant() {
 interface SuggestionCardProps {
   suggestion: Suggestion;
   agentName: string;
+  /** Its review is opening (the engine is loading the view). */
+  opening: boolean;
+  /** Opening has taken over 200 ms: show the spinner. */
+  busy: boolean;
+  /** What opening its review hit, if anything. */
+  error: EngineError | null;
   onReview: () => void;
   onDismiss: () => void;
 }
@@ -302,7 +323,16 @@ function SuggestionCard(props: SuggestionCardProps) {
       <p class="assistant-card-text">{s().text}</p>
       <Show when={s().actionable}>
         <div class="assistant-card-actions">
-          <button type="button" class="btn btn-primary" onClick={() => props.onReview()}>
+          <button
+            type="button"
+            class="btn btn-primary"
+            aria-busy={props.opening ? "true" : "false"}
+            disabled={props.opening}
+            onClick={() => props.onReview()}
+          >
+            <Show when={props.busy}>
+              <span class="busy-spinner" aria-hidden="true" />
+            </Show>
             {labels().primary}
           </button>
           <button type="button" class="btn btn-secondary" onClick={() => props.onDismiss()}>
@@ -313,6 +343,13 @@ function SuggestionCard(props: SuggestionCardProps) {
             {s().bytes !== null ? formatBytes(s().bytes!) : ""}
           </span>
         </div>
+      </Show>
+      <Show when={props.error}>
+        {(e) => (
+          <p class="assistant-error" role="alert">
+            {e().detail}
+          </p>
+        )}
       </Show>
     </article>
   );

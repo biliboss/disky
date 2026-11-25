@@ -90,6 +90,10 @@ are dropped (outermost wins), so bytes are never counted twice. No app list
 `--target` previews every category; `--apply` with no `--target` covers the
 dev categories only — system categories must be named. Still one grouped
 range-join: ~0.2 s on a 1.05 M-row snapshot (release).
+Nested matches are pruned to the outermost **before** summing
+(`cleanup::outermost`), and `cleanup::root_sums` sums with linear passes
+(no join or sort over every path): ~5 s on a real 10.9 M-row home with
+31 k `node_modules`, where the IEJoin took 8–17 s.
 
 **Performance (v0.11.0):** Single grouped range-join with a TEMP table
 of target dirs. DuckDB plans zone-maps + IEJoin in one pass.
@@ -679,6 +683,13 @@ match on `type`, not the localized `detail` string.
 Auto-saved to `~/Library/Application Support/disky/YYYY-MM-DD_HH-MM.db` via `dirs::data_local_dir()`.
 
 ## CI
+
+**Regression suite:** `scripts/regression.sh [all|engine|gui]` runs every
+stage CI runs. Every bug fix lands with a regression test in it. The CI `gui`
+job (macOS) runs vitest, the token/boundary/control lints, tsc, Playwright
+(pixel match, axe, keyboard and the cross-screen journeys in
+`gui/tests/visual/journeys.spec.ts`) and the Tauri crate's fmt, clippy and
+tests.
 
 `cargo fmt --check` + `cargo clippy -- -D warnings` + `cargo build --release` on `macos-latest` AND `ubuntu-latest`.
 Run `cargo fmt` before committing — rustfmt has opinions on inline if-else.

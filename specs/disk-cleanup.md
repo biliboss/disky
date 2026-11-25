@@ -1210,6 +1210,8 @@ verifies:
 The engine currently finds developer artefacts (`node_modules`, `target`, …). It MUST also produce the snapshot's categories: system caches, app caches, temporary files, logs, the Trash, app leftovers and old downloads. Each carries a `safety` of `safe` or `review`.
 
 implementations:
+  - src/cleanup.rs:outermost
+  - src/cleanup.rs:root_sums
   - src/cleanup.rs:scan_with
   - src/cleanup.rs:apply
   - src/cleanup.rs:InstalledApps
@@ -1222,6 +1224,8 @@ implementations:
   - src/cleanup.rs:location_roots
 
 verifies:
+  - src/cleanup.rs:drop_nested_sees_through_a_sibling_with_a_space
+  - tests/lib_integration.rs:nested_dev_folders_sum_once_under_the_outermost
   - tests/lib_integration.rs:cleanup_reports_system_categories
   - src/cleanup.rs:dev_categories_keep_names_and_are_review
   - src/cleanup.rs:safety_serialises_lowercase
@@ -1242,6 +1246,8 @@ verifies:
 - Paths inside a user-excluded folder, or outside the scanned root, are never returned as hits.
 <!-- id: REQ-DCLEAN-033.A4 -->
 - The extension keeps the existing performance bound: under 1 s on a 1.77 M-row snapshot (`cleanup_is_fast_on_large_snapshot`).
+  - Nested matches are pruned to the outermost before anything is summed, and every file counts once, under its outermost match. A match nested inside a recently used one is never reported on its own.
+  - Sums come from linear passes, with no join or sort over every path, so a 10 M-row home stays in seconds, not tens of seconds.
 <!-- id: REQ-DCLEAN-033.A5 -->
 - A category location that doesn't exist on the machine produces no hit and no error.
 

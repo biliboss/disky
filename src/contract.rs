@@ -375,7 +375,15 @@ pub fn load(snapshot_path: &str, prefs: &Preferences) -> Result<(CleanupView, Ve
     let disk = disk_near(Path::new(root))?;
     let ctx = cleanup::ScanContext::from_snapshot(&conn).with_prefs(prefs);
     let hits = view_hits_with(&conn, &ctx)?;
-    let large = large_files_count_in(&conn, &ctx)?;
+    // Exactly what the Large files screen lists (files gone since the scan
+    // left out), so the shortcut's count matches the screen's.
+    let large = on_disk_only(crate::large::large(
+        &conn,
+        LargeFilter::All,
+        &ctx,
+        ctx.now_secs,
+    )?)
+    .count as u64;
     let now = Utc::now().timestamp();
     let mut view = cleanup_view(meta.as_ref(), &hits, disk, prefs, large, now);
     view.skipped_paths = crate::db::read_scan_skipped(&conn);
@@ -427,7 +435,23 @@ pub fn large_view(
 ) -> Result<LargeView> {
     let conn = crate::db::open_read(snapshot_path)?;
     let ctx = cleanup::ScanContext::from_snapshot(&conn).with_prefs(prefs);
-    crate::large::large(&conn, filter, &ctx, ctx.now_secs)
+    Ok(on_disk_only(crate::large::large(
+        &conn,
+        filter,
+        &ctx,
+        ctx.now_secs,
+    )?))
+}
+
+/// Leave out files deleted since the scan: trashing one could only fail.
+/// Files this size are few, so one lstat each is cheap. The Smart Clean
+/// shortcut counts the same list, so the two never disagree.
+pub fn on_disk_only(mut view: LargeView) -> LargeView {
+    view.records
+        .retain(|f| crate::large::still_on_disk(&f.path));
+    view.count = view.records.len();
+    view.total_bytes = view.records.iter().map(|f| f.bytes).sum();
+    view
 }
 
 pub use crate::dupes::{DupeCopy, DupeGroup, DupesView};
@@ -512,6 +536,22 @@ pub fn assistant_view_of(
     }
 }
 
+/// What a cleanup view depends on: the snapshot (path and modification
+/// time) and the saved preferences. Two loads with the same key build the
+/// same view, so a client may reuse the first (the GUI's Assistant and
+/// Smart Clean review share one load instead of computing it twice).
+pub fn view_key(snapshot_path: &str, prefs: &Preferences) -> Result<String> {
+    let modified = std::fs::metadata(snapshot_path)?
+        .modified()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    Ok(format!(
+        "{snapshot_path}|{modified}|{}",
+        serde_json::to_string(prefs)?
+    ))
+}
+
 /// The view and hits behind the Assistant: the snapshot at `snapshot_path`
 /// (scoped by `prefs`, as Smart Clean's), or the empty view when there is
 /// none.
@@ -530,14 +570,20 @@ pub fn assistant_inputs(
 /// The GUI's `load_assistant` returns exactly this.
 pub fn assistant_view(snapshot_path: Option<&str>, prefs: &Preferences) -> Result<AssistantView> {
     let (view, hits) = assistant_inputs(snapshot_path, prefs)?;
+    Ok(assistant_view_from(&view, &hits))
+}
+
+/// [`assistant_view`] from a view already built (this machine's agents,
+/// home and clock), so a client holding the view need not rebuild it.
+pub fn assistant_view_from(view: &CleanupView, hits: &[CleanupHit]) -> AssistantView {
     let home = std::env::var_os("HOME").map(PathBuf::from);
-    Ok(assistant_view_of(
-        &view,
-        &hits,
+    assistant_view_of(
+        view,
+        hits,
         crate::agents::detect(),
         home.as_deref(),
         Utc::now().timestamp(),
-    ))
+    )
 }
 
 /// What moving reviewed files to the Trash did (REQ-DSCR-006.A1).
@@ -1516,30 +1562,45 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let db = tmp.path().join("s.db");
         let db = db.to_str().unwrap();
+        // Real (tiny) files: the view leaves out files gone from disk. The
+        // snapshot's sizes are what the scan recorded.
+        let u = tmp.path().join("u");
+        std::fs::create_dir_all(u.join("ex")).unwrap();
+        let at = |rel: &str| u.join(rel).to_string_lossy().into_owned();
+        for rel in ["ex/a.img", "b.img", "c.img", "gone.img"] {
+            std::fs::write(u.join(rel), b"x").unwrap();
+        }
         {
             let conn = crate::db::open(db).unwrap();
             crate::db::create_schema(&conn).unwrap();
             let old = Utc::now().timestamp() - 400 * 86_400;
-            for (p, gb) in [("/u/ex/a.img", 9), ("/u/b.img", 3), ("/u/c.img", 1)] {
+            for (rel, gb) in [("ex/a.img", 9), ("b.img", 3), ("c.img", 1), ("gone.img", 4)] {
+                let p = at(rel);
                 conn.execute(
                     "INSERT INTO files (path, name, size, physical_size, mtime, is_dir, depth, atime)
                      VALUES (?, ?, 0, ?, ?, false, 2, ?)",
-                    duckdb::params![p, basename(p), gb * 1_000_000_000i64, old, old],
+                    duckdb::params![p, basename(&p), gb * 1_000_000_000i64, old, old],
                 )
                 .unwrap();
             }
-            crate::db::write_scan_meta(&conn, "/u", 0, Some(1), true, 0, 0).unwrap();
+            crate::db::write_scan_meta(&conn, &at(""), 0, Some(1), true, 0, 0).unwrap();
         }
+        // Deleted after the scan: listed in the snapshot, not offered.
+        std::fs::remove_file(u.join("gone.img")).unwrap();
         let prefs = Preferences {
-            excluded: vec!["/u/ex".into()],
+            excluded: vec![at("ex")],
             ..Preferences::default()
         };
         let v = large_view(db, LargeFilter::All, &prefs).unwrap();
         assert_eq!(v.count, 1);
-        assert_eq!(v.records[0].path, "/u/b.img");
+        assert_eq!(v.records[0].path, at("b.img"));
+        assert_eq!(v.total_bytes, 3_000_000_000);
         assert!(v.records[0].unused_1y);
         let all = large_view(db, LargeFilter::All, &Preferences::default()).unwrap();
         assert_eq!(all.count, 2);
+        // The Smart Clean shortcut counts exactly what the screen lists.
+        let (view, _) = load(db, &Preferences::default()).unwrap();
+        assert_eq!(view.large_files_count, 2);
     }
 
     #[test]

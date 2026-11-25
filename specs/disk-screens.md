@@ -189,6 +189,7 @@ verifies:
 ## The engine MUST list large files with their last-opened time
 
 implementations:
+  - src/contract.rs:on_disk_only
   - src/db.rs:FileRecord
   - src/db.rs:create_schema
   - src/db.rs:append_batch
@@ -208,6 +209,7 @@ implementations:
   - gui/src/lib/engine.ts:loadLarge
 
 verifies:
+  - src/contract.rs:large_view_reads_the_snapshot_with_prefs
   - src/large.rs:large_lists_files_of_2gb_and_up_largest_first
   - src/large.rs:large_filters_over_10gb_and_unused_1y
   - src/large.rs:unused_1y_is_strictly_more_than_365_days
@@ -231,6 +233,7 @@ verifies:
   - an `unused_1y` flag, true when the last-opened time is more than 365 days ago.
 <!-- id: REQ-DSCR-004.A2 -->
 - `over-10gb` keeps files of at least 10 GB, and `unused-1y` keeps flagged files. The envelope carries the count and total bytes of the filtered list.
+  - A file deleted since the scan is left out, because trashing it could only fail. The Smart Clean shortcut counts the same list.
 <!-- id: REQ-DSCR-004.A3 -->
 - A snapshot taken before access times were recorded lists files with a null last-opened time and `unused_1y` false, rather than failing.
 
@@ -409,6 +412,9 @@ verifies:
 ## The Assistant screen MUST show the suggestion feed and MUST only ever open a review
 
 implementations:
+  - gui/src-tauri/src/main.rs:cached_load
+  - src/contract.rs:assistant_view_from
+  - src/contract.rs:view_key
   - gui/src/screens/Assistant.tsx:Assistant
   - gui/src/screens/assistant/store.ts:visibleSuggestions
   - gui/src/screens/assistant/store.ts:actionableCount
@@ -427,6 +433,8 @@ implementations:
   - gui/src/App.tsx:SCREENS
 
 verifies:
+  - gui/src/screens/__tests__/Assistant.test.tsx:reviewFailureIsShownOnItsCard
+  - gui/src/screens/__tests__/Assistant.test.tsx:slowReviewShowsTheSpinnerOnItsCard
   - gui/src/screens/__tests__/Assistant.test.tsx:feedRendersTheEngineCardsWithTheAgentName
   - gui/src/screens/__tests__/Assistant.test.tsx:dismissingACardHidesIt
   - gui/src/screens/__tests__/Assistant.test.tsx:checksOffShowsTheEmptyFeedAndPaused
@@ -462,6 +470,8 @@ verifies:
 - "Review & confirm" opens Smart Clean results with exactly the safe categories selected and the confirmation dialog open. "Review" opens results with exactly that suggestion's categories selected and the first one expanded.
   - In both cases the results kicker reads "Prepared by <agent> · review before cleaning", and the history title is "Assistant cleanup".
   - Nothing is cleaned until "Clean now".
+  - While the review loads, the clicked button reads busy, can't be pressed again, and shows the spinner once the wait passes 200 ms. A failure is shown on that card, never only at the top of the feed.
+  - The review reuses the view the feed was built from when the snapshot and preferences are unchanged, so it doesn't rebuild it.
 <!-- id: REQ-DSCR-009.A4 -->
 - "Not now" / "Dismiss" hides that card for the rest of the session.
 - With proactive checks off, the feed is empty. An empty feed shows "Nothing to review. You’ll hear from the assistant when something changes."
@@ -682,6 +692,7 @@ verifies:
 ## The Duplicates screen MUST let the user choose which copy to keep and remove the rest to the Trash
 
 implementations:
+  - gui/src-tauri/src/cache.rs:Keyed
   - gui/src/screens/Duplicates.tsx:Duplicates
   - gui/src/screens/duplicates/dupesCopy.ts:kicker
   - gui/src/screens/duplicates/dupesCopy.ts:eachLabel
@@ -696,6 +707,8 @@ implementations:
   - gui/src/App.tsx:SCREENS
 
 verifies:
+  - gui/src-tauri/src/cache.rs:same_key_within_ttl_is_reused
+  - gui/src-tauri/src/cache.rs:new_key_expiry_or_clear_rebuilds
   - gui/src/screens/__tests__/Duplicates.test.tsx:listsGroupsAsCardsWithKickerAndEachTag
   - gui/src/screens/__tests__/Duplicates.test.tsx:firstCopyIsKeptAndClickingChoosesAnother
   - gui/src/screens/__tests__/Duplicates.test.tsx:arrowKeysMoveTheKeptCopyWithinAGroup
@@ -727,6 +740,8 @@ verifies:
   - The meter refreshes.
 <!-- id: REQ-DSCR-014.A5 -->
 - No groups reads "No duplicates found." (gap-fill). No snapshot shows "No scans yet" with "Start scan". While duplicates are being computed, the screen shows the busy indicator per REQ-DCLEAN-017.
+<!-- id: REQ-DSCR-014.A6 -->
+- A return to the screen reuses the last result while the snapshot and preferences are unchanged, for up to 15 minutes, instead of hashing again. Any clean, trash or restore discards it, so the next visit finds duplicates afresh.
 
 <!-- id: REQ-DSCR-015 -->
 ## The History screen MUST list every recorded clean and restore eligible ones
@@ -826,6 +841,21 @@ verifies:
 <!-- id: REQ-DSCR-017 -->
 ## Every new screen MUST be pixel-checked against the snapshot
 
+implementations:
+  - gui/tests/visual/journeys.spec.ts:stubWholeApp
+  - gui/tests/visual/engineStub.ts:stubEngine
+
+verifies:
+  - gui/tests/visual/journeys.spec.ts:everySidebarEntryOpensItsScreen
+  - gui/tests/visual/journeys.spec.ts:smartCleanScanCleanUndoShowsInHistory
+  - gui/tests/visual/journeys.spec.ts:everyAssistantCardOpensItsReview
+  - gui/tests/visual/journeys.spec.ts:assistantPanelSavesEveryControl
+  - gui/tests/visual/journeys.spec.ts:spaceMapDrillRevealUp
+  - gui/tests/visual/journeys.spec.ts:largeFilesTrashShowsInHistory
+  - gui/tests/visual/journeys.spec.ts:duplicatesRemoveShowsInHistory
+  - gui/tests/visual/journeys.spec.ts:historyRestoresAnEntry
+  - gui/tests/visual/journeys.spec.ts:settingsSaveAndTheAssistantReadsThem
+
 **Acceptance**
 <!-- id: REQ-DSCR-017.A1 -->
 - Each of the six screens has a Playwright visual test at 1200×780 with `maxDiffPixelRatio` 0.01 against the snapshot rendered with `startScreen` set to that screen. Each test feeds fixtures shaped like the snapshot's sample data and masks only live numbers and the traffic-light slot.
@@ -833,3 +863,5 @@ verifies:
 - Each screen passes an axe-core run with zero serious or critical violations, and the keyboard-only test covers its primary action.
 <!-- id: REQ-DSCR-017.A3 -->
 - No placeholder screen remains: every sidebar entry renders its real screen.
+<!-- id: REQ-DSCR-017.A4 -->
+- Every test above, and every regression test added for a bug, runs on every push and pull request: the CI `gui` job runs the GUI suite, and the `test` job runs the engine's. `scripts/regression.sh` runs the same stages locally.
