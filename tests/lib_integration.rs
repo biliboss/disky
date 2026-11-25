@@ -756,3 +756,38 @@ fn contract_load_builds_view_from_snapshot() {
     assert_eq!(view.categories[0].bytes, 120);
     assert_eq!(hits.len(), 1);
 }
+
+/// REQ-DCLEAN-018.A2: a scan that cannot read a directory completes, keeps
+/// what it could read, and records how many paths it skipped — the count the
+/// GUI's "N paths skipped" line reads from the snapshot.
+#[cfg(unix)]
+#[test]
+fn scan_counts_permission_skipped_paths() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("tree");
+    let locked = root.join("locked");
+    fs::create_dir_all(&locked).unwrap();
+    fs::write(locked.join("secret.bin"), b"s").unwrap();
+    fs::write(root.join("open.txt"), b"o").unwrap();
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+
+    let db_path = dir.path().join("snap.db");
+    let outcome = disky::scan::run(root.to_str().unwrap(), db_path.to_str().unwrap());
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+    let outcome = outcome.expect("scan completes despite the unreadable dir");
+    assert!(outcome.complete);
+    assert!(outcome.skipped >= 1, "skipped: {}", outcome.skipped);
+
+    let conn = db::open(db_path.to_str().unwrap()).unwrap();
+    assert_eq!(db::read_scan_skipped(&conn), outcome.skipped);
+    let s = query::stats(&conn).unwrap();
+    assert!(s.files >= 1, "readable paths are still recorded");
+    let (view, _) = disky::contract::load(
+        db_path.to_str().unwrap(),
+        disky::contract::DEFAULT_GOAL_BYTES,
+        disky::contract::Preferences::default(),
+    )
+    .unwrap();
+    assert_eq!(view.skipped_paths, outcome.skipped);
+}

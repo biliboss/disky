@@ -2,23 +2,41 @@
  * The GUI's only door to the disky engine (REQ-DCLEAN-001). Each function
  * delegates to one Tauri command in `src-tauri/src/main.rs`, which delegates
  * to the `disky` library crate. Every payload is parsed against the contract
- * (REQ-DCLEAN-027) before a component sees it.
+ * (REQ-DCLEAN-027) before a component sees it, and every failure is an
+ * {@link EngineError} typed by disky's exit-code slug (REQ-DCLEAN-018).
  */
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
+  parseCleanProgress,
   parseCleanResult,
   parseCleanupView,
+  parseEngineError,
+  parseRestoreResult,
   parseScanProgress,
   type CleanMode,
+  type CleanProgress,
   type CleanResult,
   type CleanupView,
+  type RestoreResult,
   type ScanProgress,
 } from "./contract";
-import { setFromClean } from "./diskState";
+import { setDisk, setFromClean } from "./diskState";
 
 /** Event channel the backend streams scan progress on. */
 export const SCAN_PROGRESS_EVENT = "scan://progress";
+
+/** Event channel the backend streams clean progress on, one event per item. */
+export const CLEAN_PROGRESS_EVENT = "clean://progress";
+
+/** `invoke`, with a rejection turned into an EngineError. */
+async function call(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
+  try {
+    return await invoke(cmd, args);
+  } catch (e) {
+    throw parseEngineError(e);
+  }
+}
 
 /** The latest snapshot's cleanup view. CLI: `disky cleanup --format json`. */
 export async function loadCleanupView(snapshot?: string): Promise<CleanupView> {
@@ -27,7 +45,7 @@ export async function loadCleanupView(snapshot?: string): Promise<CleanupView> {
 
 /** Scan `root` into a new snapshot and return its view. CLI: `disky scan`. */
 export async function scan(root?: string): Promise<CleanupView> {
-  return parseCleanupView(await invoke("scan", { root: root ?? null }));
+  return parseCleanupView(await call("scan", { root: root ?? null }));
 }
 
 /** Ask a running scan to stop; the partial snapshot stays queryable. */
@@ -35,25 +53,57 @@ export async function stopScan(): Promise<void> {
   await invoke("stop_scan");
 }
 
-/** Subscribe to scan progress. Malformed events are dropped, never rendered. */
-export function onScanProgress(cb: (p: ScanProgress) => void, onError?: (e: unknown) => void): Promise<UnlistenFn> {
-  return listen(SCAN_PROGRESS_EVENT, (ev) => {
+/** Subscribe to `channel`, parsing each payload. Malformed events are dropped, never rendered. */
+function subscribe<T>(
+  channel: string,
+  parse: (raw: unknown) => T,
+  cb: (p: T) => void,
+  onError?: (e: unknown) => void,
+): Promise<UnlistenFn> {
+  return listen(channel, (ev) => {
+    let p: T;
     try {
-      cb(parseScanProgress(ev.payload));
+      p = parse(ev.payload);
     } catch (e) {
       onError?.(e);
+      return;
     }
+    cb(p);
   });
 }
 
+/** Subscribe to scan progress. */
+export function onScanProgress(cb: (p: ScanProgress) => void, onError?: (e: unknown) => void): Promise<UnlistenFn> {
+  return subscribe(SCAN_PROGRESS_EVENT, parseScanProgress, cb, onError);
+}
+
+/** Subscribe to clean progress (REQ-DCLEAN-008). */
+export function onCleanProgress(cb: (p: CleanProgress) => void, onError?: (e: unknown) => void): Promise<UnlistenFn> {
+  return subscribe(CLEAN_PROGRESS_EVENT, parseCleanProgress, cb, onError);
+}
+
 /**
- * Clean exactly the reviewed item paths. CLI:
+ * Clean exactly the reviewed item paths, in the order given. CLI:
  * `disky cleanup --apply [--reversible]` (its envelope carries the same
- * post-clean `disk`); undo with `disky restore <id>`.
+ * post-clean `disk`); undo with `disky restore <id>`. `openedBy` names the
+ * agent that opened the review, which titles the history entry
+ * (REQ-DCLEAN-009.A5).
  */
-export async function clean(itemPaths: string[], mode: CleanMode): Promise<CleanResult> {
-  const result = parseCleanResult(await invoke("clean", { itemPaths, mode }));
+export async function clean(itemPaths: string[], mode: CleanMode, openedBy: string | null = null): Promise<CleanResult> {
+  const result = parseCleanResult(await call("clean", { itemPaths, mode, openedBy }));
   // REQ-DCLEAN-002.A4: meter, ring and tag follow the post-clean disk.
   setFromClean(result);
   return result;
+}
+
+/** Undo a Trash clean (REQ-DCLEAN-009.A4). CLI: `disky restore <id>`. */
+export async function restore(historyId: string): Promise<RestoreResult> {
+  const result = parseRestoreResult(await call("restore", { historyId }));
+  setDisk(result.disk);
+  return result;
+}
+
+/** Open System Settings at Full Disk Access (REQ-DCLEAN-018.A2). */
+export async function openFullDiskAccess(): Promise<void> {
+  await call("open_full_disk_access");
 }

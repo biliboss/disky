@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { ScanProgress } from "../../lib/contract";
+import type { CleanProgress, ScanProgress } from "../../lib/contract";
+import { DELETE_MODE, TRASH_MODE } from "../../lib/contract";
 import {
+  CLEANING_PROGRESS_CAP,
   INITIAL_STATE,
   SCANNING_PROGRESS_CAP,
+  cleanFailed,
+  cleanFinished,
+  cleanProgress,
+  doneHome,
   backHome,
   cancelConfirm,
   confirmClean,
@@ -206,15 +212,15 @@ function cancelConfirmKeepsTheSelection() {
 
 function confirmCleanEntersCleaningOnlyFromTheDialog() {
   const s: SmartCleanState = { ...RESULTS, selected: ["a"], progress: 1 };
-  expect(confirmClean(s)).toBe(s); // dialog not open: refused
+  expect(confirmClean(s, TRASH_MODE, "a")).toBe(s); // dialog not open: refused
   const open = openConfirm(s);
-  const cleaning = confirmClean(open);
+  const cleaning = confirmClean(open, TRASH_MODE, "a");
   expect(cleaning.phase).toBe("cleaning");
   expect(cleaning.progress).toBe(0);
   expect(cleaning.confirming).toBe(false);
   expect(cleaning.selected).toEqual(["a"]);
   const idleOpen: SmartCleanState = { ...INITIAL_STATE, confirming: true };
-  expect(confirmClean(idleOpen)).toBe(idleOpen);
+  expect(confirmClean(idleOpen, TRASH_MODE, "a")).toBe(idleOpen);
 }
 
 function selectionIsFrozenWhileConfirming() {
@@ -246,4 +252,75 @@ describe("Smart Clean phase machine", () => {
   it("the current path survives an event without one (REQ-DCLEAN-004)", currentPathSurvivesAnEmptyPath);
   it("a stopped scan clears its progress and ignores a late finish (REQ-DCLEAN-004.A3)", stoppedScanIgnoresALateFinish);
   it("each category row is found, empty, checking or pending (REQ-DCLEAN-004.A4)", categoryRowStatusCoversEveryState);
+});
+
+function cev(category_id: string, done: number, total: number): CleanProgress {
+  return { category_id, done_items: done, total_items: total, fraction: done / total };
+}
+
+const CONFIRMING: SmartCleanState = { ...INITIAL_STATE, phase: "results", selected: ["a", "b"], confirming: true };
+
+function confirmCleanStoresModeAndFirstCategory() {
+  const t = confirmClean(CONFIRMING, TRASH_MODE, "a");
+  expect(t.cleanMode).toBe(TRASH_MODE);
+  expect(t.cleaningCategory).toBe("a");
+  const d = confirmClean(CONFIRMING, DELETE_MODE, "b");
+  expect(d.cleanMode).toBe(DELETE_MODE);
+  expect(d.cleaningCategory).toBe("b");
+}
+
+function cleanProgressNeverGoesBackwardsAndFollowsTheCategory() {
+  let s = confirmClean(CONFIRMING, TRASH_MODE, "a");
+  s = cleanProgress(s, cev("a", 1, 4));
+  expect(s.progress).toBe(0.25);
+  expect(s.cleaningCategory).toBe("a");
+  s = cleanProgress(s, cev("b", 2, 4));
+  expect(s.cleaningCategory).toBe("b");
+  const back = cleanProgress(s, cev("b", 1, 4));
+  expect(back.progress).toBe(0.5);
+  const full = cleanProgress(s, cev("b", 4, 4));
+  expect(full.progress).toBe(CLEANING_PROGRESS_CAP);
+  expect(full.phase).toBe("cleaning");
+}
+
+function cleanProgressIsIgnoredOutsideCleaning() {
+  for (const phase of ["idle", "scanning", "results", "done"] as const) {
+    const s: SmartCleanState = { ...INITIAL_STATE, phase };
+    expect(cleanProgress(s, cev("a", 1, 2))).toBe(s);
+  }
+}
+
+function cleanFinishedEntersDone() {
+  const s = cleanFinished(cleanProgress(confirmClean(CONFIRMING, TRASH_MODE, "a"), cev("a", 1, 2)));
+  expect(s.phase).toBe("done");
+  expect(s.progress).toBe(1);
+  expect(s.cleanMode).toBe(TRASH_MODE);
+  expect(cleanFinished(INITIAL_STATE)).toBe(INITIAL_STATE);
+}
+
+function cleanFailedReturnsToResultsWithTheSelection() {
+  const s = cleanFailed(confirmClean(CONFIRMING, DELETE_MODE, "a"));
+  expect(s.phase).toBe("results");
+  expect(s.selected).toEqual(["a", "b"]);
+  expect(s.confirming).toBe(false);
+  expect(s.cleanMode).toBeNull();
+  expect(cleanFailed(INITIAL_STATE)).toBe(INITIAL_STATE);
+}
+
+function doneHomeReturnsToIdle() {
+  const done = cleanFinished(confirmClean(CONFIRMING, TRASH_MODE, "a"));
+  const s = doneHome(done);
+  expect(s.phase).toBe("idle");
+  expect(s.selected).toEqual([]);
+  expect(s.cleanMode).toBeNull();
+  expect(doneHome(CONFIRMING)).toBe(CONFIRMING);
+}
+
+describe("Smart Clean cleaning and done transitions (REQ-DCLEAN-008, REQ-DCLEAN-009, REQ-DCLEAN-018)", () => {
+  it("Clean now stores the mode and the first category (REQ-DCLEAN-008.A1, A3)", confirmCleanStoresModeAndFirstCategory);
+  it("clean progress never goes backwards and names the current category (REQ-DCLEAN-008.A1)", cleanProgressNeverGoesBackwardsAndFollowsTheCategory);
+  it("clean progress is ignored outside cleaning (REQ-DCLEAN-008)", cleanProgressIsIgnoredOutsideCleaning);
+  it("a finished clean enters done at 100% (REQ-DCLEAN-009)", cleanFinishedEntersDone);
+  it("a failed clean returns to results with the selection (REQ-DCLEAN-018.A4)", cleanFailedReturnsToResultsWithTheSelection);
+  it("Back to home on done returns to idle (REQ-DCLEAN-009.A6)", doneHomeReturnsToIdle);
 });

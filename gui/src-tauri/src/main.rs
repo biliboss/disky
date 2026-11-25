@@ -10,10 +10,18 @@
 //! | `scan`              | `disky scan <root>`                              |
 //! | `stop_scan`         | Ctrl-C during `disky scan`                       |
 //! | `clean`             | `disky cleanup --apply [--reversible]`           |
+//! | `restore`           | `disky restore <history_id>`                     |
+//! | `open_full_disk_access` | `open "<contract::FULL_DISK_ACCESS_URL>"`    |
+//!
+//! Errors reach the GUI as `contract::EngineError`, typed by disky's
+//! exit-code slug (REQ-DCLEAN-018.A1).
 //!
 //! `scripts/lint-boundary.mjs` enforces the boundary on this file.
 //!
 //! @implements REQ-DCLEAN-001
+//! @implements REQ-DCLEAN-008
+//! @implements REQ-DCLEAN-009
+//! @implements REQ-DCLEAN-018
 //! @implements REQ-DCLEAN-027
 
 use std::path::Path;
@@ -22,7 +30,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use disky::cleanup::CleanupHit;
-use disky::contract::{self, CleanResult, CleanupView, Preferences};
+use disky::contract::{self, CleanResult, CleanupView, EngineError, Preferences, RestoreResult};
 use disky::{history, scan as engine_scan, snapshots};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -39,11 +47,7 @@ struct Engine {
     cancel: Mutex<Option<Arc<AtomicBool>>>,
 }
 
-type CmdResult<T> = Result<T, String>;
-
-fn msg(e: anyhow::Error) -> String {
-    format!("{e:#}")
-}
+type CmdResult<T> = Result<T, EngineError>;
 
 /// Run blocking engine work off the IPC thread.
 async fn blocking<T: Send + 'static>(
@@ -51,8 +55,8 @@ async fn blocking<T: Send + 'static>(
 ) -> CmdResult<T> {
     tauri::async_runtime::spawn_blocking(f)
         .await
-        .map_err(|e| e.to_string())?
-        .map_err(msg)
+        .map_err(|e| EngineError::from(anyhow::Error::from(e)))?
+        .map_err(EngineError::from)
 }
 
 /// Build a snapshot's view and remember its hits as the reviewed set.
@@ -132,15 +136,47 @@ fn stop_scan(app: AppHandle) {
     }
 }
 
+/// Clean the reviewed `item_paths` in the order given, emitting one
+/// `clean://progress` event per item (REQ-DCLEAN-008). Only paths from the
+/// last reviewed view are acted on; any other path is refused by the engine.
 #[tauri::command]
 async fn clean(
     app: AppHandle,
     item_paths: Vec<String>,
     mode: history::Mode,
+    opened_by: Option<String>,
 ) -> CmdResult<CleanResult> {
     blocking(move || {
         let reviewed = app.state::<Engine>().reviewed.lock().unwrap().clone();
-        contract::clean(&reviewed, &item_paths, mode, &history::log_path())
+        contract::clean_observed(
+            &reviewed,
+            &item_paths,
+            mode,
+            &history::log_path(),
+            opened_by.as_deref(),
+            |p| {
+                let _ = app.emit(contract::CLEAN_PROGRESS_EVENT, p);
+            },
+        )
+    })
+    .await
+}
+
+/// Undo a Trash clean (REQ-DCLEAN-009.A4): restore its history entry.
+#[tauri::command]
+async fn restore(history_id: String) -> CmdResult<RestoreResult> {
+    blocking(move || contract::restore(&history::log_path(), &history_id)).await
+}
+
+/// Open System Settings at Full Disk Access (REQ-DCLEAN-018.A2).
+#[tauri::command]
+async fn open_full_disk_access() -> CmdResult<()> {
+    blocking(|| {
+        let status = std::process::Command::new("open")
+            .arg(contract::FULL_DISK_ACCESS_URL)
+            .status()?;
+        anyhow::ensure!(status.success(), "open exited with {status}");
+        Ok(())
     })
     .await
 }
@@ -152,7 +188,9 @@ fn main() {
             load_cleanup_view,
             scan,
             stop_scan,
-            clean
+            clean,
+            restore,
+            open_full_disk_access
         ])
         .run(tauri::generate_context!())
         .expect("error while running disky GUI");

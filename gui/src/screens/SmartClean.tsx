@@ -1,17 +1,35 @@
-import { Match, Show, Switch, createEffect, createResource, createSignal, onCleanup } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createResource, createSignal, onCleanup } from "solid-js";
+import { useNavigate } from "@solidjs/router";
 import { useDelayedBusy } from "../lib/busy";
-import { loadCleanupView, onScanProgress, scan, stopScan } from "../lib/engine";
-import type { CleanMode, CleanupView } from "../lib/contract";
+import {
+  clean,
+  loadCleanupView,
+  onCleanProgress,
+  onScanProgress,
+  openFullDiskAccess,
+  restore,
+  scan,
+  stopScan,
+} from "../lib/engine";
+import { parseEngineError, type CleanMode, type CleanResult, type CleanupView, type EngineError } from "../lib/contract";
 import { diskState, setFromView } from "../lib/diskState";
+import { Cleaning } from "./smartClean/Cleaning";
 import { ConfirmClean } from "./smartClean/ConfirmClean";
+import { Done } from "./smartClean/Done";
 import { Idle } from "./smartClean/Idle";
 import { Results } from "./smartClean/Results";
 import { Scanning } from "./smartClean/Scanning";
+import { cleanFailedMessage, undoNotices } from "./smartClean/doneCopy";
+import { canRetry, scanErrorMessage } from "./smartClean/errorCopy";
 import {
   INITIAL_STATE,
   backHome,
   cancelConfirm,
+  cleanFailed,
+  cleanFinished,
+  cleanProgress,
   confirmClean,
+  doneHome,
   listedCategories,
   openConfirm,
   scanFinished,
@@ -39,6 +57,14 @@ import "./smartClean/smartClean.css";
  * selected categories and total as the footer; only "Clean now" enters the
  * cleaning phase.
  *
+ * Cleaning (REQ-DCLEAN-008): one `clean` call with the chosen categories'
+ * reviewed item paths in list order; the engine's per-item progress events
+ * drive the step label and bar. Done (REQ-DCLEAN-009) shows the engine's
+ * reclaimed bytes, Undo after a Trash clean (restore through the engine),
+ * and the paths that failed (REQ-DCLEAN-018.A3). A clean that reclaimed
+ * nothing returns to results with the selection kept (REQ-DCLEAN-018.A4).
+ * Scan failures name their cause by the engine's error code (A1).
+ *
  * Loading (REQ-DCLEAN-017): the scanning screen is the scan's loading state;
  * loading the view shows a busy indicator only past the spinner threshold;
  * a finished scan enters results with no pause.
@@ -48,14 +74,25 @@ import "./smartClean/smartClean.css";
  * @implements REQ-DCLEAN-005
  * @implements REQ-DCLEAN-006
  * @implements REQ-DCLEAN-007
+ * @implements REQ-DCLEAN-008
+ * @implements REQ-DCLEAN-009
  * @implements REQ-DCLEAN-017
+ * @implements REQ-DCLEAN-018
  * @implements REQ-DCLEAN-019
  */
 export function SmartClean() {
+  const navigate = useNavigate();
   const [loaded, { refetch }] = createResource(() => loadCleanupView());
   const [scanned, setScanned] = createSignal<CleanupView | null>(null);
   const [state, setState] = createSignal<SmartCleanState>(INITIAL_STATE);
-  const [scanError, setScanError] = createSignal<string | null>(null);
+  const [scanError, setScanError] = createSignal<EngineError | null>(null);
+  const [cleanResult, setCleanResult] = createSignal<CleanResult | null>(null);
+  const [cleanError, setCleanError] = createSignal<string | null>(null);
+  const [undoing, setUndoing] = createSignal(false);
+  const [undoError, setUndoError] = createSignal<string | null>(null);
+  const [notices, setNotices] = createSignal<string[]>([]);
+  // REQ-DCLEAN-017.A2: the undo wait shows busy only past the spinner threshold.
+  const undoBusy = useDelayedBusy(undoing);
   // Read the resource only once it holds a value: an errored resource throws.
   const ready = () => (loaded.state === "ready" ? loaded() : undefined);
   const view = () => scanned() ?? ready();
@@ -68,13 +105,19 @@ export function SmartClean() {
   });
 
   let unlisten: (() => void) | undefined;
-  onCleanup(() => unlisten?.());
+  let unlistenClean: (() => void) | undefined;
+  onCleanup(() => {
+    unlisten?.();
+    unlistenClean?.();
+  });
 
   async function beginScan() {
     const before = state();
     const next = startScan(before);
     if (next === before) return;
     setScanError(null);
+    setCleanError(null);
+    setNotices([]);
     setState(next);
     try {
       unlisten = await onScanProgress((p) => setState((s) => scanProgress(s, p)));
@@ -91,7 +134,8 @@ export function SmartClean() {
       // REQ-DCLEAN-006.A1: a new scan preselects per the safe-only preference.
       setState((s) => scanFinished(s, v.categories, v.preferences.safe_only));
     } catch (e) {
-      if (state().phase === "scanning") setScanError(String((e as Error)?.message ?? e));
+      // REQ-DCLEAN-018.A1: the cause comes from the engine's error code.
+      if (state().phase === "scanning") setScanError(parseEngineError(e));
       setState(scanStopped);
     } finally {
       unlisten?.();
@@ -99,14 +143,75 @@ export function SmartClean() {
     }
   }
 
+  /** The categories the confirm dialog lists: selected, in list order. */
+  const chosen = () => {
+    const v = view();
+    return v ? listedCategories(v.categories).filter((c) => state().selected.includes(c.id)) : [];
+  };
+
   /**
-   * "Clean now" (REQ-DCLEAN-007.A1): the only path into cleaning.
-   * REQ-DCLEAN-008: run `clean(paths, mode)` here and drive the cleaning
-   * phase's progress from it. Until then no file is touched.
+   * "Clean now" (REQ-DCLEAN-007.A1): the only path into cleaning. One clean
+   * call with the chosen categories' reviewed item paths in list order, so
+   * the step label follows selection order (REQ-DCLEAN-008.A1). The engine
+   * refuses any path that was not in the reviewed view.
    */
-  function runClean(_mode: CleanMode) {
-    setState(confirmClean);
+  async function runClean(mode: CleanMode) {
+    const cats = chosen();
+    if (cats.length === 0) return;
+    const before = state();
+    const next = confirmClean(before, mode, cats[0].id);
+    if (next === before) return;
+    const paths = cats.flatMap((c) => c.items.map((it) => it.path));
+    setCleanError(null);
+    setCleanResult(null);
+    setUndoError(null);
+    setState(next);
+    try {
+      unlistenClean = await onCleanProgress((p) => setState((s) => cleanProgress(s, p)));
+    } catch {
+      unlistenClean = undefined; // progress is cosmetic; the clean still runs
+    }
+    try {
+      const r = await clean(paths, mode, before.openedBy);
+      if (r.succeeded.length === 0) {
+        // REQ-DCLEAN-018.A4: nothing reclaimed → no done phase.
+        setCleanError(cleanFailedMessage(r.failed));
+        setState(cleanFailed);
+        return;
+      }
+      setCleanResult(r);
+      setState(cleanFinished);
+    } catch (e) {
+      setCleanError(cleanFailedMessage([], parseEngineError(e).detail));
+      setState(cleanFailed);
+    } finally {
+      unlistenClean?.();
+      unlistenClean = undefined;
+    }
   }
+
+  /** "Undo" (REQ-DCLEAN-009.A4): restore the clean's history entry, then idle. */
+  async function undo() {
+    const id = cleanResult()?.history_id;
+    if (!id || undoing()) return;
+    setUndoing(true);
+    setUndoError(null);
+    try {
+      const r = await restore(id);
+      // A7: every item that did not come back is reported, never silently dropped.
+      setNotices(undoNotices(r.report));
+      setCleanResult(null);
+      setState(doneHome);
+    } catch (e) {
+      setUndoError(parseEngineError(e).detail);
+    } finally {
+      setUndoing(false);
+    }
+  }
+
+  /** The display name of the category the clean is on. */
+  const cleaningName = () =>
+    view()?.categories.find((c) => c.id === state().cleaningCategory)?.name ?? "files";
 
   /** "Stop" (REQ-DCLEAN-004.A3): back to idle now; the engine cancels the walk. */
   function endScan() {
@@ -140,18 +245,46 @@ export function SmartClean() {
               onSelectAll={() => setState((s) => selectAll(s, v().categories))}
               onBack={() => setState(backHome)}
               onClean={() => setState(openConfirm)}
+              cleanError={cleanError()}
+              onOpenFullDiskAccess={() => void openFullDiskAccess().catch(() => undefined)}
             />
           )}
         </Match>
-        <Match when={state().phase === "cleaning"}>
-          {/* REQ-DCLEAN-008 renders the cleaning phase here. */}
-          <div class="screen" data-testid="cleaning" />
+        <Match when={state().phase === "cleaning" && state().cleanMode}>
+          {(mode) => <Cleaning state={state()} mode={mode()} categoryName={cleaningName()} />}
+        </Match>
+        <Match when={state().phase === "done" && cleanResult() && diskState()}>
+          <Done
+            result={cleanResult()!}
+            disk={diskState()!}
+            undoing={undoing()}
+            undoBusy={undoBusy()}
+            undoError={undoError()}
+            onHome={() => {
+              setCleanResult(null);
+              setState(doneHome);
+            }}
+            onUndo={() => void undo()}
+            onHistory={() => navigate("/history")}
+          />
         </Match>
         <Match when={view() && diskState()}>
           <Show when={scanError()}>
-            <p class="screen-note idle-error" role="alert" data-testid="scan-error">
-              The scan didn't finish: {scanError()}
-            </p>
+            {(e) => (
+              <div class="error-state idle-error" role="alert" data-testid="scan-error">
+                <span>{scanErrorMessage(e())}</span>
+                <Show when={canRetry(e())}>
+                  <button type="button" class="btn btn-secondary" onClick={() => void beginScan()}>
+                    Try again
+                  </button>
+                </Show>
+              </div>
+            )}
+          </Show>
+          <Show when={notices().length > 0}>
+            <ul class="notice undo-notice" role="status" data-testid="undo-notices">
+              <For each={notices()}>{(n) => <li>{n}</li>}</For>
+            </ul>
           </Show>
           <Idle view={view()!} disk={diskState()!} onStartScan={() => void beginScan()} />
         </Match>
@@ -164,7 +297,6 @@ export function SmartClean() {
       </Switch>
       <Show when={state().phase === "results" && state().confirming && view()}>
         {(v) => {
-          const chosen = () => listedCategories(v().categories).filter((c) => state().selected.includes(c.id));
           return (
             <ConfirmClean
               categories={chosen()}
@@ -172,7 +304,7 @@ export function SmartClean() {
               trashByDefault={v().preferences.trash_by_default}
               fallbackFocus={() => document.querySelector<HTMLElement>('[data-testid="results-heading"]')}
               onCancel={() => setState(cancelConfirm)}
-              onConfirm={runClean}
+              onConfirm={(mode) => void runClean(mode)}
             />
           );
         }}

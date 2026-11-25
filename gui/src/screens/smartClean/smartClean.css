@@ -558,3 +558,163 @@
 .btn.btn-danger:active {
   background: var(--color-danger-hover);
 }
+
+/* ── Cleaning (REQ-DCLEAN-008) ────────────────────────────────── */
+.cleaning {
+  flex: 1;
+  padding: var(--clean-py) var(--layout-screen-px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--clean-gap);
+  max-width: var(--clean-max-w);
+}
+
+.cleaning-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-clean-title);
+  margin: 0;
+}
+
+/* A2: accent-2 fill distinguishes cleaning from scanning (same track). */
+.clean-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-2);
+  transition: var(--motion-bar);
+}
+
+/* ── Done (REQ-DCLEAN-009) ────────────────────────────────────── */
+.done {
+  flex: 1;
+  padding: var(--done-pad);
+  display: grid;
+  grid-template-columns: 1fr var(--done-rail-w);
+  gap: var(--done-gap);
+  align-content: start;
+}
+
+.done-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--done-stack-gap);
+}
+
+.done-tag {
+  align-self: flex-start;
+}
+
+.done-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-done-title);
+  line-height: var(--lh-done-title);
+  margin: 0;
+}
+
+.done-note {
+  margin: 0;
+  font-size: var(--fs-done-note);
+  line-height: var(--lh-body);
+  max-width: var(--done-note-max);
+  color: var(--color-neutral-800);
+}
+
+.done-actions {
+  display: flex;
+  gap: var(--done-actions-gap);
+  margin-top: var(--done-actions-mt);
+}
+
+.done-home {
+  padding: var(--btn-done-py) var(--btn-done-home-px);
+}
+
+.done-undo {
+  padding: var(--btn-done-py) var(--btn-done-undo-px);
+}
+
+.done-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--done-rail-gap);
+}
+
+.done-rail .ring {
+  --ring-size: var(--done-ring-size);
+}
+
+.done-rail .ring-free {
+  font-size: var(--fs-done-ring-number);
+}
+
+.done-rail .ring-label {
+  gap: var(--done-ring-label-gap);
+}
+
+.done-failed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--done-failed-gap);
+  margin: 0;
+  max-width: var(--done-note-max);
+}
+
+.done-failed-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--done-failed-gap);
+  font-size: var(--fs-small);
+}
+
+.done-failed-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Error states (REQ-DCLEAN-018.A5) ─────────────────────────── */
+.error-state {
+  color: var(--color-danger);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--error-gap);
+  margin: 0;
+}
+
+.error-state .btn {
+  margin-top: var(--error-mt);
+}
+
+.results-error {
+  padding: var(--results-foot-py) var(--layout-screen-px) 0;
+}
+
+.notice {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--color-neutral-800);
+}
+
+.notice-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-accent-700);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.skipped-note {
+  padding: var(--results-foot-py) var(--layout-screen-px) 0;
+}
+
+.undo-notice {
+  padding: var(--idle-actions-mt) var(--layout-screen-px) 0;
+}

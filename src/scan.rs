@@ -107,6 +107,9 @@ pub struct ScanOutcome {
     pub complete: bool,
     pub entries: u64,
     pub bytes: u64,
+    /// Paths the walk could not read for permission reasons
+    /// (REQ-DCLEAN-018.A2). Recorded in `scan_meta.skipped`.
+    pub skipped: u64,
 }
 
 pub fn run(root: &str, db_path: &str) -> Result<ScanOutcome> {
@@ -173,6 +176,8 @@ pub fn run_observed(
     let bytes_clone = Arc::clone(&bytes_seen);
     let physical_clone = Arc::clone(&physical_seen);
     let cancel_clone = Arc::clone(&cancel);
+    let skipped = Arc::new(AtomicU64::new(0));
+    let skipped_clone = Arc::clone(&skipped);
 
     let walker = thread::Builder::new()
         .name("walker".into())
@@ -185,15 +190,36 @@ pub fn run_observed(
                 .follow_links(false)
                 .parallelism(Parallelism::RayonNewPool(cpus))
                 .into_iter()
-                .flatten()
             {
                 if cancel_clone.load(Ordering::Relaxed) {
                     break;
                 }
+                let denied = |e: &jwalk::Error| {
+                    e.io_error()
+                        .is_some_and(|io| io.kind() == std::io::ErrorKind::PermissionDenied)
+                };
+                let entry = match entry {
+                    Ok(e) => e,
+                    Err(e) => {
+                        if denied(&e) {
+                            skipped_clone.fetch_add(1, Ordering::Relaxed);
+                        }
+                        continue;
+                    }
+                };
+                // jwalk reports an unreadable directory on its own entry.
+                if entry.read_children_error.as_ref().is_some_and(denied) {
+                    skipped_clone.fetch_add(1, Ordering::Relaxed);
+                }
                 let path = entry.path();
                 let meta = match entry.metadata() {
                     Ok(m) => m,
-                    Err(_) => continue,
+                    Err(e) => {
+                        if denied(&e) {
+                            skipped_clone.fetch_add(1, Ordering::Relaxed);
+                        }
+                        continue;
+                    }
                 };
 
                 let is_dir = meta.is_dir();
@@ -294,9 +320,12 @@ pub fn run_observed(
         .map(|d| d.as_secs() as i64)
         .ok();
     db::write_scan_meta(&conn, root, started_at, ended_at, !cancelled, total, bytes)?;
+    let skipped = skipped.load(Ordering::Relaxed);
+    db::write_scan_skipped(&conn, skipped)?;
     Ok(ScanOutcome {
         complete: !cancelled,
         entries: total,
         bytes,
+        skipped,
     })
 }

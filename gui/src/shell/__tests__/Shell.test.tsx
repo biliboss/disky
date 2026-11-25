@@ -81,6 +81,7 @@ function liveView(disk: CleanupView["disk"], goal: number): CleanupView {
     is_stale: false,
     preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
     large_files_count: 0,
+    skipped_paths: 0,
     categories: [],
     catalogue: [],
   };
@@ -114,6 +115,7 @@ function meterFollowsACleanWithoutRemount() {
     freed_bytes: 50 * GB,
     succeeded: ["/x"],
     failed: [],
+    history_id: null,
     history_entry: null,
     disk: { volume: "Data", capacity_bytes: 1000 * GB, free_bytes: 300 * GB },
   };

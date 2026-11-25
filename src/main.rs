@@ -101,6 +101,7 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                 bundle.insert("kind".into(), json!("scan_bundle"));
                 bundle.insert("snapshot".into(), json!(db_path));
                 bundle.insert("complete".into(), json!(outcome.complete));
+                bundle.insert("skipped_paths".into(), json!(outcome.skipped));
                 bundle.insert("stats".into(), json!(query::stats(&conn)?));
                 if let Some(n) = emit_top {
                     bundle.insert("top".into(), json!(query::top_files(&conn, n, 0)?));

@@ -117,6 +117,7 @@ function idleFixtureView() {
     is_stale: false,
     preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
     large_files_count: 8,
+    skipped_paths: 0,
     categories: [],
     catalogue: SNAPSHOT_SCAN_ROWS.map((name, i) => ({ id: `visual_cat_${i}`, name, icon: "folder", safety: "safe" })),
   };
@@ -140,14 +141,22 @@ const SNAPSHOT_SCAN_ROWS = [
  * accepted, so the app holds the scanning phase. With `scanResult`, `scan`
  * resolves to that view at once, so the app enters the results phase.
  */
-async function stubEngine(page: Page, view: unknown, scanForever = false, scanResult: unknown = null) {
+async function stubEngine(
+  page: Page,
+  view: unknown,
+  scanForever = false,
+  scanResult: unknown = null,
+  cleanResult: unknown = null,
+) {
   await page.addInitScript(
-    ([v, forever, result]) => {
+    ([v, forever, result, cleaned]) => {
       (window as any).__TAURI_INTERNALS__ = {
         invoke: async (cmd: string) => {
           if (cmd === "load_cleanup_view") return v;
           if (forever && cmd === "scan") return new Promise(() => undefined);
           if (result && cmd === "scan") return result;
+          if (cleaned === "forever" && cmd === "clean") return new Promise(() => undefined);
+          if (cleaned && cmd === "clean") return cleaned;
           if ((forever || result) && cmd === "plugin:event|listen") return 1;
           if (result && cmd === "plugin:event|unlisten") return null;
           throw new Error(`visual stub: ${cmd} is not available`);
@@ -155,7 +164,7 @@ async function stubEngine(page: Page, view: unknown, scanForever = false, scanRe
         transformCallback: () => 0,
       };
     },
-    [view, scanForever, scanResult] as const,
+    [view, scanForever, scanResult, cleanResult] as const,
   );
 }
 
@@ -415,22 +424,138 @@ async function confirmDialogMatchesSnapshot({ page }: { page: Page }) {
 
 test("confirm dialog matches the snapshot within 1% (REQ-DCLEAN-032.A1, REQ-DCLEAN-007, REQ-DCLEAN-022)", confirmDialogMatchesSnapshot);
 
-// Full-phase comparisons (REQ-DCLEAN-032.A1). Parked until each Smart Clean
-// phase REQ is implemented; un-fixme as the phase lands.
-const PHASES = [
-  ["cleaning", "REQ-DCLEAN-008"],
-  ["done", "REQ-DCLEAN-009"],
-] as const;
+/** Drive the snapshot prototype from idle to its review screen. */
+async function snapshotToReview(page: Page) {
+  const at = await openSnapshot(page);
+  await page.getByRole("button", { name: "Later" }).click();
+  await page.locator('[data-screen-label="Smart clean · home"]').waitFor();
+  await page.locator("main").getByRole("button", { name: "Start scan" }).click();
+  await page.locator(SNAPSHOT_REVIEW).waitFor({ timeout: 15_000 });
+  return at;
+}
 
-for (const [phase, req] of PHASES) {
-  test.fixme(`Smart Clean ${phase} phase matches the snapshot within 1% (REQ-DCLEAN-032.A1, ${req})`, async ({ page }) => {
-    // Drive the snapshot to `phase`, capture the full 1200 × 780 window as the
-    // baseline, drive the app to the same phase with fixture data, then:
-    await openApp(page);
-    await expect(page).toHaveScreenshot(`phase-${phase}.png`, {
-      ...SHELL_DIFF,
-      clip: WINDOW,
-      mask: [page.locator(APP_LIGHTS)],
-    });
+/** Drive the app from idle through results and the dialog to "Clean now". */
+async function appCleanNow(page: Page) {
+  await openApp(page);
+  await page.getByTestId("idle").getByRole("button", { name: "Start scan" }).click();
+  await page.getByTestId("results").waitFor();
+  await page.getByTestId("clean").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Clean now" }).click();
+}
+
+const SNAPSHOT_CLEANING = '[data-screen-label="Smart clean · cleaning"]';
+
+async function cleaningPhaseMatchesSnapshot({ page }: { page: Page }) {
+  const at = await snapshotToReview(page);
+  await page.locator("main").getByRole("button", { name: /^Clean / }).click();
+  await page.locator('[role="dialog"]').getByRole("button", { name: "Clean now" }).click();
+  // Freeze the prototype's simulated clean so the screen holds still.
+  await page.evaluate(() => {
+    for (let id = 0; id < 10_000; id++) clearInterval(id);
+  });
+  const scr = page.locator(SNAPSHOT_CLEANING);
+  await scr.waitFor();
+  await page.screenshot({
+    path: baselinePath("phase-cleaning.png"),
+    clip: offset(WINDOW, at),
+    mask: [
+      page.locator(SNAPSHOT_LIGHTS),
+      scr.locator("> div").nth(0), // step label + percentage
+      scr.locator("> div").nth(1).locator("> div"), // progress fill
+      page.locator('aside span:has-text("GB free")'),
+    ],
+    maskColor: MASK_COLOR,
+    animations: "disabled",
+  });
+
+  await page.setViewportSize(WINDOW);
+  await stubEngine(page, idleFixtureView(), false, reviewFixtureView(), "forever");
+  await appCleanNow(page);
+  await page.getByTestId("cleaning").waitFor();
+  await expect(page.getByTestId("clean-step")).toHaveText("Moving System caches…");
+  await expect(page).toHaveScreenshot("phase-cleaning.png", {
+    ...SHELL_DIFF,
+    clip: WINDOW,
+    mask: [
+      page.locator(APP_LIGHTS),
+      page.getByTestId("clean-meta"),
+      page.getByTestId("clean-bar-fill"),
+      page.locator(".meter-free"),
+    ],
+  });
+
+  // REQ-DCLEAN-008.A2: accent-2 fill (masked above) over the surface track.
+  const colours = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.style.background = "var(--color-accent-2)";
+    document.body.append(probe);
+    const accent2 = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return { fill: getComputedStyle(document.querySelector(".clean-bar-fill")!).backgroundColor, accent2 };
+  });
+  expect(colours.fill).toBe(colours.accent2);
+}
+
+test("Smart Clean cleaning phase matches the snapshot within 1% (REQ-DCLEAN-032.A1, REQ-DCLEAN-008)", cleaningPhaseMatchesSnapshot);
+
+const SNAPSHOT_DONE = '[data-screen-label="Smart clean · done"]';
+
+/**
+ * The app's clean of the snapshot's default (Safe) selection: the same
+ * bytes the prototype frees, so the post-clean disk, ring and meter agree.
+ */
+function doneFixtureResult() {
+  const safe = snapshotReviewCategories().filter((c) => c.safety === "safe");
+  const freed = safe.reduce((a, c) => a + c.bytes, 0);
+  return {
+    mode: "trash",
+    freed_bytes: freed,
+    succeeded: safe.flatMap((c) => c.items.map((i) => i.path)),
+    failed: [],
+    history_id: "visual-entry",
+    history_entry: null,
+    disk: { volume: "Macintosh HD", capacity_bytes: 512e9, free_bytes: 74e9 + freed },
+  };
+}
+
+async function donePhaseMatchesSnapshot({ page }: { page: Page }) {
+  const at = await snapshotToReview(page);
+  await page.locator("main").getByRole("button", { name: /^Clean / }).click();
+  await page.locator('[role="dialog"]').getByRole("button", { name: "Clean now" }).click();
+  // The prototype's simulated clean takes ≈ 2 s.
+  const done = page.locator(SNAPSHOT_DONE);
+  await done.waitFor({ timeout: 15_000 });
+  await page.waitForTimeout(1_000); // let the ring's .8 s transition settle
+  await page.screenshot({
+    path: baselinePath("phase-done.png"),
+    clip: offset(WINDOW, at),
+    mask: [
+      page.locator(SNAPSHOT_LIGHTS),
+      done.locator("h1"),
+      done.locator('span:text-is("now free")').locator("xpath=preceding-sibling::span"),
+      page.locator('aside span:has-text("GB free")'),
+    ],
+    maskColor: MASK_COLOR,
+    animations: "disabled",
+  });
+
+  await page.setViewportSize(WINDOW);
+  await stubEngine(page, idleFixtureView(), false, reviewFixtureView(), doneFixtureResult());
+  await appCleanNow(page);
+  await page.getByTestId("done").waitFor();
+  // REQ-DCLEAN-009.A3: a Trash clean offers Undo, as the snapshot shows.
+  await expect(page.getByTestId("undo")).toBeVisible();
+  await page.waitForTimeout(1_000);
+  await expect(page).toHaveScreenshot("phase-done.png", {
+    ...SHELL_DIFF,
+    clip: WINDOW,
+    mask: [
+      page.locator(APP_LIGHTS),
+      page.getByTestId("done-heading"),
+      page.locator(".done-rail [data-testid=ring-free]"),
+      page.locator(".meter-free"),
+    ],
   });
 }
+
+test("Smart Clean done phase matches the snapshot within 1% (REQ-DCLEAN-032.A1, REQ-DCLEAN-009)", donePhaseMatchesSnapshot);

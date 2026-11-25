@@ -95,7 +95,7 @@ fn commands() -> Value {
         {
             "name": "history",
             "args": { "limit": "int=50" },
-            "output": "HistoryEntry[] under kind='history', newest first. Log file: <data dir>/history.json"
+            "output": "HistoryEntry[] under kind='history', newest first: {id, title ('Smart Clean' | 'Assistant cleanup' | 'Cleanup'), ts, mode: trash|delete, categories:[string], bytes:u64 (physical, freed), items:[{original_path, trash_path:string?, bytes:u64, status}], restored_at:string?}. Log file: <data dir>/history.json"
         },
         {
             "name": "restore",

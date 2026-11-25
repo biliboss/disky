@@ -10,6 +10,11 @@
 //! * [`CleanResult`] — what a clean did, with its history entry and the
 //!   volume's disk usage read after the clean, so the meter, ring and goal
 //!   tag update without a manual refresh (REQ-DCLEAN-002.A4).
+//! * [`CleanProgress`] — one event per cleaned item, naming the category in
+//!   progress (REQ-DCLEAN-008).
+//! * [`RestoreResult`] — what an Undo restored (REQ-DCLEAN-009.A4, A7).
+//! * [`EngineError`] — a failed command, typed by disky's exit-code slug so
+//!   the GUI never matches on message text (REQ-DCLEAN-018).
 //!
 //! Every byte value is a `u64` of **physical** bytes (REQ-DCLEAN-027.A1).
 //! Category ids, names, descriptions and safety come from
@@ -19,6 +24,9 @@
 //! @implements REQ-DCLEAN-002
 //! @implements REQ-DCLEAN-003
 //! @implements REQ-DCLEAN-004
+//! @implements REQ-DCLEAN-008
+//! @implements REQ-DCLEAN-009
+//! @implements REQ-DCLEAN-018
 //! @implements REQ-DCLEAN-027
 //! @implements REQ-DCLEAN-029
 
@@ -54,6 +62,14 @@ pub const FAILURE_NOT_REVIEWED: &str = "not reviewed";
 
 /// Event channel the GUI backend emits [`ScanProgress`] on.
 pub const SCAN_PROGRESS_EVENT: &str = "scan://progress";
+
+/// Event channel the GUI backend emits [`CleanProgress`] on.
+pub const CLEAN_PROGRESS_EVENT: &str = "clean://progress";
+
+/// System Settings → Privacy & Security → Full Disk Access
+/// (REQ-DCLEAN-018.A2).
+pub const FULL_DISK_ACCESS_URL: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 
 /// Settings the component reads. Nothing stores them yet, so every value is
 /// its spec default (all on).
@@ -147,6 +163,9 @@ pub struct CleanupView {
     pub categories: Vec<CategoryView>,
     /// Every category the engine checks ([`catalogue`]).
     pub catalogue: Vec<CatalogueEntry>,
+    /// Paths the snapshot's scan could not read for permission reasons
+    /// (REQ-DCLEAN-018.A2).
+    pub skipped_paths: u64,
 }
 
 /// One scan progress event.
@@ -162,15 +181,32 @@ pub struct ScanProgress {
     pub completed_category_bytes: BTreeMap<String, u64>,
 }
 
+/// One clean progress event, sent after each item (REQ-DCLEAN-008).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CleanProgress {
+    /// The category being processed now: the next item's, or the last
+    /// item's once all are done. Items run in selection order (A1).
+    pub category_id: String,
+    pub done_items: u64,
+    pub total_items: u64,
+    /// `done_items / total_items`, 0..=1.
+    pub fraction: f64,
+}
+
 /// What a clean did.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CleanResult {
     pub mode: history::Mode,
-    /// Physical bytes of the items that were handled.
+    /// Physical bytes of the items that were handled — what was actually
+    /// reclaimed, not the estimate (REQ-DCLEAN-009.A1, REQ-DCLEAN-018.A3).
     pub freed_bytes: u64,
     /// Paths that were trashed or deleted.
     pub succeeded: Vec<String>,
+    /// Paths left untouched, with the reason (REQ-DCLEAN-018.A3).
     pub failed: Vec<Failure>,
+    /// Id of the history entry Undo restores; `None` when nothing was
+    /// handled. CLI: `disky restore <id>`.
+    pub history_id: Option<String>,
     /// `None` when nothing was handled (no entry is written).
     pub history_entry: Option<history::Entry>,
     /// The volume's usage read after the clean finished (REQ-DCLEAN-002.A4).
@@ -278,6 +314,7 @@ pub fn cleanup_view(
         large_files_count,
         categories: categories_from_hits(hits),
         catalogue: catalogue(),
+        skipped_paths: 0,
     }
 }
 
@@ -334,7 +371,7 @@ pub fn load(
     let hits = view_hits(&conn)?;
     let large = large_files_count(&conn)?;
     let now = Utc::now().timestamp();
-    let view = cleanup_view(
+    let mut view = cleanup_view(
         meta.as_ref(),
         &hits,
         disk,
@@ -343,6 +380,7 @@ pub fn load(
         large,
         now,
     );
+    view.skipped_paths = crate::db::read_scan_skipped(&conn);
     Ok((view, hits))
 }
 
@@ -381,7 +419,8 @@ pub fn scan_finished(view: &CleanupView) -> ScanProgress {
 
 /// Keep only the hits the user reviewed. `paths` are the exact item paths
 /// from the view; a path that is not in `reviewed` is refused, never
-/// re-queried.
+/// re-queried. The selection keeps the order of `paths`, which is the order
+/// the clean runs in (REQ-DCLEAN-008.A1).
 pub fn select_reviewed(
     reviewed: &[CleanupHit],
     paths: &[String],
@@ -412,6 +451,15 @@ fn apply_mode(mode: history::Mode) -> ApplyMode {
     }
 }
 
+/// History title for a clean (REQ-DCLEAN-009.A5): "Assistant cleanup" when
+/// the assistant opened the review, else "Smart Clean".
+pub fn clean_title(opened_by: Option<&str>) -> &'static str {
+    match opened_by {
+        Some(_) => history::TITLE_ASSISTANT,
+        None => history::TITLE_SMART_CLEAN,
+    }
+}
+
 /// Clean exactly the reviewed `paths` through [`cleanup::apply`] and record
 /// the history entry in `log`. Trash mode is reversible via `disky restore`
 /// (REQ-DCLEAN-034). A path gone since the scan is reported in `failed`
@@ -422,9 +470,22 @@ pub fn clean(
     mode: history::Mode,
     log: &Path,
 ) -> Result<CleanResult> {
-    let (selected, refused) = select_reviewed(reviewed, paths);
-    let outcome = cleanup::apply(&selected, apply_mode(mode), Some(log))?;
-    clean_result(mode, &selected, outcome, refused)
+    clean_observed(reviewed, paths, mode, log, None, |_| {})
+}
+
+/// [`clean`] that reports a [`CleanProgress`] after each item, in the order
+/// of `paths` (REQ-DCLEAN-008), and titles the history entry from
+/// `opened_by` (REQ-DCLEAN-009.A5). One history entry per call.
+pub fn clean_observed(
+    reviewed: &[CleanupHit],
+    paths: &[String],
+    mode: history::Mode,
+    log: &Path,
+    opened_by: Option<&str>,
+    on: impl FnMut(CleanProgress),
+) -> Result<CleanResult> {
+    let trash = cleanup::default_trash(apply_mode(mode))?;
+    clean_in(reviewed, paths, mode, log, &trash, opened_by, on)
 }
 
 /// [`clean`] with an explicit Trash root, so tests never touch `~/.Trash`.
@@ -436,9 +497,45 @@ pub(crate) fn clean_with(
     log: &Path,
     trash_root: &Path,
 ) -> Result<CleanResult> {
+    clean_in(reviewed, paths, mode, log, trash_root, None, |_| {})
+}
+
+fn clean_in(
+    reviewed: &[CleanupHit],
+    paths: &[String],
+    mode: history::Mode,
+    log: &Path,
+    trash_root: &Path,
+    opened_by: Option<&str>,
+    mut on: impl FnMut(CleanProgress),
+) -> Result<CleanResult> {
     let (selected, refused) = select_reviewed(reviewed, paths);
-    let outcome = cleanup::apply_with(&selected, apply_mode(mode), Some(log), trash_root)?;
+    let outcome = cleanup::apply_observed(
+        &selected,
+        apply_mode(mode),
+        Some(log),
+        trash_root,
+        clean_title(opened_by),
+        &mut |_, i| on(clean_progress(&selected, i)),
+    )?;
     clean_result(mode, &selected, outcome, refused)
+}
+
+/// Progress once item `index` of `selected` is done.
+fn clean_progress(selected: &[CleanupHit], index: usize) -> CleanProgress {
+    let total = selected.len();
+    let done = (index + 1).min(total);
+    let current = selected.get(done).or_else(|| selected.get(index));
+    CleanProgress {
+        category_id: current.map(|h| h.category.clone()).unwrap_or_default(),
+        done_items: done as u64,
+        total_items: total as u64,
+        fraction: if total == 0 {
+            1.0
+        } else {
+            done as f64 / total as f64
+        },
+    }
 }
 
 fn clean_result(
@@ -461,9 +558,56 @@ fn clean_result(
         freed_bytes,
         succeeded: outcome.handled,
         failed,
+        history_id: outcome.entry.as_ref().map(|e| e.id.clone()),
         history_entry: outcome.entry,
         disk,
     })
+}
+
+/// What an Undo did (REQ-DCLEAN-009.A4): the restore report — restored,
+/// conflicts, and items "no longer in Trash" (A7) — and the volume's usage
+/// read afterwards, so the meter follows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RestoreResult {
+    pub report: history::RestoreReport,
+    pub disk: Disk,
+}
+
+/// Undo a clean: [`history::restore`] on entry `id`, then read disk usage.
+/// CLI: `disky restore <id>`.
+pub fn restore(log: &Path, id: &str) -> Result<RestoreResult> {
+    let report = history::restore(log, id)?;
+    let near = report
+        .restored
+        .first()
+        .or(report.missing.first())
+        .or(report.conflicts.first())
+        .map_or("/", String::as_str);
+    let disk = disk_near(Path::new(near))?;
+    Ok(RestoreResult { report, disk })
+}
+
+/// A failed engine call as the GUI receives it: disky's RFC 9457 fields,
+/// with `code` the stable exit-code slug (`lock-held`, `io`, …). The GUI
+/// dispatches on `code`, never on `detail` (REQ-DCLEAN-018.A1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EngineError {
+    pub code: String,
+    pub title: String,
+    pub detail: String,
+    pub retryable: bool,
+}
+
+impl From<anyhow::Error> for EngineError {
+    fn from(e: anyhow::Error) -> Self {
+        let d = crate::exit::classify(e);
+        EngineError {
+            code: d.code.slug().to_string(),
+            title: d.title.to_string(),
+            detail: d.detail,
+            retryable: d.retryable,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -774,5 +918,182 @@ mod tests {
         assert!(v.categories.is_empty());
         assert_eq!(v.large_files_count, 0);
         assert!(v.disk.capacity_bytes > 0);
+    }
+
+    #[test]
+    fn select_reviewed_keeps_the_callers_order() {
+        let reviewed = sample();
+        let paths: Vec<String> = [
+            "/h/Library/Caches/com.foo",
+            "/private/tmp/a",
+            "/p/app/node_modules",
+        ]
+        .map(String::from)
+        .to_vec();
+        let (sel, failed) = select_reviewed(&reviewed, &paths);
+        assert!(failed.is_empty());
+        let got: Vec<&str> = sel.iter().map(|h| h.path.as_str()).collect();
+        assert_eq!(got, paths.iter().map(String::as_str).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn clean_reports_progress_per_item_in_selection_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let trash = tmp.path().join("Trash");
+        let log = tmp.path().join("history.json");
+        let p = |x: &Path| x.to_string_lossy().into_owned();
+        let a1 = tmp.path().join("a1/node_modules");
+        let a2 = tmp.path().join("a2/node_modules");
+        let b1 = tmp.path().join("b1/target");
+        for d in [&a1, &a2, &b1] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let reviewed = vec![
+            hit("target", &p(&b1), 5, Safety::Review),
+            hit("node_modules", &p(&a1), 3, Safety::Review),
+            hit("node_modules", &p(&a2), 4, Safety::Review),
+        ];
+        // Selection order: both node_modules first, then target.
+        let paths = vec![p(&a1), p(&a2), p(&b1)];
+        let mut events = Vec::new();
+        let r = clean_in(
+            &reviewed,
+            &paths,
+            history::Mode::Trash,
+            &log,
+            &trash,
+            None,
+            |e| events.push(e),
+        )
+        .unwrap();
+
+        let seen: Vec<(&str, u64, u64)> = events
+            .iter()
+            .map(|e| (e.category_id.as_str(), e.done_items, e.total_items))
+            .collect();
+        assert_eq!(
+            seen,
+            [("node_modules", 1, 3), ("target", 2, 3), ("target", 3, 3)]
+        );
+        assert!(events.windows(2).all(|w| w[0].fraction <= w[1].fraction));
+        assert_eq!(events.last().unwrap().fraction, 1.0);
+        assert_eq!(r.succeeded, paths, "cleaned in selection order");
+        let entries = history::load(&log).unwrap();
+        assert_eq!(entries.len(), 1, "one history entry per clean");
+        assert_eq!(r.history_id.as_deref(), Some(entries[0].id.as_str()));
+        assert_eq!(entries[0].title, history::TITLE_SMART_CLEAN);
+    }
+
+    #[test]
+    fn clean_title_follows_who_opened_the_review() {
+        assert_eq!(clean_title(None), "Smart Clean");
+        assert_eq!(clean_title(Some("Assistant")), "Assistant cleanup");
+        let tmp = tempfile::tempdir().unwrap();
+        let log = tmp.path().join("history.json");
+        let dir = tmp.path().join("proj/node_modules");
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.to_string_lossy().into_owned();
+        let reviewed = vec![hit("node_modules", &p, 7, Safety::Review)];
+        let r = clean_in(
+            &reviewed,
+            &[p],
+            history::Mode::Delete,
+            &log,
+            &tmp.path().join("Trash"),
+            Some("Assistant"),
+            |_| {},
+        )
+        .unwrap();
+        let e = r.history_entry.unwrap();
+        assert_eq!(e.title, "Assistant cleanup");
+        assert_eq!(e.mode, history::Mode::Delete);
+        assert_eq!(e.categories, ["node_modules"]);
+        assert_eq!(e.bytes, 7);
+    }
+
+    #[test]
+    fn partial_clean_frees_only_what_was_reclaimed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let log = tmp.path().join("history.json");
+        let trash = tmp.path().join("Trash");
+        let p = |x: &Path| x.to_string_lossy().into_owned();
+        let present = tmp.path().join("proj/node_modules");
+        std::fs::create_dir_all(&present).unwrap();
+        // Already in the Trash: refused in Trash mode, left untouched.
+        let in_trash = trash.join("old");
+        std::fs::create_dir_all(&in_trash).unwrap();
+        let reviewed = vec![
+            hit("node_modules", &p(&present), 40, Safety::Review),
+            hit("node_modules", &p(&in_trash), 900, Safety::Review),
+        ];
+        let r = clean_with(
+            &reviewed,
+            &[p(&present), p(&in_trash)],
+            history::Mode::Trash,
+            &log,
+            &trash,
+        )
+        .unwrap();
+        assert_eq!(r.freed_bytes, 40, "reclaimed, not the 940 estimate");
+        assert_eq!(r.failed.len(), 1);
+        assert_eq!(r.failed[0].path, p(&in_trash));
+        assert!(in_trash.exists());
+    }
+
+    #[test]
+    fn undo_restores_a_trash_clean_and_reports_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let trash = tmp.path().join("Trash");
+        let log = tmp.path().join("history.json");
+        let p = |x: &Path| x.to_string_lossy().into_owned();
+        let a = tmp.path().join("a/node_modules");
+        let b = tmp.path().join("b/node_modules");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        let reviewed = vec![
+            hit("node_modules", &p(&a), 1, Safety::Review),
+            hit("node_modules", &p(&b), 2, Safety::Review),
+        ];
+        let r = clean_with(
+            &reviewed,
+            &[p(&a), p(&b)],
+            history::Mode::Trash,
+            &log,
+            &trash,
+        )
+        .unwrap();
+        let id = r.history_id.unwrap();
+        // The user emptied one item from the Trash meanwhile.
+        let gone = r.history_entry.unwrap().items[1]
+            .trash_path
+            .clone()
+            .unwrap();
+        std::fs::remove_dir_all(&gone).unwrap();
+
+        let u = restore(&log, &id).unwrap();
+        assert_eq!(u.report.restored, [p(&a)]);
+        assert_eq!(u.report.missing, [p(&b)], "reported, not a silent failure");
+        assert!(a.exists());
+        assert!(u.disk.capacity_bytes > 0);
+    }
+
+    #[test]
+    fn engine_errors_carry_the_exit_slug() {
+        let held: EngineError = anyhow::Error::from(crate::exit::DiskyError::lock_held("x")).into();
+        assert_eq!(held.code, "lock-held");
+        assert!(held.retryable);
+        let duck: EngineError =
+            anyhow::anyhow!("IO Error: Could not set lock on file \"/x.db\"").into();
+        assert_eq!(duck.code, "lock-held");
+        let other: EngineError = anyhow::anyhow!("boom").into();
+        assert_eq!(other.code, "generic");
+        let json = serde_json::to_value(&held).unwrap();
+        assert_eq!(json["code"], "lock-held");
+    }
+
+    #[test]
+    fn full_disk_access_url_opens_the_privacy_pane() {
+        assert!(FULL_DISK_ACCESS_URL.starts_with("x-apple.systempreferences:"));
+        assert!(FULL_DISK_ACCESS_URL.ends_with("Privacy_AllFiles"));
     }
 }

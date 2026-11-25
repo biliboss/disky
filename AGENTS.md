@@ -55,8 +55,13 @@ usage once the clean finished, the same `disk` the GUI's `CleanResult` carries
 `CleanupHit = {category, safety: safe|review, path, bytes, physical_bytes, files, note?}` (`bytes` logical, `physical_bytes` on disk).
 
 **GUI contract (REQ-DCLEAN-027).** `disky::contract` builds what the desktop
-GUI renders (`CleanupView`, `ScanProgress`, `CleanResult`) from the same
-cleanup query, in physical bytes. The Tauri commands only delegate to it, and
+GUI renders (`CleanupView`, `ScanProgress`, `CleanProgress`, `CleanResult`,
+`RestoreResult`) from the same cleanup query, in physical bytes. Clean
+progress goes out on `clean://progress`, one event per item. Commands fail
+with `EngineError {code, title, detail, retryable}`, where `code` is the
+exit-code slug (`lock-held`, …). `CleanupView.skipped_paths` counts paths the
+scan could not read for permission reasons (`scan_meta.skipped`, and
+`skipped_paths` in the `scan_bundle`). The Tauri commands only delegate to it, and
 `gui/scripts/lint-boundary.mjs` (run by `npm run lint:tokens`) keeps file
 walking, size summing, deletion and category ids out of `gui/`.
 
@@ -104,10 +109,17 @@ disky history [--limit N] --format json   # kind:"history", newest first
 disky restore <id> --format json          # kind:"restore", records:[RestoreReport]
 ```
 
-`Entry = {id, ts, mode: trash|delete, categories, bytes, items:[Item], restored_at?}`,
+`Entry = {id, title, ts, mode: trash|delete, categories, bytes, items:[Item], restored_at?}`,
 `Item = {original_path, trash_path (null in delete mode), bytes, status}`, with
-`status = in_trash|restored|conflict|missing|deleted`. The `cleanup` envelope
-carries `history_id` when an entry was written.
+`status = in_trash|restored|conflict|missing|deleted`. `bytes` are physical
+(what the clean freed). `title` is "Smart Clean" or "Assistant cleanup" for
+GUI cleans and "Cleanup" for the CLI (and for entries written before titles
+existed). The `cleanup` envelope carries `history_id` when an entry was
+written, and so does the GUI's `CleanResult`.
+
+A path that fails to trash or delete (for example, permission denied) is
+reported in `failed` and left untouched. The rest of the clean proceeds and
+still writes one entry (REQ-DCLEAN-018.A3).
 
 Rules: restore never overwrites. An occupied original path is a `conflict`
 and the item stays in the Trash. An item gone from its Trash path is reported

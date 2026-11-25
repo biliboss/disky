@@ -4,7 +4,7 @@
  * each rule is testable without rendering. Only the transitions the shipped
  * phases use live here; later phase REQs (005 … 009) add theirs.
  */
-import type { CategoryView, ScanProgress } from "../../lib/contract";
+import type { CategoryView, CleanMode, CleanProgress, ScanProgress } from "../../lib/contract";
 
 export type Phase = "idle" | "scanning" | "results" | "cleaning" | "done";
 
@@ -35,6 +35,10 @@ export interface SmartCleanState {
    * frozen while it is open.
    */
   confirming: boolean;
+  /** The mode of the running or finished clean (REQ-DCLEAN-008.A3), else null. */
+  cleanMode: CleanMode | null;
+  /** The category id the running clean is on (REQ-DCLEAN-008.A1), else null. */
+  cleaningCategory: string | null;
 }
 
 /** What selection needs from a category. */
@@ -51,7 +55,12 @@ export const INITIAL_STATE: SmartCleanState = {
   openedBy: null,
   selected: [],
   confirming: false,
+  cleanMode: null,
+  cleaningCategory: null,
 };
+
+/** Highest progress a running clean shows: 100% means finished. */
+export const CLEANING_PROGRESS_CAP = 0.99;
 
 /** Highest progress a running scan shows: 100% means finished (REQ-DCLEAN-004.A1). */
 export const SCANNING_PROGRESS_CAP = 0.99;
@@ -76,6 +85,8 @@ export function startScan(s: SmartCleanState): SmartCleanState {
     openedBy: null,
     selected: [],
     confirming: false,
+    cleanMode: null,
+    cleaningCategory: null,
   };
 }
 
@@ -220,13 +231,75 @@ export function cancelConfirm(s: SmartCleanState): SmartCleanState {
 
 /**
  * "Clean now" (REQ-DCLEAN-007.A1): the only way into the cleaning phase.
- * Refused unless the dialog is open.
+ * Refused unless the dialog is open. Stores the mode (REQ-DCLEAN-008.A3)
+ * and the first chosen category, so the step label names it before any
+ * progress event arrives (REQ-DCLEAN-008.A1).
  *
  * @implements REQ-DCLEAN-007
+ * @implements REQ-DCLEAN-008
  */
-export function confirmClean(s: SmartCleanState): SmartCleanState {
+export function confirmClean(s: SmartCleanState, mode: CleanMode, firstCategoryId: string | null): SmartCleanState {
   if (s.phase !== "results" || !s.confirming) return s;
-  return { ...s, phase: "cleaning", progress: 0, confirming: false };
+  return { ...s, phase: "cleaning", progress: 0, confirming: false, cleanMode: mode, cleaningCategory: firstCategoryId };
+}
+
+/**
+ * A clean progress event (REQ-DCLEAN-008): progress never goes backwards
+ * and stays below 100% until {@link cleanFinished}; the step label follows
+ * the category the engine is on (A1). Ignored outside cleaning.
+ *
+ * @implements REQ-DCLEAN-008
+ */
+export function cleanProgress(s: SmartCleanState, p: CleanProgress): SmartCleanState {
+  if (s.phase !== "cleaning") return s;
+  return {
+    ...s,
+    progress: Math.max(s.progress, Math.min(CLEANING_PROGRESS_CAP, p.fraction)),
+    cleaningCategory: p.category_id || s.cleaningCategory,
+  };
+}
+
+/**
+ * The clean finished with something reclaimed: enter done at 100%
+ * (REQ-DCLEAN-009).
+ *
+ * @implements REQ-DCLEAN-009
+ */
+export function cleanFinished(s: SmartCleanState): SmartCleanState {
+  if (s.phase !== "cleaning") return s;
+  return { ...s, phase: "done", progress: 1, cleaningCategory: null };
+}
+
+/**
+ * The clean reclaimed nothing, or failed outright (REQ-DCLEAN-018.A4): no
+ * done phase — back to results with the selection exactly as it was.
+ *
+ * @implements REQ-DCLEAN-018
+ */
+export function cleanFailed(s: SmartCleanState): SmartCleanState {
+  if (s.phase !== "cleaning") return s;
+  return { ...s, phase: "results", progress: 0, confirming: false, cleanMode: null, cleaningCategory: null };
+}
+
+/**
+ * "Back to home" on done, or a finished Undo (REQ-DCLEAN-009.A4, A6):
+ * return to idle with nothing selected.
+ *
+ * @implements REQ-DCLEAN-009
+ */
+export function doneHome(s: SmartCleanState): SmartCleanState {
+  if (s.phase !== "done") return s;
+  return {
+    ...s,
+    ...NO_SCAN,
+    phase: "idle",
+    expanded: null,
+    selected: [],
+    openedBy: null,
+    confirming: false,
+    cleanMode: null,
+    cleaningCategory: null,
+  };
 }
 
 /** "Stop", or a scan that failed: back to idle, no results (REQ-DCLEAN-004.A3). */

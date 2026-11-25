@@ -6,6 +6,7 @@ import ShieldCheck from "lucide-solid/icons/shield-check";
 import type { CategoryView, CleanupView } from "../../lib/contract";
 import { NUMERIC_CLASS, formatBytes } from "../../lib/format";
 import { iconByName } from "../../shell/iconByName";
+import { FULL_DISK_ACCESS_LINK, SKIPPED_HINT, skippedPaths } from "./errorCopy";
 import { listedCategories, type SmartCleanState } from "./phase";
 import {
   EMPTY_RESULTS,
@@ -30,6 +31,10 @@ export interface ResultsProps {
   onBack: () => void;
   /** "Clean <total>": opens the confirm dialog (REQ-DCLEAN-007); never cleans by itself. */
   onClean?: () => void;
+  /** Why the last clean reclaimed nothing (REQ-DCLEAN-018.A4), if it did. */
+  cleanError?: string | null;
+  /** Opens System Settings at Full Disk Access (REQ-DCLEAN-018.A2). */
+  onOpenFullDiskAccess?: () => void;
 }
 
 /**
@@ -42,8 +47,13 @@ export interface ResultsProps {
  * the list and the Clean action (REQ-DCLEAN-019). Layout follows
  * snapshot.html "Smart clean · review".
  *
+ * Errors (REQ-DCLEAN-018): a clean that reclaimed nothing returns here with
+ * the selection kept and says so (A4); a scan that skipped unreadable paths
+ * says how many, with a link to Full Disk Access (A2).
+ *
  * @implements REQ-DCLEAN-005
  * @implements REQ-DCLEAN-006
+ * @implements REQ-DCLEAN-018
  * @implements REQ-DCLEAN-019
  */
 export function Results(props: ResultsProps) {
@@ -56,6 +66,19 @@ export function Results(props: ResultsProps) {
         <p class="results-stale" role="status" data-testid="stale-warning">
           <span class="tag tag-accent">Out of date</span> This scan is more than a day old. Scan again before
           cleaning.
+        </p>
+      </Show>
+      <Show when={props.cleanError}>
+        <div class="error-state results-error" role="alert" data-testid="clean-error">
+          {props.cleanError}
+        </div>
+      </Show>
+      <Show when={props.view.skipped_paths > 0}>
+        <p class="notice skipped-note" role="status" data-testid="skipped-paths">
+          {skippedPaths(props.view.skipped_paths)}. {SKIPPED_HINT}{" "}
+          <button type="button" class="notice-link" onClick={() => props.onOpenFullDiskAccess?.()}>
+            {FULL_DISK_ACCESS_LINK}
+          </button>
         </p>
       </Show>
       <Show when={listed().length > 0} fallback={<EmptyResults onBack={props.onBack} />}>

@@ -15,7 +15,13 @@ export interface UsageRingProps {
  */
 export function UsageRing(props: UsageRingProps) {
   return (
-    <div class="ring" data-testid="usage-ring" data-phase={props.phase}>
+    <div
+      class="ring"
+      data-testid="usage-ring"
+      data-phase={props.phase}
+      role="img"
+      aria-label={`${formatBytes(props.disk.free_bytes)} free of ${formatBytes(props.disk.capacity_bytes)}`}
+    >
       <svg class="ring-svg" viewBox="0 0 120 120" aria-hidden="true">
         <circle class="ring-track" cx="60" cy="60" r="50" fill="none" />
         <circle
@@ -32,8 +38,9 @@ export function UsageRing(props: UsageRingProps) {
         <span class="ring-free num" data-testid="ring-free">
           {formatBytes(props.disk.free_bytes)}
         </span>
+        {/* Idle: "free of <capacity>"; done: "now free", as the snapshot (REQ-DCLEAN-009). */}
         <span class="ring-total" data-testid="ring-total">
-          free of {formatBytes(props.disk.capacity_bytes)}
+          {props.phase === "done" ? "now free" : `free of ${formatBytes(props.disk.capacity_bytes)}`}
         </span>
       </div>
     </div>

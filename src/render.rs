@@ -403,10 +403,10 @@ pub fn history(entries: &[Entry], format: Format) -> Result<()> {
         return Ok(());
     }
     println!(
-        "{:<28} {:<24} {:<6} {:>12} {:>6}  STATUS",
-        "ID", "WHEN", "MODE", "FREED", "ITEMS"
+        "{:<28} {:<18} {:<24} {:<6} {:>12} {:>6}  STATUS",
+        "ID", "TITLE", "WHEN", "MODE", "FREED", "ITEMS"
     );
-    println!("{}", "-".repeat(96));
+    println!("{}", "-".repeat(115));
     for e in entries {
         let status = match (&e.restored_at, e.mode) {
             (Some(at), _) => format!("restored {at}"),
@@ -414,8 +414,9 @@ pub fn history(entries: &[Entry], format: Format) -> Result<()> {
             (None, crate::history::Mode::Trash) => "in trash".to_string(),
         };
         println!(
-            "{:<28} {:<24} {:<6} {:>12} {:>6}  {}",
+            "{:<28} {:<18} {:<24} {:<6} {:>12} {:>6}  {}",
             e.id,
+            e.title,
             e.ts,
             serde_json::to_value(e.mode)?.as_str().unwrap_or(""),
             format_size(e.bytes, BINARY),

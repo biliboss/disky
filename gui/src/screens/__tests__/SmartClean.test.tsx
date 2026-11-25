@@ -31,6 +31,7 @@ function engineView(overrides: Record<string, unknown> = {}) {
     is_stale: false,
     preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
     large_files_count: 3,
+    skipped_paths: 0,
     categories: [
       {
         id: "engine_cat_a",
@@ -630,6 +631,7 @@ async function cleanUpdatesRingTagAndSidebar() {
       freed_bytes: 16e9,
       succeeded: ["/x"],
       failed: [],
+      history_id: null,
       history_entry: null,
       disk: { volume: "Macintosh HD", capacity_bytes: 512e9, free_bytes: 90e9 },
     }),
@@ -746,9 +748,8 @@ async function nothingIsCleanedBeforeCleanNow() {
   fireEvent.click(within(dialog).getByRole("button", { name: "Clean now" }));
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(await screen.findByTestId("cleaning")).toBeInTheDocument();
-  // REQ-DCLEAN-008 runs the clean; this change stops at the cleaning phase.
-  expect(cleanCalls()).toEqual([]);
-  expect(invoke.mock.calls.map(([cmd]) => cmd)).toEqual(["load_cleanup_view", "scan"]);
+  // REQ-DCLEAN-008: "Clean now" runs exactly one clean, and nothing before it did.
+  expect(invoke.mock.calls.map(([cmd]) => cmd)).toEqual(["load_cleanup_view", "scan", "clean"]);
 }
 
 async function deleteModeGivesCleanNowTheDangerFill() {
@@ -933,4 +934,324 @@ describe("loading states (REQ-DCLEAN-017)", () => {
 
 describe("disk state after a clean (REQ-DCLEAN-002.A4)", () => {
   it("ring, goal tag and sidebar meter follow the post-clean disk", cleanUpdatesRingTagAndSidebar);
+});
+
+// ── Cleaning, done, undo and errors (REQ-DCLEAN-008, -009, -018) ──
+
+const CLEAN_DISK = { volume: "Macintosh HD", capacity_bytes: 512e9, free_bytes: 78e9 };
+
+function cleanResultFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    mode: "trash",
+    freed_bytes: 3_000_000_000,
+    succeeded: ["/a/one", LONG_PATH],
+    failed: [],
+    history_id: "h1",
+    history_entry: null,
+    disk: CLEAN_DISK,
+    ...overrides,
+  };
+}
+
+/** Scan to results with extra engine handlers (clean, restore, …). */
+async function resultsWith(scanned: unknown, handlers: Record<string, (args: any) => unknown> = {}) {
+  let finish!: (v: unknown) => void;
+  engine({
+    load_cleanup_view: () => engineView(),
+    scan: () => new Promise((r) => (finish = r)),
+    ...handlers,
+  });
+  renderApp();
+  fireEvent.click(within(await idle()).getByRole("button", { name: "Start scan" }));
+  await screen.findByTestId("scanning");
+  finish(scanned);
+  return screen.findByTestId("results");
+}
+
+/** A clean that waits until `finish` is called; records its arguments. */
+function deferredClean() {
+  const d = { args: null as any, finish: (_v: unknown) => undefined as void };
+  const handler = (args: any) => {
+    d.args = args;
+    return new Promise((r) => (d.finish = r));
+  };
+  return { d, handler };
+}
+
+function emitClean(category_id: string, done: number, total: number) {
+  for (const cb of [...progressListeners]) cb({ payload: { category_id, done_items: done, total_items: total, fraction: done / total } });
+}
+
+/** Select both categories, open the dialog, pick `mode`, and Clean now. */
+async function cleanBoth(mode: "Move to Trash" | "Delete permanently" = "Move to Trash") {
+  fireEvent.click(within(resultRows()[1]).getByRole("checkbox", { name: "Engine label B" }));
+  const dialog = openDialog();
+  fireEvent.click(modeRadio(mode));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Clean now" }));
+  return screen.findByTestId("cleaning");
+}
+
+async function cleaningShowsHeadingStepAndBar() {
+  const { d, handler } = deferredClean();
+  await resultsWith(itemsView(), { clean: handler });
+  const cleaning = await cleanBoth();
+  expect(within(cleaning).getByRole("heading", { level: 1 })).toHaveTextContent("Tidying up…");
+  // The first chosen category shows before any event arrives.
+  expect(within(cleaning).getByTestId("clean-step")).toHaveTextContent(/^Moving Engine label A…$/);
+  await waitFor(() => expect(progressListeners.length).toBeGreaterThan(0));
+  emitClean("engine_cat_a", 1, 3);
+  expect(within(cleaning).getByTestId("clean-step")).toHaveTextContent(/^Moving Engine label A…$/);
+  emitClean("engine_cat_b", 2, 3);
+  expect(within(cleaning).getByTestId("clean-step")).toHaveTextContent(/^Moving Engine label B…$/);
+  expect(within(cleaning).getByTestId("clean-progress")).toHaveTextContent("67%");
+  const bar = within(cleaning).getByRole("progressbar", { name: "Clean progress" });
+  expect(bar).toHaveAttribute("aria-valuenow", "67");
+  expect(within(cleaning).getByTestId("clean-bar-fill")).toHaveClass("clean-bar-fill");
+  // A4: no cancel or stop while cleaning.
+  expect(within(cleaning).queryAllByRole("button")).toEqual([]);
+  // One clean, with the chosen categories' item paths in list order.
+  expect(cleanCalls()).toHaveLength(1);
+  expect(d.args).toEqual({ itemPaths: ["/a/one", LONG_PATH, "/y"], mode: "trash", openedBy: null });
+}
+
+async function permanentCleanSaysDeleting() {
+  const { handler } = deferredClean();
+  await resultsWith(itemsView(), { clean: handler });
+  const cleaning = await cleanBoth("Delete permanently");
+  expect(within(cleaning).getByTestId("clean-step")).toHaveTextContent(/^Deleting Engine label A…$/);
+  await waitFor(() => expect(progressListeners.length).toBeGreaterThan(0));
+  emitClean("engine_cat_b", 3, 3);
+  expect(within(cleaning).getByTestId("clean-step")).toHaveTextContent(/^Deleting Engine label B…$/);
+  expect(within(cleaning).getByTestId("clean-progress")).toHaveTextContent("99%");
+}
+
+function cleanFillUsesAccent2() {
+  const css = readFileSync(resolve(__dirname, "../smartClean/smartClean.css"), "utf8");
+  expect(css).toMatch(/\.clean-bar-fill\s*\{[^}]*background:\s*var\(--color-accent-2\);/);
+  expect(css).toMatch(/\.scan-bar-fill\s*\{[^}]*background:\s*var\(--color-accent\);/);
+}
+
+async function finishCleanToDone(result: unknown, handlers: Record<string, (args: any) => unknown> = {}, mode?: "Delete permanently") {
+  await resultsWith(itemsView(), { clean: () => result, ...handlers });
+  await cleanBoth(mode);
+  return screen.findByTestId("done");
+}
+
+async function doneReportsReclaimedBytesNoteAndActions() {
+  // Estimate was 4.8 GB; the engine reclaimed 3 GB — that is what shows (A1).
+  const done = await finishCleanToDone(cleanResultFixture());
+  expect(within(done).getByText("Done")).toHaveClass("tag", "tag-accent-2");
+  expect(within(done).getByTestId("done-heading")).toHaveTextContent(/^3 GB cleared$/);
+  expect(within(done).getByTestId("done-note")).toHaveTextContent(
+    "Everything went to the Trash. Changed your mind? Undo now or restore any time in the next 30 days.",
+  );
+  expect(within(done).getByRole("button", { name: "Back to home" })).toHaveClass("btn-primary");
+  expect(within(done).getByRole("button", { name: "Undo" })).toHaveClass("btn-secondary");
+  expect(within(done).getByRole("button", { name: "View history" })).toHaveClass("btn-ghost");
+  expect(within(done).getByTestId("ring-total")).toHaveTextContent("now free");
+  expect(within(done).getByTestId("ring-free")).toHaveTextContent("78 GB");
+  expect(within(done).getByTestId("ring-fill")).toHaveClass("ring-fill--done");
+  expect(within(done).queryByTestId("done-failed")).toBeNull();
+}
+
+async function permanentDoneHasNoUndo() {
+  const done = await finishCleanToDone(cleanResultFixture({ mode: "delete" }), {}, "Delete permanently");
+  expect(within(done).getByTestId("done-note")).toHaveTextContent(/^Those files were deleted permanently\.$/);
+  expect(within(done).queryByRole("button", { name: "Undo" })).toBeNull();
+}
+
+async function backHomeAndViewHistoryNavigate() {
+  let done = await finishCleanToDone(cleanResultFixture());
+  fireEvent.click(within(done).getByRole("button", { name: "Back to home" }));
+  expect(await idle()).toBeInTheDocument();
+  cleanup();
+  window.location.hash = "";
+  done = await finishCleanToDone(cleanResultFixture());
+  fireEvent.click(within(done).getByRole("button", { name: "View history" }));
+  const main = screen.getByRole("main");
+  expect(await within(main).findByRole("heading", { level: 1, name: "History" })).toBeInTheDocument();
+}
+
+async function undoRestoresUpdatesTheMeterAndReportsMissing() {
+  let restoreArgs: unknown = null;
+  const done = await finishCleanToDone(cleanResultFixture(), {
+    restore: (args) => {
+      restoreArgs = args;
+      return {
+        report: { id: "h1", restored: ["/a/one"], conflicts: [], missing: [LONG_PATH] },
+        disk: { volume: "Macintosh HD", capacity_bytes: 512e9, free_bytes: 75e9 },
+      };
+    },
+  });
+  expect(screen.getByTestId("disk-meter")).toHaveTextContent("78 GB free");
+  fireEvent.click(within(done).getByRole("button", { name: "Undo" }));
+  const home = await idle();
+  expect(restoreArgs).toEqual({ historyId: "h1" });
+  expect(screen.getByTestId("disk-meter")).toHaveTextContent("75 GB free");
+  expect(within(home).getByTestId("ring-free")).toHaveTextContent("75 GB");
+  expect(screen.getByTestId("undo-notices")).toHaveTextContent(`${LONG_PATH} is no longer in Trash`);
+}
+
+async function undoShowsBusyOnlyPastTheThreshold() {
+  const done = await finishCleanToDone(cleanResultFixture(), { restore: () => new Promise(() => undefined) });
+  const undoBtn = within(done).getByTestId("undo");
+  vi.useFakeTimers();
+  try {
+    fireEvent.click(undoBtn);
+    expect(undoBtn).toBeDisabled();
+    vi.advanceTimersByTime(199);
+    expect(undoBtn).toHaveTextContent(/^Undo$/);
+    vi.advanceTimersByTime(1);
+    expect(undoBtn).toHaveTextContent("Restoring…");
+    expect(undoBtn).toHaveAttribute("aria-busy", "true");
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+async function failedUndoStaysOnDoneWithTheCause() {
+  const done = await finishCleanToDone(cleanResultFixture(), {
+    restore: () => Promise.reject({ code: "generic", title: "already restored", detail: "entry h1 already restored at x", retryable: false }),
+  });
+  fireEvent.click(within(done).getByRole("button", { name: "Undo" }));
+  expect(await within(done).findByTestId("undo-error")).toHaveTextContent("entry h1 already restored at x");
+  expect(within(done).getByTestId("undo-error")).toHaveClass("error-state");
+}
+
+async function partialCleanListsFailedPathsAndReclaimedBytes() {
+  const done = await finishCleanToDone(
+    cleanResultFixture({
+      freed_bytes: 1_100_000_000,
+      succeeded: ["/a/one"],
+      failed: [
+        { path: LONG_PATH, reason: "delete failed" },
+        { path: "/y", reason: "missing" },
+      ],
+    }),
+  );
+  expect(within(done).getByTestId("done-heading")).toHaveTextContent(/^1.1 GB cleared$/);
+  const failed = within(done).getByTestId("done-failed");
+  expect(failed).toHaveAttribute("role", "alert");
+  expect(failed).toHaveClass("error-state");
+  expect(failed).toHaveTextContent("2 items couldn't be cleaned");
+  const rows = within(failed).getAllByRole("listitem");
+  expect(rows.map((r) => r.getAttribute("title"))).toEqual([LONG_PATH, "/y"]);
+  expect(rows[0]).toHaveTextContent("couldn't be deleted");
+}
+
+async function totalFailureReturnsToResultsWithTheSelection() {
+  await resultsWith(itemsView(), {
+    clean: () =>
+      cleanResultFixture({
+        freed_bytes: 0,
+        succeeded: [],
+        failed: [
+          { path: "/a/one", reason: "delete failed" },
+          { path: LONG_PATH, reason: "delete failed" },
+          { path: "/y", reason: "delete failed" },
+        ],
+        history_id: null,
+      }),
+  });
+  await cleanBoth();
+  const results = await screen.findByTestId("results");
+  expect(screen.queryByTestId("done")).toBeNull();
+  const err = within(results).getByTestId("clean-error");
+  expect(err).toHaveAttribute("role", "alert");
+  expect(err).toHaveClass("error-state");
+  expect(err).toHaveTextContent("Nothing was cleaned");
+  expect(checkedIds()).toEqual(["engine_cat_a", "engine_cat_b"]);
+}
+
+async function aRejectedCleanAlsoReturnsToResults() {
+  await resultsWith(itemsView(), {
+    clean: () => Promise.reject({ code: "io", title: "i/o error", detail: "disk on fire", retryable: true }),
+  });
+  await cleanBoth();
+  const results = await screen.findByTestId("results");
+  expect(within(results).getByTestId("clean-error")).toHaveTextContent("Nothing was cleaned: disk on fire");
+  expect(checkedIds()).toEqual(["engine_cat_a", "engine_cat_b"]);
+}
+
+async function lockHeldScanNamesTheCauseWithTryAgain() {
+  let scans = 0;
+  engine({
+    load_cleanup_view: () => engineView(),
+    scan: () => {
+      scans++;
+      return Promise.reject({ code: "lock-held", title: "snapshot locked", detail: "Could not set lock", retryable: true });
+    },
+  });
+  renderApp();
+  fireEvent.click(within(await idle()).getByRole("button", { name: "Start scan" }));
+  const err = await screen.findByTestId("scan-error");
+  expect(err).toHaveAttribute("role", "alert");
+  expect(err).toHaveClass("error-state");
+  expect(err).toHaveTextContent(/^Another disky process is using the snapshot\. Try again in a moment\.Try again$/);
+  fireEvent.click(within(err).getByRole("button", { name: "Try again" }));
+  await waitFor(() => expect(scans).toBe(2));
+}
+
+async function otherScanErrorsKeepTheEngineDetail() {
+  engine({
+    load_cleanup_view: () => engineView(),
+    scan: () => Promise.reject({ code: "generic", title: "error", detail: "walker exploded", retryable: false }),
+  });
+  renderApp();
+  fireEvent.click(within(await idle()).getByRole("button", { name: "Start scan" }));
+  const err = await screen.findByTestId("scan-error");
+  expect(err).toHaveTextContent("The scan didn't finish: walker exploded");
+  expect(within(err).queryByRole("button", { name: "Try again" })).toBeNull();
+}
+
+async function skippedPathsAreCountedWithAFullDiskAccessLink() {
+  let opened = 0;
+  const results = await resultsWith(itemsView({ skipped_paths: 3 }), {
+    open_full_disk_access: () => {
+      opened++;
+      return null;
+    },
+  });
+  const note = within(results).getByTestId("skipped-paths");
+  expect(note).toHaveTextContent("3 paths skipped");
+  // Results for the readable paths are still shown.
+  expect(resultRows()).toHaveLength(2);
+  fireEvent.click(within(note).getByRole("button", { name: "Open Full Disk Access" }));
+  await waitFor(() => expect(opened).toBe(1));
+}
+
+async function noSkippedNoteWhenNothingWasSkipped() {
+  const results = await resultsWith(itemsView());
+  expect(within(results).queryByTestId("skipped-paths")).toBeNull();
+}
+
+function errorStatesUseTheDangerToken() {
+  const css = readFileSync(resolve(__dirname, "../smartClean/smartClean.css"), "utf8");
+  expect(css).toMatch(/\.error-state\s*\{[^}]*color:\s*var\(--color-danger\);/);
+}
+
+describe("Smart Clean cleaning phase (REQ-DCLEAN-008)", () => {
+  it("shows the heading, the step label in selection order and the bar, with no cancel (REQ-DCLEAN-008.A1, A4)", cleaningShowsHeadingStepAndBar);
+  it("a permanent clean reads Deleting (REQ-DCLEAN-008.A3)", permanentCleanSaysDeleting);
+  it("the cleaning fill uses accent-2 (REQ-DCLEAN-008.A2)", cleanFillUsesAccent2);
+});
+
+describe("Smart Clean done phase (REQ-DCLEAN-009)", () => {
+  it("reports the reclaimed bytes, the Trash note and the three actions (REQ-DCLEAN-009.A1, A2)", doneReportsReclaimedBytesNoteAndActions);
+  it("a permanent clean has its note and no Undo (REQ-DCLEAN-009.A2, A3)", permanentDoneHasNoUndo);
+  it("Back to home returns to idle and View history opens History (REQ-DCLEAN-009.A6)", backHomeAndViewHistoryNavigate);
+  it("Undo restores, updates the meter, reports missing items and returns to idle (REQ-DCLEAN-009.A4, A7)", undoRestoresUpdatesTheMeterAndReportsMissing);
+  it("Undo shows busy only past the spinner threshold (REQ-DCLEAN-017.A2)", undoShowsBusyOnlyPastTheThreshold);
+  it("a failed Undo stays on done and says why (REQ-DCLEAN-009.A7)", failedUndoStaysOnDoneWithTheCause);
+});
+
+describe("Smart Clean error states (REQ-DCLEAN-018)", () => {
+  it("a lock-held scan names the cause with Try again (REQ-DCLEAN-018.A1)", lockHeldScanNamesTheCauseWithTryAgain);
+  it("other scan errors keep the engine's detail (REQ-DCLEAN-018)", otherScanErrorsKeepTheEngineDetail);
+  it("skipped paths are counted with a Full Disk Access link (REQ-DCLEAN-018.A2)", skippedPathsAreCountedWithAFullDiskAccessLink);
+  it("no skipped note when nothing was skipped (REQ-DCLEAN-018.A2)", noSkippedNoteWhenNothingWasSkipped);
+  it("a partial clean lists failed paths and only reclaimed bytes (REQ-DCLEAN-018.A3)", partialCleanListsFailedPathsAndReclaimedBytes);
+  it("a total failure returns to results with the selection (REQ-DCLEAN-018.A4)", totalFailureReturnsToResultsWithTheSelection);
+  it("a rejected clean also returns to results with the selection (REQ-DCLEAN-018.A4)", aRejectedCleanAlsoReturnsToResults);
+  it("error states use --color-danger (REQ-DCLEAN-018.A5)", errorStatesUseTheDangerToken);
 });

@@ -144,6 +144,36 @@
   --confirm-list-gap: 6px;            /* snapshot: dialog-body gap:6px */
   --fs-confirm-note: var(--fs-small); /* 13px */
 
+  /* ── Smart Clean · cleaning (REQ-DCLEAN-008) ────────────────── */
+  --clean-py: var(--scan-py);         /* 48px, as scanning */
+  --clean-gap: var(--scan-gap);       /* 20px */
+  --clean-max-w: var(--scan-max-w);   /* 760px */
+  --fs-clean-title: var(--fs-scan-title); /* 40px */
+
+  /* ── Smart Clean · done (REQ-DCLEAN-009) ────────────────────── */
+  --done-pad: 56px;
+  --done-gap: var(--idle-gap);        /* 48px, main column ↔ ring rail */
+  --done-rail-w: var(--idle-rail-w);  /* 300px */
+  --done-stack-gap: 18px;
+  --fs-done-title: 54px;
+  --lh-done-title: 1;
+  --fs-done-note: var(--fs-h5);       /* 16px */
+  --done-note-max: var(--idle-desc-max); /* 440px */
+  --done-actions-gap: var(--idle-actions-gap); /* 10px */
+  --done-actions-mt: var(--idle-actions-mt);   /* 8px */
+  --btn-done-py: var(--btn-clean-py); /* 12px */
+  --btn-done-home-px: 24px;
+  --btn-done-undo-px: 20px;
+  --done-ring-size: 240px;
+  --fs-done-ring-number: 34px;
+  --done-ring-label-gap: 0px;         /* snapshot: the done ring label has no gap */
+  --done-rail-gap: var(--idle-rail-gap); /* 14px */
+  --done-failed-gap: 6px;
+
+  /* ── Error states (REQ-DCLEAN-018) ──────────────────────────── */
+  --error-gap: 10px;
+  --error-mt: var(--idle-actions-mt); /* 8px */
+
   /* ── Busy indicator (REQ-DCLEAN-017.A2) ─────────────────────── */
   --busy-size: 18px;
   --busy-stroke: 2px;

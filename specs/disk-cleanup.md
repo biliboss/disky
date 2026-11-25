@@ -387,6 +387,35 @@ verifies:
 
 The cleaning phase shows the heading "Tidying up…", a step label "Moving <category>…", a percentage, and a progress bar.
 
+implementations:
+  - src/cleanup.rs:apply_observed
+  - src/contract.rs:clean_observed
+  - src/contract.rs:CleanProgress
+  - src/contract.rs:select_reviewed
+  - gui/src-tauri/src/main.rs:clean
+  - gui/src/lib/contract.ts:parseCleanProgress
+  - gui/src/lib/engine.ts:onCleanProgress
+  - gui/src/screens/smartClean/phase.ts:confirmClean
+  - gui/src/screens/smartClean/phase.ts:cleanProgress
+  - gui/src/screens/smartClean/cleaningCopy.ts:stepLabel
+  - gui/src/screens/smartClean/Cleaning.tsx:Cleaning
+  - gui/src/screens/SmartClean.tsx:SmartClean
+
+verifies:
+  - src/cleanup.rs:apply_observed_reports_each_hit_in_order
+  - src/contract.rs:clean_reports_progress_per_item_in_selection_order
+  - src/contract.rs:select_reviewed_keeps_the_callers_order
+  - gui/src/lib/contract.test.ts:cleanProgressIsValidated
+  - gui/src/screens/__tests__/phase.test.ts:confirmCleanStoresModeAndFirstCategory
+  - gui/src/screens/__tests__/phase.test.ts:cleanProgressNeverGoesBackwardsAndFollowsTheCategory
+  - gui/src/screens/__tests__/phase.test.ts:cleanProgressIsIgnoredOutsideCleaning
+  - gui/src/screens/__tests__/cleaningCopy.test.ts:stepVerbFollowsTheMode
+  - gui/src/screens/__tests__/SmartClean.test.tsx:cleaningShowsHeadingStepAndBar
+  - gui/src/screens/__tests__/SmartClean.test.tsx:permanentCleanSaysDeleting
+  - gui/src/screens/__tests__/SmartClean.test.tsx:cleanFillUsesAccent2
+  - gui/src/screens/__tests__/SmartClean.test.tsx:nothingIsCleanedBeforeCleanNow
+  - gui/tests/visual/shell.spec.ts:cleaningPhaseMatchesSnapshot
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-008.A1 -->
 - The step label names the category currently being processed, in selection order.
@@ -401,6 +430,50 @@ The cleaning phase shows the heading "Tidying up…", a step label "Moving <cate
 ## The done phase MUST report bytes actually freed and MUST offer undo only when reversible
 
 The done phase shows a "Done" tag, the heading "<freed> cleared", a mode-dependent note, the actions "Back to home" (primary), "Undo" (secondary) and "View history" (ghost), and the ring with "now free" beneath the free amount.
+
+implementations:
+  - src/contract.rs:CleanResult
+  - src/contract.rs:clean_title
+  - src/contract.rs:RestoreResult
+  - src/contract.rs:restore
+  - src/history.rs:Entry
+  - src/cleanup.rs:apply_observed
+  - src/render.rs:history
+  - gui/src-tauri/src/main.rs:clean
+  - gui/src-tauri/src/main.rs:restore
+  - gui/src/lib/engine.ts:clean
+  - gui/src/lib/engine.ts:restore
+  - gui/src/lib/contract.ts:parseCleanResult
+  - gui/src/lib/contract.ts:parseRestoreResult
+  - gui/src/lib/diskState.ts:setDisk
+  - gui/src/screens/smartClean/phase.ts:cleanFinished
+  - gui/src/screens/smartClean/phase.ts:doneHome
+  - gui/src/screens/smartClean/doneCopy.ts:doneHeading
+  - gui/src/screens/smartClean/doneCopy.ts:doneNote
+  - gui/src/screens/smartClean/doneCopy.ts:canUndo
+  - gui/src/screens/smartClean/doneCopy.ts:undoNotices
+  - gui/src/screens/smartClean/Done.tsx:Done
+  - gui/src/shell/UsageRing.tsx:UsageRing
+  - gui/src/screens/SmartClean.tsx:SmartClean
+
+verifies:
+  - src/contract.rs:clean_title_follows_who_opened_the_review
+  - src/contract.rs:undo_restores_a_trash_clean_and_reports_missing
+  - src/history.rs:entries_without_a_title_read_as_cli_cleanups
+  - src/cleanup.rs:apply_trash_records_one_history_entry
+  - gui/src/lib/contract.test.ts:restoreResultParsesTheReportAndDisk
+  - gui/src/lib/contract.test.ts:cleanResultParsesWithAndWithoutEntry
+  - gui/src/screens/__tests__/phase.test.ts:cleanFinishedEntersDone
+  - gui/src/screens/__tests__/phase.test.ts:doneHomeReturnsToIdle
+  - gui/src/screens/__tests__/cleaningCopy.test.ts:doneCopyFollowsTheMode
+  - gui/src/screens/__tests__/cleaningCopy.test.ts:undoAndFailureCopy
+  - gui/src/screens/__tests__/SmartClean.test.tsx:doneReportsReclaimedBytesNoteAndActions
+  - gui/src/screens/__tests__/SmartClean.test.tsx:permanentDoneHasNoUndo
+  - gui/src/screens/__tests__/SmartClean.test.tsx:backHomeAndViewHistoryNavigate
+  - gui/src/screens/__tests__/SmartClean.test.tsx:undoRestoresUpdatesTheMeterAndReportsMissing
+  - gui/src/screens/__tests__/SmartClean.test.tsx:undoShowsBusyOnlyPastTheThreshold
+  - gui/src/screens/__tests__/SmartClean.test.tsx:failedUndoStaysOnDoneWithTheCause
+  - gui/tests/visual/shell.spec.ts:donePhaseMatchesSnapshot
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-009.A1 -->
@@ -535,6 +608,49 @@ verifies:
 ## Failures MUST surface as an error state that names the cause and a recovery action
 
 The snapshot shows no error state. This REQ is gap-filled from disky's error taxonomy.
+
+implementations:
+  - src/scan.rs:run_observed
+  - src/db.rs:write_scan_skipped
+  - src/db.rs:read_scan_skipped
+  - src/contract.rs:load
+  - src/contract.rs:EngineError
+  - src/contract.rs:clean_result
+  - src/cleanup.rs:apply_one
+  - gui/src-tauri/src/main.rs:blocking
+  - gui/src-tauri/src/main.rs:scan
+  - gui/src-tauri/src/main.rs:open_full_disk_access
+  - gui/src/lib/contract.ts:EngineError
+  - gui/src/lib/contract.ts:parseEngineError
+  - gui/src/lib/engine.ts:openFullDiskAccess
+  - gui/src/screens/smartClean/errorCopy.ts:scanErrorMessage
+  - gui/src/screens/smartClean/errorCopy.ts:canRetry
+  - gui/src/screens/smartClean/errorCopy.ts:skippedPaths
+  - gui/src/screens/smartClean/doneCopy.ts:cleanFailedMessage
+  - gui/src/screens/smartClean/doneCopy.ts:failedHeading
+  - gui/src/screens/smartClean/phase.ts:cleanFailed
+  - gui/src/screens/smartClean/Results.tsx:Results
+  - gui/src/screens/smartClean/Done.tsx:Done
+  - gui/src/screens/SmartClean.tsx:SmartClean
+
+verifies:
+  - tests/lib_integration.rs:scan_counts_permission_skipped_paths
+  - src/cleanup.rs:apply_delete_failure_leaves_path_and_proceeds
+  - src/contract.rs:partial_clean_frees_only_what_was_reclaimed
+  - src/contract.rs:engine_errors_carry_the_exit_slug
+  - src/contract.rs:full_disk_access_url_opens_the_privacy_pane
+  - gui/src/lib/contract.test.ts:engineErrorsKeepTheExitSlug
+  - gui/src/lib/contract.test.ts:skippedPathsMustBeAWholeCount
+  - gui/src/screens/__tests__/phase.test.ts:cleanFailedReturnsToResultsWithTheSelection
+  - gui/src/screens/__tests__/cleaningCopy.test.ts:errorCopyDispatchesOnTheCode
+  - gui/src/screens/__tests__/SmartClean.test.tsx:lockHeldScanNamesTheCauseWithTryAgain
+  - gui/src/screens/__tests__/SmartClean.test.tsx:otherScanErrorsKeepTheEngineDetail
+  - gui/src/screens/__tests__/SmartClean.test.tsx:skippedPathsAreCountedWithAFullDiskAccessLink
+  - gui/src/screens/__tests__/SmartClean.test.tsx:noSkippedNoteWhenNothingWasSkipped
+  - gui/src/screens/__tests__/SmartClean.test.tsx:partialCleanListsFailedPathsAndReclaimedBytes
+  - gui/src/screens/__tests__/SmartClean.test.tsx:totalFailureReturnsToResultsWithTheSelection
+  - gui/src/screens/__tests__/SmartClean.test.tsx:aRejectedCleanAlsoReturnsToResults
+  - gui/src/screens/__tests__/SmartClean.test.tsx:errorStatesUseTheDangerToken
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-018.A1 -->

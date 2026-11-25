@@ -83,6 +83,7 @@ function itemSizesAddUpToTheCategorySize() {
     is_stale: false,
     preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
     large_files_count: 0,
+    skipped_paths: 0,
     categories: snapshotReviewCategories(),
     catalogue: [],
   });

@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { ContractError, parseCleanResult, parseCleanupView, parseScanProgress } from "./contract";
+import {
+  ContractError,
+  EngineError,
+  LOCK_HELD,
+  parseCleanProgress,
+  parseCleanResult,
+  parseCleanupView,
+  parseEngineError,
+  parseRestoreResult,
+  parseScanProgress,
+} from "./contract";
 
 /** A view as the engine's `contract::CleanupView` serialises it. */
 function validView(): Record<string, any> {
@@ -11,6 +21,7 @@ function validView(): Record<string, any> {
     is_stale: false,
     preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
     large_files_count: 8,
+    skipped_paths: 0,
     categories: [
       {
         id: "app_caches",
@@ -128,6 +139,7 @@ function catalogueAndCompletedBytesAreStrict() {
 function cleanResultParsesWithAndWithoutEntry() {
   const entry = {
     id: "2026-11-25_09-00-00-00ab",
+    title: "Smart Clean",
     ts: "2026-11-25T09:00:00.000Z",
     mode: "trash",
     categories: ["app_caches"],
@@ -140,17 +152,20 @@ function cleanResultParsesWithAndWithoutEntry() {
     freed_bytes: 900,
     succeeded: ["/a"],
     failed: [{ path: "/gone", reason: "missing" }],
+    history_id: entry.id,
     history_entry: entry,
     disk: { volume: "Macintosh HD", capacity_bytes: 512e9, free_bytes: 80e9 },
   };
   expect(parseCleanResult(raw)).toEqual(raw);
-  expect(parseCleanResult({ ...raw, history_entry: null }).history_entry).toBeNull();
+  expect(parseCleanResult({ ...raw, history_id: null, history_entry: null }).history_entry).toBeNull();
+  expectContractError(() => parseCleanResult({ ...raw, history_id: 7 }), "result.history_id");
+  expectContractError(() => parseCleanResult({ ...raw, history_entry: { ...entry, title: undefined } }), "result.history_entry.title");
   expectContractError(() => parseCleanResult({ ...raw, mode: "shred" }), "result.mode");
   expectContractError(() => parseCleanResult({ ...raw, freed_bytes: 0.5 }), "result.freed_bytes");
 }
 
 function cleanResultWithoutDiskIsRejected() {
-  const raw: Record<string, unknown> = { mode: "trash", freed_bytes: 0, succeeded: [], failed: [], history_entry: null };
+  const raw: Record<string, unknown> = { mode: "trash", freed_bytes: 0, succeeded: [], failed: [], history_id: null, history_entry: null };
   expectContractError(() => parseCleanResult(raw), "result.disk");
   const bad = { ...raw, disk: { volume: "v", capacity_bytes: 1, free_bytes: -1 } };
   expectContractError(() => parseCleanResult(bad), "result.disk.free_bytes");
@@ -172,6 +187,52 @@ function largeFilesCountMustBeAWholeCount() {
   const fractional = { ...validView(), large_files_count: 1.5 };
   expectContractError(() => parseCleanupView(fractional), "view.large_files_count");
 }
+
+function cleanProgressIsValidated() {
+  const ok = { category_id: "engine_cat_a", done_items: 1, total_items: 2, fraction: 0.5 };
+  expect(parseCleanProgress(ok)).toEqual(ok);
+  expectContractError(() => parseCleanProgress({ ...ok, fraction: 1.5 }), "clean.fraction");
+  expectContractError(() => parseCleanProgress({ ...ok, done_items: 3 }), "clean.done_items");
+  expectContractError(() => parseCleanProgress({ ...ok, total_items: -1 }), "clean.total_items");
+  expectContractError(() => parseCleanProgress({ ...ok, category_id: 1 }), "clean.category_id");
+}
+
+function restoreResultParsesTheReportAndDisk() {
+  const raw = {
+    report: { id: "e1", restored: ["/a"], conflicts: [], missing: ["/b"] },
+    disk: { volume: "Macintosh HD", capacity_bytes: 512e9, free_bytes: 70e9 },
+  };
+  expect(parseRestoreResult(raw)).toEqual(raw);
+  expectContractError(() => parseRestoreResult({ ...raw, report: { ...raw.report, missing: [1] } }), "restore.report.missing[0]");
+  expectContractError(() => parseRestoreResult({ report: raw.report }), "restore.disk");
+}
+
+function engineErrorsKeepTheExitSlug() {
+  const held = parseEngineError({ code: LOCK_HELD, title: "snapshot locked", detail: "held", retryable: true });
+  expect(held).toBeInstanceOf(EngineError);
+  expect(held.code).toBe(LOCK_HELD);
+  expect(held.retryable).toBe(true);
+  expect(held.detail).toBe("held");
+  const plain = parseEngineError("boom");
+  expect(plain.code).toBe("generic");
+  expect(plain.detail).toBe("boom");
+  expect(parseEngineError(held)).toBe(held);
+}
+
+function skippedPathsMustBeAWholeCount() {
+  const missing = validView();
+  delete missing.skipped_paths;
+  expectContractError(() => parseCleanupView(missing), "view.skipped_paths");
+  expectContractError(() => parseCleanupView({ ...validView(), skipped_paths: -2 }), "view.skipped_paths");
+  expect(parseCleanupView({ ...validView(), skipped_paths: 3 }).skipped_paths).toBe(3);
+}
+
+describe("GUI contract for cleaning, undo and errors (REQ-DCLEAN-008, REQ-DCLEAN-009, REQ-DCLEAN-018)", () => {
+  it("clean progress events are parsed strictly (REQ-DCLEAN-008)", cleanProgressIsValidated);
+  it("a restore result carries the report and the disk (REQ-DCLEAN-009.A4, A7)", restoreResultParsesTheReportAndDisk);
+  it("engine errors keep disky's exit-code slug (REQ-DCLEAN-018.A1)", engineErrorsKeepTheExitSlug);
+  it("the skipped-path count is a whole number (REQ-DCLEAN-018.A2)", skippedPathsMustBeAWholeCount);
+});
 
 describe("GUI data contract (REQ-DCLEAN-027, REQ-DCLEAN-029)", () => {
   it("a valid engine view passes unchanged (REQ-DCLEAN-027)", validViewPasses);

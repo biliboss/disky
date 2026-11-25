@@ -23,9 +23,14 @@ export function setFromView(view: CleanupView): void {
   setState({ disk: view.disk, goalBytes: view.goal_bytes });
 }
 
+/** Replace disk usage with a fresh engine reading; the goal is kept. */
+export function setDisk(disk: Disk): void {
+  setState((s) => (s ? { ...s, disk } : s));
+}
+
 /** Replace disk usage with a clean's post-clean reading; the goal is kept. */
 export function setFromClean(result: CleanResult): void {
-  setState((s) => (s ? { ...s, disk: result.disk } : s));
+  setDisk(result.disk);
 }
 
 /** Forget the state (tests). */

@@ -11,6 +11,10 @@
 
 export type Safety = "safe" | "review";
 export type CleanMode = "trash" | "delete"; // lint-boundary-allow: clean mode, not a category
+/** The reversible clean mode: items move to the Trash. */
+export const TRASH_MODE: CleanMode = "trash"; // lint-boundary-allow: clean mode, not a category
+/** The permanent clean mode. */
+export const DELETE_MODE: CleanMode = "delete";
 
 export interface Disk {
   volume: string;
@@ -62,6 +66,8 @@ export interface CleanupView {
   categories: CategoryView[];
   /** Every category the engine checks, in engine order. */
   catalogue: CatalogueEntry[];
+  /** Paths the scan could not read for permission reasons (REQ-DCLEAN-018.A2). */
+  skipped_paths: number;
 }
 
 export interface ScanProgress {
@@ -70,6 +76,16 @@ export interface ScanProgress {
   completed_category_ids: string[];
   /** Physical bytes per completed category with hits; absent → nothing found. */
   completed_category_bytes: Record<string, number>;
+}
+
+/** One clean progress event, sent after each item (REQ-DCLEAN-008). */
+export interface CleanProgress {
+  /** The category being processed now, in selection order. */
+  category_id: string;
+  done_items: number;
+  total_items: number;
+  /** done_items / total_items, 0..1. */
+  fraction: number;
 }
 
 export interface Failure {
@@ -86,6 +102,8 @@ export interface HistoryItem {
 
 export interface HistoryEntry {
   id: string;
+  /** "Smart Clean", "Assistant cleanup" or "Cleanup" (REQ-DCLEAN-009.A5). */
+  title: string;
   ts: string;
   mode: CleanMode;
   categories: string[];
@@ -99,9 +117,56 @@ export interface CleanResult {
   freed_bytes: number;
   succeeded: string[];
   failed: Failure[];
+  /** Entry Undo restores; null when nothing was cleaned. */
+  history_id: string | null;
   history_entry: HistoryEntry | null;
   /** The volume's usage read after the clean (REQ-DCLEAN-002.A4). */
   disk: Disk;
+}
+
+/** What an Undo restored (REQ-DCLEAN-009.A4, A7). Paths are original paths. */
+export interface RestoreReport {
+  id: string;
+  restored: string[];
+  conflicts: string[];
+  /** Items "no longer in Trash" (REQ-DCLEAN-034.A4). */
+  missing: string[];
+}
+
+export interface RestoreResult {
+  report: RestoreReport;
+  /** The volume's usage read after the restore. */
+  disk: Disk;
+}
+
+/** disky's exit-code slug for a snapshot locked by another process. */
+export const LOCK_HELD = "lock-held";
+
+/**
+ * A failed engine command (REQ-DCLEAN-018), typed by disky's exit-code slug
+ * (`code`: "lock-held", "io", …). Dispatch on `code`, never on `detail`.
+ */
+export class EngineError extends Error {
+  constructor(
+    readonly code: string,
+    readonly detail: string,
+    readonly retryable: boolean,
+  ) {
+    super(detail);
+    this.name = "EngineError";
+  }
+}
+
+/** Turn whatever a rejected `invoke` carried into an {@link EngineError}. */
+export function parseEngineError(raw: unknown): EngineError {
+  if (raw instanceof EngineError) return raw;
+  if (typeof raw === "object" && raw !== null && typeof (raw as Obj).code === "string") {
+    const o = raw as Obj;
+    const detail = typeof o.detail === "string" ? o.detail : String(o.title ?? o.code);
+    return new EngineError(o.code as string, detail, o.retryable === true);
+  }
+  const detail = raw instanceof Error ? raw.message : String(raw);
+  return new EngineError("generic", detail, false);
 }
 
 /** A payload that does not match the contract. `path` names the field. */
@@ -232,6 +297,7 @@ export function parseCleanupView(raw: unknown): CleanupView {
         safety: safety(e.safety, `view.catalogue[${i}].safety`),
       };
     }),
+    skipped_paths: count(o.skipped_paths, "view.skipped_paths"),
   };
 }
 
@@ -256,10 +322,42 @@ export function parseScanProgress(raw: unknown): ScanProgress {
   };
 }
 
+/** Validated like {@link parseScanProgress}: a malformed event throws. */
+export function parseCleanProgress(raw: unknown): CleanProgress {
+  const o = obj(raw, "clean");
+  const fraction = o.fraction;
+  if (typeof fraction !== "number" || !Number.isFinite(fraction) || fraction < 0 || fraction > 1) {
+    throw new ContractError("clean.fraction", `expected a number in 0..1, got ${JSON.stringify(fraction)}`);
+  }
+  const done = count(o.done_items, "clean.done_items");
+  const total = count(o.total_items, "clean.total_items");
+  if (done > total) throw new ContractError("clean.done_items", `${done} exceeds total_items ${total}`);
+  return { category_id: str(o.category_id, "clean.category_id"), done_items: done, total_items: total, fraction };
+}
+
+function strArr(v: unknown, path: string): string[] {
+  return arr(v, path).map((s, i) => str(s, `${path}[${i}]`));
+}
+
+export function parseRestoreResult(raw: unknown): RestoreResult {
+  const o = obj(raw, "restore");
+  const r = obj(o.report, "restore.report");
+  return {
+    report: {
+      id: str(r.id, "restore.report.id"),
+      restored: strArr(r.restored, "restore.report.restored"),
+      conflicts: strArr(r.conflicts, "restore.report.conflicts"),
+      missing: strArr(r.missing, "restore.report.missing"),
+    },
+    disk: parseDisk(o.disk, "restore.disk"),
+  };
+}
+
 function parseHistoryEntry(v: unknown, path: string): HistoryEntry {
   const o = obj(v, path);
   return {
     id: str(o.id, `${path}.id`),
+    title: str(o.title, `${path}.title`),
     ts: str(o.ts, `${path}.ts`),
     mode: mode(o.mode, `${path}.mode`),
     categories: arr(o.categories, `${path}.categories`).map((c, i) => str(c, `${path}.categories[${i}]`)),
@@ -287,6 +385,7 @@ export function parseCleanResult(raw: unknown): CleanResult {
       const fo = obj(f, `result.failed[${i}]`);
       return { path: str(fo.path, `result.failed[${i}].path`), reason: str(fo.reason, `result.failed[${i}].reason`) };
     }),
+    history_id: strOrNull(o.history_id, "result.history_id"),
     history_entry: o.history_entry === null ? null : parseHistoryEntry(o.history_entry, "result.history_entry"),
     disk: parseDisk(o.disk, "result.disk"),
   };

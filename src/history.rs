@@ -20,6 +20,18 @@ use crate::exit::{DiskyError, ExitCode};
 /// On-disk format version of `history.json`.
 pub const LOG_VERSION: u32 = 1;
 
+/// Title of a clean run from Smart Clean (REQ-DCLEAN-009.A5).
+pub const TITLE_SMART_CLEAN: &str = "Smart Clean";
+/// Title of a clean whose review the assistant opened (REQ-DCLEAN-009.A5).
+pub const TITLE_ASSISTANT: &str = "Assistant cleanup";
+/// Title of a `disky cleanup --apply` run, and of entries written before
+/// titles existed.
+pub const TITLE_CLI: &str = "Cleanup";
+
+fn default_title() -> String {
+    TITLE_CLI.to_string()
+}
+
 /// How a clean disposed of its items.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -56,6 +68,10 @@ pub struct Item {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
     pub id: String,
+    /// What ran the clean: [`TITLE_SMART_CLEAN`], [`TITLE_ASSISTANT`] or
+    /// [`TITLE_CLI`]. Entries from before titles read as [`TITLE_CLI`].
+    #[serde(default = "default_title")]
+    pub title: String,
     /// RFC 3339 UTC.
     pub ts: String,
     pub mode: Mode,
@@ -70,11 +86,12 @@ pub struct Entry {
 impl Entry {
     /// A fresh entry stamped now. The id is `YYYY-MM-DD_HH-MM-SS-<suffix>`;
     /// [`append`] guarantees it is unique within the log.
-    pub fn new(mode: Mode, categories: Vec<String>, items: Vec<Item>) -> Self {
+    pub fn new(title: &str, mode: Mode, categories: Vec<String>, items: Vec<Item>) -> Self {
         let now = Utc::now();
         let suffix = now.timestamp_subsec_nanos() % 0x1_0000;
         Self {
             id: format!("{}-{:04x}", now.format("%Y-%m-%d_%H-%M-%S"), suffix),
+            title: title.to_string(),
             ts: now.to_rfc3339_opts(SecondsFormat::Millis, true),
             mode,
             categories,
@@ -294,7 +311,12 @@ mod tests {
                 }
             })
             .collect();
-        Entry::new(Mode::Trash, vec!["node_modules".into()], items)
+        Entry::new(
+            TITLE_SMART_CLEAN,
+            Mode::Trash,
+            vec!["node_modules".into()],
+            items,
+        )
     }
 
     fn with_ts(mut e: Entry, ts: &str) -> Entry {
@@ -409,7 +431,7 @@ mod tests {
         };
         let e = append(
             &log,
-            Entry::new(Mode::Delete, vec!["target".into()], vec![item]),
+            Entry::new(TITLE_CLI, Mode::Delete, vec!["target".into()], vec![item]),
         )
         .unwrap();
         let err = crate::exit::classify(restore(&log, &e.id).unwrap_err());
@@ -462,7 +484,11 @@ mod tests {
                         bytes: 1,
                         status: ItemStatus::Deleted,
                     };
-                    append(&log, Entry::new(Mode::Delete, vec![], vec![item])).unwrap();
+                    append(
+                        &log,
+                        Entry::new(TITLE_CLI, Mode::Delete, vec![], vec![item]),
+                    )
+                    .unwrap();
                 })
             })
             .collect();
@@ -470,5 +496,21 @@ mod tests {
             t.join().unwrap();
         }
         assert_eq!(load(&log).unwrap().len(), 8);
+    }
+
+    #[test]
+    fn entries_without_a_title_read_as_cli_cleanups() {
+        let tmp = tempfile::tempdir().unwrap();
+        let log = tmp.path().join("history.json");
+        fs::write(
+            &log,
+            r#"{"version":1,"entries":[{"id":"x","ts":"2026-01-01T00:00:00.000Z","mode":"delete",
+               "categories":[],"bytes":0,"items":[],"restored_at":null}]}"#,
+        )
+        .unwrap();
+        assert_eq!(load(&log).unwrap()[0].title, TITLE_CLI);
+        let e = append(&log, trashed_entry(tmp.path(), &["a"])).unwrap();
+        assert_eq!(load(&log).unwrap()[1].title, TITLE_SMART_CLEAN);
+        assert_eq!(e.title, TITLE_SMART_CLEAN);
     }
 }

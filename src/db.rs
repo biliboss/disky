@@ -29,7 +29,8 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
             ended_at     BIGINT,
             completed    BOOLEAN NOT NULL DEFAULT false,
             entries      BIGINT NOT NULL DEFAULT 0,
-            bytes        BIGINT NOT NULL DEFAULT 0
+            bytes        BIGINT NOT NULL DEFAULT 0,
+            skipped      BIGINT NOT NULL DEFAULT 0
         );
     ",
     )?;
@@ -76,6 +77,22 @@ impl ScanMeta {
     pub fn duration_secs(&self) -> Option<i64> {
         self.ended_at.map(|e| (e - self.started_at).max(0))
     }
+}
+
+/// Record how many paths the scan could not read for permission reasons
+/// (REQ-DCLEAN-018.A2). Call after [`write_scan_meta`].
+pub fn write_scan_skipped(conn: &Connection, skipped: u64) -> Result<()> {
+    conn.execute("UPDATE scan_meta SET skipped = ?", [skipped as i64])?;
+    Ok(())
+}
+
+/// Paths the snapshot's scan skipped for permission reasons. 0 for a
+/// snapshot written before the count existed.
+pub fn read_scan_skipped(conn: &Connection) -> u64 {
+    conn.query_row("SELECT skipped FROM scan_meta LIMIT 1", [], |r| {
+        r.get::<_, i64>(0)
+    })
+    .map_or(0, |n| n.max(0) as u64)
 }
 
 pub fn read_scan_meta(conn: &Connection) -> Option<ScanMeta> {
