@@ -22,16 +22,20 @@ import { Scanning } from "./smartClean/Scanning";
 import { cleanFailedMessage, undoNotices } from "./smartClean/doneCopy";
 import { canRetry, scanErrorMessage } from "./smartClean/errorCopy";
 import {
-  INITIAL_STATE,
   backHome,
   cancelConfirm,
   cleanFailed,
   cleanFinished,
   cleanProgress,
   confirmClean,
+  dismissNotification,
   doneHome,
+  leaveViaNav,
   listedCategories,
+  notificationVisible,
   openConfirm,
+  reviewFromNotification,
+  safeTotal,
   scanFinished,
   scanProgress,
   scanStopped,
@@ -40,8 +44,9 @@ import {
   startScan,
   toggleExpanded,
   toggleSelected,
-  type SmartCleanState,
 } from "./smartClean/phase";
+import { notificationText } from "./smartClean/idleCopy";
+import { setSmartCleanState as setState, smartCleanState as state } from "./smartClean/store";
 import { selectedBytes } from "./smartClean/resultsCopy";
 import "./smartClean/smartClean.css";
 
@@ -78,13 +83,20 @@ import "./smartClean/smartClean.css";
  * @implements REQ-DCLEAN-009
  * @implements REQ-DCLEAN-017
  * @implements REQ-DCLEAN-018
+ * Below goal (REQ-DCLEAN-010), idle carries the goal notification; "Review
+ * cleanup" opens the results with the Safe categories selected under the
+ * confirm dialog. The phase lives in the shared store (`smartClean/store.ts`)
+ * so the shell's navigation can block itself while a scan or clean runs
+ * (REQ-DCLEAN-011); leaving the screen from results or done resets it to idle.
+ *
  * @implements REQ-DCLEAN-019
+ * @implements REQ-DCLEAN-010
+ * @implements REQ-DCLEAN-011
  */
-export function SmartClean() {
+export function SmartClean(props: { showNotification?: boolean } = {}) {
   const navigate = useNavigate();
   const [loaded, { refetch }] = createResource(() => loadCleanupView());
   const [scanned, setScanned] = createSignal<CleanupView | null>(null);
-  const [state, setState] = createSignal<SmartCleanState>(INITIAL_STATE);
   const [scanError, setScanError] = createSignal<EngineError | null>(null);
   const [cleanResult, setCleanResult] = createSignal<CleanResult | null>(null);
   const [cleanError, setCleanError] = createSignal<string | null>(null);
@@ -109,7 +121,28 @@ export function SmartClean() {
   onCleanup(() => {
     unlisten?.();
     unlistenClean?.();
+    // REQ-DCLEAN-011.A4: results and done do not survive leaving the screen.
+    setState((s) => leaveViaNav(s, false));
   });
+
+  /** The below-goal notification, when every condition holds (REQ-DCLEAN-010.A1). */
+  const notification = () => {
+    const v = view();
+    const d = diskState();
+    if (!v || !d) return undefined;
+    const safe = safeTotal(v.categories);
+    const show = notificationVisible({
+      phase: state().phase,
+      dismissed: state().notificationDismissed,
+      showNotification: props.showNotification ?? v.preferences.notifications,
+      assistant: v.preferences.assistant,
+      free: d.disk.free_bytes,
+      goal: d.goalBytes,
+      safeTotal: safe,
+      hasScan: v.last_scan_at !== null,
+    });
+    return show ? { text: notificationText(d.disk.free_bytes, d.goalBytes, safe), agentName: null } : undefined;
+  };
 
   async function beginScan() {
     const before = state();
@@ -286,7 +319,14 @@ export function SmartClean() {
               <For each={notices()}>{(n) => <li>{n}</li>}</For>
             </ul>
           </Show>
-          <Idle view={view()!} disk={diskState()!} onStartScan={() => void beginScan()} />
+          <Idle
+            view={view()!}
+            disk={diskState()!}
+            onStartScan={() => void beginScan()}
+            notification={notification()}
+            onLater={() => setState(dismissNotification)}
+            onReview={() => setState((s) => reviewFromNotification(s, view()?.categories ?? []))}
+          />
         </Match>
         <Match when={loadingBusy()}>
           <div class="busy" role="status" aria-busy="true" data-testid="busy">

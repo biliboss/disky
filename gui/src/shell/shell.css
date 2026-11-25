@@ -111,6 +111,13 @@
   font-weight: var(--fw-nav-active);
 }
 
+/* REQ-DCLEAN-011.A2 / REQ-DCLEAN-016.A2: blocked while scanning or cleaning —
+   the design system's disabled treatment (organic.css `.btn:disabled`). */
+.nav-item[aria-disabled="true"] {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
 .nav-icon {
   flex: none;
   width: var(--nav-icon);

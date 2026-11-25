@@ -559,3 +559,72 @@ async function donePhaseMatchesSnapshot({ page }: { page: Page }) {
 }
 
 test("Smart Clean done phase matches the snapshot within 1% (REQ-DCLEAN-032.A1, REQ-DCLEAN-009)", donePhaseMatchesSnapshot);
+
+/**
+ * The below-goal notification over the idle screen (REQ-DCLEAN-010), compared
+ * with the snapshot's toast as it opens. Masked on both sides: the toast text
+ * (its free / goal / safe figures) and the idle screen's live figures.
+ */
+const SNAPSHOT_TOAST = 'main [role="status"]';
+async function idleNotificationMatchesSnapshot({ page }: { page: Page }) {
+  const at = await openSnapshot(page);
+  await page.locator(SNAPSHOT_TOAST).waitFor();
+  await page.screenshot({
+    path: baselinePath("phase-idle-notification.png"),
+    clip: offset(WINDOW, at),
+    mask: [
+      page.locator(SNAPSHOT_LIGHTS),
+      ...SNAPSHOT_IDLE_LIVE(page),
+      page.locator(SNAPSHOT_TOAST).locator("> div").nth(1),
+    ],
+    maskColor: MASK_COLOR,
+    animations: "disabled",
+  });
+
+  await page.setViewportSize(WINDOW);
+  await stubEngine(page, reviewFixtureView());
+  await openApp(page);
+  await page.getByTestId("goal-notification").waitFor();
+  await expect(page).toHaveScreenshot("phase-idle-notification.png", {
+    ...SHELL_DIFF,
+    clip: WINDOW,
+    mask: [
+      page.locator(APP_LIGHTS),
+      ...APP_IDLE_LIVE.map((s) => page.locator(s)),
+      page.getByTestId("goal-notification-text"),
+    ],
+  });
+  // It paints above the ring it overlaps, as the snapshot's toast does.
+  const onTop = await page.getByTestId("goal-notification-text").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return el.contains(document.elementFromPoint(r.left + r.width / 2, r.bottom - 4));
+  });
+  expect(onTop).toBe(true);
+  // A5: it appeared without taking focus.
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+}
+
+test("idle with the below-goal notification matches the snapshot within 1% (REQ-DCLEAN-010)", idleNotificationMatchesSnapshot);
+
+/** Keyboard activation of a blocked nav entry changes nothing (REQ-DCLEAN-011.A1). */
+async function blockedNavIgnoresTheKeyboard({ page }: { page: Page }) {
+  await stubEngine(page, idleFixtureView(), true);
+  await openApp(page);
+  await page.getByRole("button", { name: "Start scan" }).click();
+  await page.getByTestId("scanning").waitFor();
+  const url = page.url();
+  const history = page.getByRole("button", { name: /^History/ });
+  await expect(history).toHaveAttribute("aria-disabled", "true");
+  await history.focus();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Space");
+  // Playwright refuses to click an aria-disabled element; force the pointer event.
+  await history.click({ force: true });
+  expect(page.url()).toBe(url);
+  await expect(page.getByTestId("scanning")).toBeVisible();
+  // Disabled treatment: the design system's 45% opacity and a not-allowed cursor.
+  const style = await history.evaluate((el) => [getComputedStyle(el).opacity, getComputedStyle(el).cursor]);
+  expect(style).toEqual(["0.45", "not-allowed"]);
+}
+
+test("blocked navigation ignores pointer and keyboard while scanning (REQ-DCLEAN-011.A1, A2)", blockedNavIgnoresTheKeyboard);

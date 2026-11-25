@@ -5,6 +5,10 @@ import {
   idleDescription,
   largeFilesShortcut,
   lastScanKicker,
+  NOTIFICATION_LATER,
+  NOTIFICATION_REVIEW,
+  notificationSender,
+  notificationText,
 } from "../smartClean/idleCopy";
 import { relativeTime } from "../../lib/format";
 
@@ -61,4 +65,18 @@ describe("idle copy", () => {
   it("Assistant shortcut copy follows the suggestion count (REQ-DCLEAN-003.A3)", assistantShortcutCopy);
   it("Large files copy comes from the count (REQ-DCLEAN-003.A4)", largeFilesCopyComesFromTheCount);
   it("heading is the snapshot's (REQ-DCLEAN-003)", headingMatchesTheSnapshot);
+});
+
+function notificationCopyMatchesTheSnapshot() {
+  expect(notificationText(74e9, 80e9, 6.4e9)).toBe(
+    "You’re down to 74 GB free, under your 80 GB goal. I can clear 6.4 GB of safe junk once you confirm.",
+  );
+  expect(NOTIFICATION_LATER).toBe("Later");
+  expect(NOTIFICATION_REVIEW).toBe("Review cleanup");
+  expect(notificationSender(null)).toBe("Assistant");
+  expect(notificationSender("Claude Code")).toBe("Assistant · Claude Code");
+}
+
+describe("below-goal notification copy", () => {
+  it("text and actions are the snapshot's (REQ-DCLEAN-010)", notificationCopyMatchesTheSnapshot);
 });

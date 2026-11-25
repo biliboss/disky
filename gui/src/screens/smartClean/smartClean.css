@@ -718,3 +718,63 @@
 .undo-notice {
   padding: var(--idle-actions-mt) var(--layout-screen-px) 0;
 }
+
+/* ── Below-goal notification (REQ-DCLEAN-010) ─────────────────── */
+/* Snapshot toast: absolute in the screen area (.app-main), top-right. */
+.notify {
+  position: absolute;
+  top: var(--notify-inset);
+  right: var(--notify-inset);
+  width: var(--notify-w);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: var(--notify-py) var(--notify-px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--notify-gap);
+}
+
+.notify-head {
+  display: flex;
+  align-items: center;
+  gap: var(--notify-gap);
+}
+
+.notify-icon {
+  width: var(--notify-icon-size);
+  height: var(--notify-icon-size);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-2);
+  color: var(--color-bg);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.notify-glyph {
+  width: var(--notify-glyph);
+  height: var(--notify-glyph);
+}
+
+.notify-who {
+  font-size: var(--fs-notify-who);
+  font-weight: var(--fw-notify-who);
+  flex: 1;
+}
+
+.notify-when {
+  font-size: var(--fs-notify-when);
+  color: var(--color-neutral-700);
+}
+
+.notify-text {
+  font-size: var(--fs-notify-text);
+  line-height: var(--lh-notify-text);
+}
+
+.notify-actions {
+  display: flex;
+  gap: var(--notify-actions-gap);
+  justify-content: flex-end;
+}

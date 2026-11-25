@@ -1,4 +1,4 @@
-import { For, type Component } from "solid-js";
+import { For, Show, type Component } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { useNavigate } from "@solidjs/router";
 import type { LucideProps } from "lucide-solid";
@@ -9,6 +9,7 @@ import type { DiskState } from "../../lib/diskState";
 import { GoalTag } from "../../shell/GoalTag";
 import { UsageRing } from "../../shell/UsageRing";
 import { SpaceMapIcon } from "../../shell/icons";
+import { GoalNotification } from "./GoalNotification";
 import {
   IDLE_HEADING,
   SPACE_MAP_SHORTCUT,
@@ -28,6 +29,10 @@ export interface IdleProps {
   /** Shared disk state; the ring and tag read it so a clean updates them (REQ-DCLEAN-002.A4). */
   disk: DiskState;
   onStartScan: () => void;
+  /** The below-goal notification, when it should show (REQ-DCLEAN-010). */
+  notification?: { text: string; agentName: string | null };
+  onLater?: () => void;
+  onReview?: () => void;
 }
 
 interface Shortcut {
@@ -42,8 +47,12 @@ interface Shortcut {
  * Idle phase (REQ-DCLEAN-003): kicker, heading, a mode-truthful description,
  * "Start scan" and "Explore disk", three shortcut cards, and the usage ring
  * with its goal tag. Layout follows snapshot.html "Smart clean · home".
+ * The below-goal notification (REQ-DCLEAN-010) sits over the screen area's
+ * top-right corner when the parent passes one; it comes last in the markup,
+ * as in the snapshot, so it paints above the ring.
  *
  * @implements REQ-DCLEAN-003
+ * @implements REQ-DCLEAN-010
  */
 export function Idle(props: IdleProps) {
   const navigate = useNavigate();
@@ -102,6 +111,17 @@ export function Idle(props: IdleProps) {
         <UsageRing disk={props.disk.disk} phase="idle" />
         <GoalTag freeBytes={props.disk.disk.free_bytes} goalBytes={props.disk.goalBytes} />
       </div>
+      {/* Last, as in the snapshot's main: paints over the ring rail. */}
+      <Show when={props.notification}>
+        {(n) => (
+          <GoalNotification
+            text={n().text}
+            agentName={n().agentName}
+            onLater={() => props.onLater?.()}
+            onReview={() => props.onReview?.()}
+          />
+        )}
+      </Show>
     </div>
   );
 }

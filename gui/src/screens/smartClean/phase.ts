@@ -5,6 +5,8 @@
  * phases use live here; later phase REQs (005 … 009) add theirs.
  */
 import type { CategoryView, CleanMode, CleanProgress, ScanProgress } from "../../lib/contract";
+import { goalStatus } from "../../lib/meter";
+import { totalBytes } from "./resultsCopy";
 
 export type Phase = "idle" | "scanning" | "results" | "cleaning" | "done";
 
@@ -326,4 +328,126 @@ export function categoryRowStatus(
     return bytes === undefined ? { status: "empty", bytes: null } : { status: "found", bytes };
   }
   return { status: s.phase === "scanning" ? "checking" : "pending", bytes: null };
+}
+
+/**
+ * Physical bytes of the latest scan's Safe categories (REQ-DCLEAN-010.A4):
+ * the "<safe total>" the below-goal notification offers to clear.
+ *
+ * @implements REQ-DCLEAN-010
+ */
+export function safeTotal(categories: readonly Selectable[]): number {
+  return totalBytes(listedCategories(categories).filter((c) => c.safety === "safe"));
+}
+
+/** What the below-goal notification's visibility depends on (REQ-DCLEAN-010). */
+export interface NotificationInputs {
+  phase: Phase;
+  /** "Later" (or a scan) dismissed it this session. */
+  dismissed: boolean;
+  /** Notifications are enabled (prop `showNotification`). */
+  showNotification: boolean;
+  /** The assistant is on. */
+  assistant: boolean;
+  free: number;
+  goal: number;
+  /** Physical bytes of the latest scan's Safe categories. */
+  safeTotal: number;
+  /** A scan is available to compute the safe total from. */
+  hasScan: boolean;
+}
+
+/**
+ * The below-goal notification shows only on idle, and only when every
+ * condition holds (REQ-DCLEAN-010.A1): notifications on, assistant on, free
+ * space strictly below the goal, not dismissed this session. With no scan,
+ * or nothing Safe to clear, there is nothing to offer and it stays hidden
+ * (A4, A6).
+ *
+ * @implements REQ-DCLEAN-010
+ */
+export function notificationVisible(n: NotificationInputs): boolean {
+  return (
+    n.phase === "idle" &&
+    !n.dismissed &&
+    n.showNotification &&
+    n.assistant &&
+    goalStatus(n.free, n.goal) === "below" &&
+    n.hasScan &&
+    n.safeTotal > 0
+  );
+}
+
+/**
+ * "Later" on the below-goal notification (REQ-DCLEAN-010.A2): hide it for
+ * the rest of the session. The flag lives in memory only, so a restart
+ * clears it.
+ *
+ * @implements REQ-DCLEAN-010
+ */
+export function dismissNotification(s: SmartCleanState): SmartCleanState {
+  if (s.phase !== "idle" || s.notificationDismissed) return s;
+  return { ...s, notificationDismissed: true };
+}
+
+/**
+ * "Review cleanup" on the below-goal notification (REQ-DCLEAN-010.A3): open
+ * the results with exactly the Safe categories selected and the confirm
+ * dialog open. Nothing is cleaned: only {@link confirmClean} enters
+ * cleaning.
+ *
+ * @implements REQ-DCLEAN-010
+ */
+export function reviewFromNotification(s: SmartCleanState, categories: readonly Selectable[]): SmartCleanState {
+  if (s.phase !== "idle") return s;
+  const selected = preselect(categories, true);
+  return {
+    ...s,
+    ...NO_SCAN,
+    phase: "results",
+    progress: 1,
+    expanded: null,
+    notificationDismissed: true,
+    openedBy: null,
+    selected,
+    confirming: selected.length > 0,
+    cleanMode: null,
+    cleaningCategory: null,
+  };
+}
+
+/**
+ * Navigation is blocked while a scan or a clean runs (REQ-DCLEAN-011.A1).
+ *
+ * @implements REQ-DCLEAN-011
+ */
+export function navBlocked(phase: Phase): boolean {
+  return phase === "scanning" || phase === "cleaning";
+}
+
+/**
+ * Smart Clean when the user navigates (REQ-DCLEAN-011.A4): leaving the done
+ * phase resets it to idle, and so does leaving Smart Clean for another
+ * screen from the results (the scan's view is not kept across screens).
+ * Re-selecting Smart Clean on the results keeps them. Blocked phases are
+ * returned unchanged; the session's notification dismissal is kept.
+ *
+ * @implements REQ-DCLEAN-011
+ */
+export function leaveViaNav(s: SmartCleanState, stayOnSmartClean: boolean): SmartCleanState {
+  if (navBlocked(s.phase)) return s;
+  if (s.phase === "done" || (s.phase === "results" && !stayOnSmartClean)) {
+    return {
+      ...s,
+      ...NO_SCAN,
+      phase: "idle",
+      expanded: null,
+      selected: [],
+      openedBy: null,
+      confirming: false,
+      cleanMode: null,
+      cleaningCategory: null,
+    };
+  }
+  return s;
 }

@@ -13,12 +13,15 @@ vi.mock("@tauri-apps/api/event", () => ({
   },
 }));
 
+import { HashRouter } from "@solidjs/router";
 import { App } from "../../App";
+import { SmartClean } from "../SmartClean";
 import { clean } from "../../lib/engine";
 import { resetDiskState } from "../../lib/diskState";
 import { parseCleanupView } from "../../lib/contract";
 import { Results } from "../smartClean/Results";
 import { INITIAL_STATE } from "../smartClean/phase";
+import { resetSmartCleanStore } from "../smartClean/store";
 
 const DAY = 86_400_000;
 
@@ -95,6 +98,7 @@ beforeEach(() => {
   invoke.mockReset();
   progressListeners.length = 0;
   resetDiskState();
+  resetSmartCleanStore();
   window.location.hash = "";
 });
 afterEach(cleanup);
@@ -1254,4 +1258,236 @@ describe("Smart Clean error states (REQ-DCLEAN-018)", () => {
   it("a total failure returns to results with the selection (REQ-DCLEAN-018.A4)", totalFailureReturnsToResultsWithTheSelection);
   it("a rejected clean also returns to results with the selection (REQ-DCLEAN-018.A4)", aRejectedCleanAlsoReturnsToResults);
   it("error states use --color-danger (REQ-DCLEAN-018.A5)", errorStatesUseTheDangerToken);
+});
+
+// ── Below-goal notification (REQ-DCLEAN-010) ─────────────────────
+
+/** An idle view below its goal (74 of 80 GB) with a scan: 4.2 GB Safe, 600 MB Review. */
+function belowGoalView(overrides: Record<string, unknown> = {}) {
+  return engineView({ last_scan_at: new Date(Date.now() - 2 * DAY).toISOString(), ...overrides });
+}
+
+const NOTIFICATION_TEXT =
+  "You’re down to 74 GB free, under your 80 GB goal. I can clear 4.2 GB of safe junk once you confirm.";
+
+function notification() {
+  return screen.queryByTestId("goal-notification");
+}
+
+/** Smart Clean alone under a router, with an explicit `showNotification`. */
+function renderSmartClean(showNotification: boolean) {
+  render(() => <HashRouter>{[{ path: "/", component: () => <SmartClean showNotification={showNotification} /> }]}</HashRouter>);
+}
+
+async function notificationShowsOnIdleBelowGoal() {
+  engine({ load_cleanup_view: () => belowGoalView() });
+  renderApp();
+  await idle();
+  const n = notification()!;
+  expect(n).toHaveAttribute("role", "status");
+  expect(n).toHaveAttribute("aria-live", "polite");
+  expect(within(n).getByTestId("goal-notification-text")).toHaveTextContent(new RegExp(`^${NOTIFICATION_TEXT}$`));
+  // Snapshot order: Later (secondary), then Review cleanup (primary).
+  const buttons = within(n).getAllByRole("button");
+  expect(buttons.map((b) => b.textContent)).toEqual(["Later", "Review cleanup"]);
+  expect(buttons[0]).toHaveClass("btn", "btn-secondary");
+  expect(buttons[1]).toHaveClass("btn", "btn-primary");
+}
+
+async function notificationHiddenUnlessEveryConditionHolds() {
+  const cases: [string, () => void][] = [
+    ["showNotification={false}", () => {
+      engine({ load_cleanup_view: () => belowGoalView() });
+      renderSmartClean(false);
+    }],
+    ["notifications preference off", () => {
+      engine({ load_cleanup_view: () => belowGoalView({ preferences: { trash_by_default: true, safe_only: true, notifications: false, assistant: true } }) });
+      renderApp();
+    }],
+    ["assistant off", () => {
+      engine({ load_cleanup_view: () => belowGoalView({ preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: false } }) });
+      renderApp();
+    }],
+    ["free space at the goal", () => {
+      engine({ load_cleanup_view: () => belowGoalView({ goal_bytes: 74e9 }) });
+      renderApp();
+    }],
+    ["free space above the goal", () => {
+      engine({ load_cleanup_view: () => belowGoalView({ goal_bytes: 50e9 }) });
+      renderApp();
+    }],
+    ["no scan", () => {
+      engine({ load_cleanup_view: () => belowGoalView({ last_scan_at: null }) });
+      renderApp();
+    }],
+    ["no Safe bytes", () => {
+      engine({ load_cleanup_view: () => belowGoalView({ categories: [engineView().categories[1]] }) });
+      renderApp();
+    }],
+  ];
+  for (const [name, setup] of cases) {
+    setup();
+    await idle();
+    expect(notification(), name).toBeNull();
+    cleanup();
+    resetSmartCleanStore();
+    resetDiskState();
+    window.location.hash = "";
+  }
+  // The prop wins over the preference: on with the preference on renders it.
+  engine({ load_cleanup_view: () => belowGoalView() });
+  renderSmartClean(true);
+  await idle();
+  expect(notification()).not.toBeNull();
+}
+
+async function laterHidesItForTheSession() {
+  engine({ load_cleanup_view: () => belowGoalView() });
+  renderApp();
+  await idle();
+  fireEvent.click(within(notification()!).getByRole("button", { name: "Later" }));
+  expect(notification()).toBeNull();
+  // Away to another screen and back: still hidden this session.
+  fireEvent.click(screen.getByRole("button", { name: /^History/ }));
+  await screen.findByText("Coming soon");
+  fireEvent.click(screen.getByRole("button", { name: /^Smart Clean/ }));
+  await idle();
+  expect(notification()).toBeNull();
+}
+
+async function reviewCleanupOpensResultsWithSafeSelectedAndTheDialog() {
+  const { d, handler } = deferredClean();
+  engine({ load_cleanup_view: () => belowGoalView(), clean: handler });
+  renderApp();
+  await idle();
+  fireEvent.click(within(notification()!).getByRole("button", { name: "Review cleanup" }));
+  expect(await screen.findByTestId("results")).toBeInTheDocument();
+  expect(checkedIds()).toEqual(["engine_cat_a"]);
+  const dialog = screen.getByRole("dialog");
+  expect(within(dialog).getByRole("heading")).toHaveTextContent("4.2 GB");
+  expect(cleanCalls()).toHaveLength(0);
+  expect(notification()).toBeNull();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Clean now" }));
+  await screen.findByTestId("cleaning");
+  expect(cleanCalls()).toHaveLength(1);
+  expect(d.args).toEqual({ itemPaths: ["/x"], mode: "trash", openedBy: null });
+}
+
+async function notificationDoesNotTakeFocus() {
+  engine({ load_cleanup_view: () => belowGoalView() });
+  renderApp();
+  const before = document.activeElement;
+  await idle();
+  await waitFor(() => expect(notification()).not.toBeNull());
+  expect(document.activeElement).toBe(before);
+  const n = notification()!;
+  expect(n).not.toHaveAttribute("tabindex");
+  expect(n.querySelector("[autofocus]")).toBeNull();
+}
+
+async function aScanDismissesIt() {
+  let finish!: (v: unknown) => void;
+  engine({ load_cleanup_view: () => belowGoalView(), scan: () => new Promise((r) => (finish = r)) });
+  renderApp();
+  await idle();
+  expect(notification()).not.toBeNull();
+  fireEvent.click(within(await idle()).getByRole("button", { name: "Start scan" }));
+  await screen.findByTestId("scanning");
+  finish(belowGoalView());
+  const results = await screen.findByTestId("results");
+  fireEvent.click(within(results).getByRole("button", { name: "Cancel" }));
+  await idle();
+  expect(notification()).toBeNull();
+}
+
+describe("below-goal notification (REQ-DCLEAN-010)", () => {
+  it("shows on idle below the goal with the snapshot's text and actions (REQ-DCLEAN-010.A1)", notificationShowsOnIdleBelowGoal);
+  it("is hidden unless every condition holds (REQ-DCLEAN-010.A1, A4, A6)", notificationHiddenUnlessEveryConditionHolds);
+  it("Later hides it for the rest of the session (REQ-DCLEAN-010.A2)", laterHidesItForTheSession);
+  it("Review cleanup opens results with Safe selected and the dialog, cleaning nothing (REQ-DCLEAN-010.A3)", reviewCleanupOpensResultsWithSafeSelectedAndTheDialog);
+  it("does not take focus when it appears (REQ-DCLEAN-010.A5)", notificationDoesNotTakeFocus);
+  it("a scan dismisses it (REQ-DCLEAN-010)", aScanDismissesIt);
+});
+
+// ── Navigation blocking (REQ-DCLEAN-011) ─────────────────────────
+
+function navEntries() {
+  return within(screen.getByRole("navigation", { name: "Main" })).getAllByRole("button");
+}
+
+/** Click and key-activate a nav entry the way a browser does (Enter/Space → click). */
+function activate(el: HTMLElement) {
+  fireEvent.click(el);
+  fireEvent.keyDown(el, { key: "Enter" });
+  fireEvent.click(el);
+  fireEvent.keyDown(el, { key: " " });
+  fireEvent.keyUp(el, { key: " " });
+  fireEvent.click(el);
+}
+
+async function navIsBlockedAndDisabledWhileScanning() {
+  await startOpenScan();
+  const hash = window.location.hash;
+  for (const entry of navEntries()) expect(entry).toHaveAttribute("aria-disabled", "true");
+  activate(screen.getByRole("button", { name: /^History/ }));
+  activate(screen.getByRole("button", { name: /^Smart Clean/ }));
+  expect(window.location.hash).toBe(hash);
+  expect(screen.getByTestId("scanning")).toBeInTheDocument();
+  expect(screen.queryByText("Coming soon")).toBeNull();
+}
+
+async function navIsBlockedAndDisabledWhileCleaning() {
+  const { handler } = deferredClean();
+  await resultsWith(itemsView(), { clean: handler });
+  for (const entry of navEntries()) expect(entry).not.toHaveAttribute("aria-disabled");
+  await cleanBoth();
+  const hash = window.location.hash;
+  for (const entry of navEntries()) expect(entry).toHaveAttribute("aria-disabled", "true");
+  activate(screen.getByRole("button", { name: /^Space Map/ }));
+  expect(window.location.hash).toBe(hash);
+  expect(screen.getByTestId("cleaning")).toBeInTheDocument();
+}
+
+function disabledAndCurrentEntriesUseTheirTokens() {
+  const css = readFileSync(resolve(__dirname, "../../shell/shell.css"), "utf8");
+  expect(css).toMatch(/\.nav-item\[aria-disabled="true"\]\s*\{[^}]*opacity:\s*var\(--opacity-disabled\);[^}]*cursor:\s*not-allowed;/);
+  expect(css).toMatch(/\.nav-item\[aria-current="page"\]\s*\{[^}]*color:\s*var\(--color-bg\);[^}]*background:\s*var\(--color-accent\);/);
+  const tokens = readFileSync(resolve(__dirname, "../../styles/gui-tokens.css"), "utf8");
+  expect(tokens).toMatch(/--opacity-disabled:\s*0\.45;/);
+}
+
+async function currentEntryIsExposedAsTheCurrentPage() {
+  engine({ load_cleanup_view: () => engineView() });
+  renderApp();
+  await idle();
+  expect(screen.getByRole("button", { name: /^Smart Clean/ })).toHaveAttribute("aria-current", "page");
+  fireEvent.click(screen.getByRole("button", { name: /^History/ }));
+  await screen.findByText("Coming soon");
+  expect(screen.getByRole("button", { name: /^History/ })).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("button", { name: /^Smart Clean/ })).not.toHaveAttribute("aria-current");
+}
+
+async function navigatingFromDoneShowsIdle() {
+  await finishCleanToDone(cleanResultFixture());
+  for (const entry of navEntries()) expect(entry).not.toHaveAttribute("aria-disabled");
+  fireEvent.click(screen.getByRole("button", { name: /^Smart Clean/ }));
+  expect(await idle()).toBeInTheDocument();
+  expect(screen.queryByTestId("done")).toBeNull();
+  cleanup();
+  resetSmartCleanStore();
+  window.location.hash = "";
+  await finishCleanToDone(cleanResultFixture());
+  fireEvent.click(screen.getByRole("button", { name: /^History/ }));
+  await screen.findByText("Coming soon");
+  fireEvent.click(screen.getByRole("button", { name: /^Smart Clean/ }));
+  expect(await idle()).toBeInTheDocument();
+  expect(screen.queryByTestId("done")).toBeNull();
+}
+
+describe("navigation during Smart Clean (REQ-DCLEAN-011)", () => {
+  it("is blocked and aria-disabled while scanning (REQ-DCLEAN-011.A1, A2)", navIsBlockedAndDisabledWhileScanning);
+  it("is blocked and aria-disabled while cleaning (REQ-DCLEAN-011.A1, A2)", navIsBlockedAndDisabledWhileCleaning);
+  it("blocked and current entries use their tokens (REQ-DCLEAN-011.A2, A3)", disabledAndCurrentEntriesUseTheirTokens);
+  it("the current entry is exposed as the current page (REQ-DCLEAN-011.A3)", currentEntryIsExposedAsTheCurrentPage);
+  it("leaving done via navigation resets Smart Clean to idle (REQ-DCLEAN-011.A4)", navigatingFromDoneShowsIdle);
 });

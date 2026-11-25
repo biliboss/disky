@@ -496,6 +496,31 @@ verifies:
 
 On the idle phase, a notification with "status" semantics appears when all of these hold: notifications are enabled (prop `showNotification`), the assistant is on, free space is below the goal, and the user has not dismissed it this session. Its text reads "You're down to <free> free, under your <goal> goal. I can clear <safe total> of safe junk once you confirm.", with the actions "Later" and "Review cleanup".
 
+implementations:
+  - gui/src/screens/smartClean/phase.ts:safeTotal
+  - gui/src/screens/smartClean/phase.ts:notificationVisible
+  - gui/src/screens/smartClean/phase.ts:dismissNotification
+  - gui/src/screens/smartClean/phase.ts:reviewFromNotification
+  - gui/src/screens/smartClean/idleCopy.ts:notificationText
+  - gui/src/screens/smartClean/GoalNotification.tsx:GoalNotification
+  - gui/src/screens/smartClean/Idle.tsx:Idle
+  - gui/src/screens/SmartClean.tsx:SmartClean
+
+verifies:
+  - gui/src/screens/__tests__/phase.test.ts:notificationVisibleOnlyWhenEveryConditionHolds
+  - gui/src/screens/__tests__/phase.test.ts:notificationHiddenWithoutAScanOrSafeTotal
+  - gui/src/screens/__tests__/phase.test.ts:safeTotalSumsTheListedSafeCategories
+  - gui/src/screens/__tests__/phase.test.ts:dismissNotificationOnlyActsOnIdle
+  - gui/src/screens/__tests__/phase.test.ts:reviewFromNotificationSelectsSafeAndOpensTheDialog
+  - gui/src/screens/__tests__/idleCopy.test.ts:notificationCopyMatchesTheSnapshot
+  - gui/src/screens/__tests__/SmartClean.test.tsx:notificationShowsOnIdleBelowGoal
+  - gui/src/screens/__tests__/SmartClean.test.tsx:notificationHiddenUnlessEveryConditionHolds
+  - gui/src/screens/__tests__/SmartClean.test.tsx:laterHidesItForTheSession
+  - gui/src/screens/__tests__/SmartClean.test.tsx:reviewCleanupOpensResultsWithSafeSelectedAndTheDialog
+  - gui/src/screens/__tests__/SmartClean.test.tsx:notificationDoesNotTakeFocus
+  - gui/src/screens/__tests__/SmartClean.test.tsx:aScanDismissesIt
+  - gui/tests/visual/shell.spec.ts:idleNotificationMatchesSnapshot
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-010.A1 -->
 - The notification is shown only on the idle phase, and only when every listed condition holds.
@@ -507,9 +532,28 @@ On the idle phase, a notification with "status" semantics appears when all of th
 - "<safe total>" is computed from the latest scan's Safe categories. With no scan available, the notification is not shown.
 <!-- id: REQ-DCLEAN-010.A5 -->
 - The notification MUST NOT take keyboard focus when it appears.
+<!-- id: REQ-DCLEAN-010.A6 -->
+- With a Safe total of zero, the notification is not shown: there is nothing to offer. The snapshot always has Safe bytes; this is a gap-fill.
 
 <!-- id: REQ-DCLEAN-011 -->
 ## Navigation MUST be blocked during scanning and cleaning, and blocked entries MUST look disabled
+
+implementations:
+  - gui/src/screens/smartClean/phase.ts:navBlocked
+  - gui/src/screens/smartClean/phase.ts:leaveViaNav
+  - gui/src/screens/smartClean/store.ts:isNavBlocked
+  - gui/src/shell/NavItem.tsx:NavItem
+  - gui/src/screens/SmartClean.tsx:SmartClean
+
+verifies:
+  - gui/src/screens/__tests__/phase.test.ts:navIsBlockedWhileScanningOrCleaning
+  - gui/src/screens/__tests__/phase.test.ts:leavingDoneViaNavResetsToIdle
+  - gui/src/screens/__tests__/SmartClean.test.tsx:navIsBlockedAndDisabledWhileScanning
+  - gui/src/screens/__tests__/SmartClean.test.tsx:navIsBlockedAndDisabledWhileCleaning
+  - gui/src/screens/__tests__/SmartClean.test.tsx:disabledAndCurrentEntriesUseTheirTokens
+  - gui/src/screens/__tests__/SmartClean.test.tsx:currentEntryIsExposedAsTheCurrentPage
+  - gui/src/screens/__tests__/SmartClean.test.tsx:navigatingFromDoneShowsIdle
+  - gui/tests/visual/shell.spec.ts:blockedNavIgnoresTheKeyboard
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-011.A1 -->

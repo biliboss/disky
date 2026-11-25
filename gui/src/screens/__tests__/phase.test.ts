@@ -24,6 +24,13 @@ import {
   scanProgress,
   scanStopped,
   startScan,
+  dismissNotification,
+  leaveViaNav,
+  navBlocked,
+  notificationVisible,
+  reviewFromNotification,
+  safeTotal,
+  type NotificationInputs,
   type SmartCleanState,
 } from "../smartClean/phase";
 
@@ -323,4 +330,102 @@ describe("Smart Clean cleaning and done transitions (REQ-DCLEAN-008, REQ-DCLEAN-
   it("a finished clean enters done at 100% (REQ-DCLEAN-009)", cleanFinishedEntersDone);
   it("a failed clean returns to results with the selection (REQ-DCLEAN-018.A4)", cleanFailedReturnsToResultsWithTheSelection);
   it("Back to home on done returns to idle (REQ-DCLEAN-009.A6)", doneHomeReturnsToIdle);
+});
+
+const GB = 1e9;
+const GOAL_CATS = [
+  { id: "a", safety: "safe" as const, bytes: 3 * GB },
+  { id: "b", safety: "review" as const, bytes: 5 * GB },
+  { id: "c", safety: "safe" as const, bytes: 2 * GB },
+  { id: "d", safety: "safe" as const, bytes: 0 },
+];
+
+const SHOWN: NotificationInputs = {
+  phase: "idle",
+  dismissed: false,
+  showNotification: true,
+  assistant: true,
+  free: 74 * GB,
+  goal: 80 * GB,
+  safeTotal: 5 * GB,
+  hasScan: true,
+};
+
+function notificationVisibleOnlyWhenEveryConditionHolds() {
+  expect(notificationVisible(SHOWN)).toBe(true);
+  for (const phase of ["scanning", "results", "cleaning", "done"] as const) {
+    expect(notificationVisible({ ...SHOWN, phase })).toBe(false);
+  }
+  expect(notificationVisible({ ...SHOWN, dismissed: true })).toBe(false);
+  expect(notificationVisible({ ...SHOWN, showNotification: false })).toBe(false);
+  expect(notificationVisible({ ...SHOWN, assistant: false })).toBe(false);
+  expect(notificationVisible({ ...SHOWN, free: 80 * GB })).toBe(false); // at the goal is not below
+  expect(notificationVisible({ ...SHOWN, free: 90 * GB })).toBe(false);
+}
+
+function notificationHiddenWithoutAScanOrSafeTotal() {
+  expect(notificationVisible({ ...SHOWN, hasScan: false })).toBe(false);
+  expect(notificationVisible({ ...SHOWN, safeTotal: 0 })).toBe(false);
+}
+
+function safeTotalSumsTheListedSafeCategories() {
+  expect(safeTotal(GOAL_CATS)).toBe(5 * GB);
+  expect(safeTotal([])).toBe(0);
+}
+
+function dismissNotificationOnlyActsOnIdle() {
+  const s = dismissNotification(INITIAL_STATE);
+  expect(s.notificationDismissed).toBe(true);
+  expect(s.phase).toBe("idle");
+  const results: SmartCleanState = { ...INITIAL_STATE, phase: "results" };
+  expect(dismissNotification(results)).toBe(results);
+}
+
+function reviewFromNotificationSelectsSafeAndOpensTheDialog() {
+  const s = reviewFromNotification(INITIAL_STATE, GOAL_CATS);
+  expect(s.phase).toBe("results");
+  expect(s.selected).toEqual(["a", "c"]);
+  expect(s.confirming).toBe(true);
+  expect(s.cleanMode).toBeNull();
+  expect(s.cleaningCategory).toBeNull();
+  expect(s.openedBy).toBeNull();
+  const scanning: SmartCleanState = { ...INITIAL_STATE, phase: "scanning" };
+  expect(reviewFromNotification(scanning, GOAL_CATS)).toBe(scanning);
+  // Nothing Safe to clean: no dialog over an empty selection.
+  expect(reviewFromNotification(INITIAL_STATE, [GOAL_CATS[1]]).confirming).toBe(false);
+}
+
+describe("below-goal notification transitions (REQ-DCLEAN-010)", () => {
+  it("shows only on idle when every condition holds (REQ-DCLEAN-010.A1)", notificationVisibleOnlyWhenEveryConditionHolds);
+  it("hidden with no scan or nothing Safe to clear (REQ-DCLEAN-010.A4, A6)", notificationHiddenWithoutAScanOrSafeTotal);
+  it("safe total sums the listed Safe categories (REQ-DCLEAN-010.A4)", safeTotalSumsTheListedSafeCategories);
+  it("Later dismisses it, only on idle (REQ-DCLEAN-010.A2)", dismissNotificationOnlyActsOnIdle);
+  it("Review cleanup opens results with Safe selected and the dialog open (REQ-DCLEAN-010.A3)", reviewFromNotificationSelectsSafeAndOpensTheDialog);
+});
+
+function navIsBlockedWhileScanningOrCleaning() {
+  expect(navBlocked("scanning")).toBe(true);
+  expect(navBlocked("cleaning")).toBe(true);
+  for (const p of ["idle", "results", "done"] as const) expect(navBlocked(p)).toBe(false);
+}
+
+function leavingDoneViaNavResetsToIdle() {
+  const done = { ...cleanFinished(confirmClean(CONFIRMING, TRASH_MODE, "a")), notificationDismissed: true };
+  for (const stay of [true, false]) {
+    const s = leaveViaNav(done, stay);
+    expect(s.phase).toBe("idle");
+    expect(s.selected).toEqual([]);
+    expect(s.cleanMode).toBeNull();
+    expect(s.notificationDismissed).toBe(true); // the session's dismissal is kept
+  }
+  // Results survive re-selecting Smart Clean, not leaving it.
+  expect(leaveViaNav(CONFIRMING, true)).toBe(CONFIRMING);
+  expect(leaveViaNav(CONFIRMING, false).phase).toBe("idle");
+  const cleaning = confirmClean(CONFIRMING, TRASH_MODE, "a");
+  expect(leaveViaNav(cleaning, false)).toBe(cleaning);
+}
+
+describe("navigation and the Smart Clean phase (REQ-DCLEAN-011)", () => {
+  it("navigation is blocked while scanning or cleaning (REQ-DCLEAN-011.A1)", navIsBlockedWhileScanningOrCleaning);
+  it("leaving done via navigation resets to idle (REQ-DCLEAN-011.A4)", leavingDoneViaNavResetsToIdle);
 });

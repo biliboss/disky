@@ -1,7 +1,7 @@
 /**
  * Idle-phase copy (REQ-DCLEAN-003). Pure, so each wording rule is testable.
  */
-import { relativeTime } from "../../lib/format";
+import { formatBytes, relativeTime } from "../../lib/format";
 
 export const IDLE_HEADING = "Let’s clear some room.";
 
@@ -34,3 +34,22 @@ export function largeFilesShortcut(count: number): string {
 }
 
 export const SPACE_MAP_SHORTCUT = "See what’s taking up room";
+
+/**
+ * The below-goal notification's text (REQ-DCLEAN-010), worded as the
+ * snapshot's `toastText`.
+ *
+ * @implements REQ-DCLEAN-010
+ */
+export function notificationText(freeBytes: number, goalBytes: number, safeBytes: number): string {
+  return `You’re down to ${formatBytes(freeBytes)} free, under your ${formatBytes(goalBytes)} goal. I can clear ${formatBytes(safeBytes)} of safe junk once you confirm.`;
+}
+
+/** The notification's sender line; the agent's name follows once one is known. */
+export function notificationSender(agentName: string | null): string {
+  return agentName ? `Assistant · ${agentName}` : "Assistant";
+}
+
+export const NOTIFICATION_WHEN = "now";
+export const NOTIFICATION_LATER = "Later";
+export const NOTIFICATION_REVIEW = "Review cleanup";
