@@ -665,6 +665,42 @@ fn prefs_malformed_store_is_reported_not_replaced() {
     let _ = fs::remove_dir_all(&home);
 }
 
+/// REQ-DSCR-002.A2: skip-recently-used exempts safe categories. A cache
+/// touched just now is still reported with the default (skip on), because
+/// caches are rebuilt automatically and are always recent.
+#[test]
+fn skip_recently_used_keeps_fresh_safe_categories() {
+    let home = temp_dir();
+    let cache = home.join("Library/Caches/com.example.fresh");
+    fs::create_dir_all(&cache).unwrap();
+    fs::write(cache.join("blob"), vec![1u8; 4096]).unwrap();
+    let db = home.join("snap.db");
+    let out = run_in_home(
+        &home,
+        &["scan", home.to_str().unwrap(), "--db", db.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "scan: {:?}", out);
+    let v = json_in_home(
+        &home,
+        &[
+            "cleanup",
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    let cats: Vec<&str> = v["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["path"].as_str().unwrap().ends_with("com.example.fresh"))
+        .map(|r| r["category"].as_str().unwrap())
+        .collect();
+    assert_eq!(cats, ["app_caches"], "fresh cache still reported: {v}");
+    let _ = fs::remove_dir_all(&home);
+}
+
 /// REQ-DSCR-002.A1–A3 through the CLI: `cleanup` drops hits inside an
 /// excluded folder (with `~` expanded), keeps a missing excluded folder in
 /// the list, and with skip-recently-used on leaves out fresh items.

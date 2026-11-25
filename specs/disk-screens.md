@@ -121,6 +121,7 @@ verifies:
   - tests/lib_integration.rs:cleanup_drops_excluded_and_recently_used_hits
   - tests/lib_integration.rs:contract_load_honours_the_preferences_store
   - tests/agentic.rs:cleanup_honours_excluded_folders_and_skip_recently_used
+  - tests/agentic.rs:skip_recently_used_keeps_fresh_safe_categories
   - src/contract.rs:large_files_count_honours_exclusions_and_recent_use
   - src/prefs.rs:excluded_expands_home_and_recent_cutoff_follows_the_toggle
 
@@ -128,7 +129,7 @@ verifies:
 <!-- id: REQ-DSCR-002.A1 -->
 - No cleanup hit, large file, duplicate copy or suggestion lies inside an excluded folder.
 <!-- id: REQ-DSCR-002.A2 -->
-- With skip-recently-used on, items modified in the last 30 days are left out of cleanup hits, large files and duplicates. With it off, they are included.
+- With skip-recently-used on, items modified in the last 30 days are left out of review-category cleanup hits, large files and duplicates. With it off, they are included. Safe categories (caches, temp files, logs, Trash) are rebuilt automatically and touched constantly, so they are exempt.
 <!-- id: REQ-DSCR-002.A3 -->
 - An excluded folder that doesn't exist is kept in the list and simply matches nothing.
 

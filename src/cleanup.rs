@@ -1081,9 +1081,12 @@ pub fn scan_with(
                 continue;
             }
         }
-        // Skip recently used (REQ-DSCR-002.A2): anything touched since the
-        // cutoff stays. Unknown age → not provably unused → not reported.
-        if let Some(cutoff) = ctx.recent_cutoff {
+        // Skip recently used (REQ-DSCR-002.A2): a review-category hit touched
+        // since the cutoff stays. Unknown age → not provably unused → not
+        // reported. Safe categories (caches, temp, logs, Trash) are rebuilt
+        // automatically and are touched constantly, so they are exempt —
+        // otherwise the default would hide nearly all of them.
+        if let (Some(cutoff), Safety::Review) = (ctx.recent_cutoff, r.safety) {
             if !matches!(newest, Some(m) if m < cutoff) {
                 continue;
             }
