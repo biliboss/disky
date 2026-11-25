@@ -278,6 +278,34 @@ fn cleanup_reversible_moves_to_trash() {
     let _ = fs::remove_dir_all(&home);
 }
 
+/// REQ-DCLEAN-002.A4 / REQ-DCLEAN-001.A1: `cleanup --apply` reports the
+/// volume's disk usage after the clean, as the GUI's `CleanResult.disk`.
+#[test]
+fn cleanup_apply_envelope_carries_post_clean_disk() {
+    let home = temp_dir();
+    let v = trash_node_modules(&home);
+    let disk = &v["disk"];
+    let capacity = disk["capacity_bytes"].as_u64().expect("capacity_bytes");
+    let free = disk["free_bytes"].as_u64().expect("free_bytes");
+    assert!(capacity > 0 && free <= capacity, "disk: {}", disk);
+    assert!(disk["volume"].as_str().is_some_and(|s| !s.is_empty()));
+
+    // A dry-run moves nothing, so it carries no post-clean disk.
+    let db = home.join("snap.db");
+    let dry = json_in_home(
+        &home,
+        &[
+            "cleanup",
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert!(dry.get("disk").is_none(), "dry-run: {}", dry);
+    let _ = fs::remove_dir_all(&home);
+}
+
 #[test]
 fn history_and_restore_round_trip_through_the_cli() {
     let home = temp_dir();

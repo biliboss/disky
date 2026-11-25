@@ -47,6 +47,8 @@ export interface CleanupView {
   snapshot_taken_at: string | null;
   is_stale: boolean;
   preferences: Preferences;
+  /** Files in the snapshot of at least 2 GB physical (REQ-DCLEAN-003.A4). */
+  large_files_count: number;
   categories: CategoryView[];
 }
 
@@ -84,6 +86,8 @@ export interface CleanResult {
   succeeded: string[];
   failed: Failure[];
   history_entry: HistoryEntry | null;
+  /** The volume's usage read after the clean (REQ-DCLEAN-002.A4). */
+  disk: Disk;
 }
 
 /** A payload that does not match the contract. `path` names the field. */
@@ -133,6 +137,14 @@ function bytes(v: unknown, path: string): number {
   return v;
 }
 
+/** A count: a non-negative safe integer. */
+function count(v: unknown, path: string): number {
+  if (typeof v !== "number" || !Number.isSafeInteger(v) || v < 0) {
+    throw new ContractError(path, `expected a non-negative integer count, got ${JSON.stringify(v)}`);
+  }
+  return v;
+}
+
 /** Exactly "safe" or "review" (REQ-DCLEAN-027.A2). */
 function safety(v: unknown, path: string): Safety {
   if (v !== "safe" && v !== "review") {
@@ -170,16 +182,20 @@ function parseCategory(v: unknown, path: string): CategoryView {
   };
 }
 
+function parseDisk(v: unknown, path: string): Disk {
+  const d = obj(v, path);
+  return {
+    volume: str(d.volume, `${path}.volume`),
+    capacity_bytes: bytes(d.capacity_bytes, `${path}.capacity_bytes`),
+    free_bytes: bytes(d.free_bytes, `${path}.free_bytes`),
+  };
+}
+
 export function parseCleanupView(raw: unknown): CleanupView {
   const o = obj(raw, "view");
-  const d = obj(o.disk, "view.disk");
   const p = obj(o.preferences, "view.preferences");
   return {
-    disk: {
-      volume: str(d.volume, "view.disk.volume"),
-      capacity_bytes: bytes(d.capacity_bytes, "view.disk.capacity_bytes"),
-      free_bytes: bytes(d.free_bytes, "view.disk.free_bytes"),
-    },
+    disk: parseDisk(o.disk, "view.disk"),
     goal_bytes: bytes(o.goal_bytes, "view.goal_bytes"),
     last_scan_at: strOrNull(o.last_scan_at, "view.last_scan_at"),
     snapshot_taken_at: strOrNull(o.snapshot_taken_at, "view.snapshot_taken_at"),
@@ -190,6 +206,7 @@ export function parseCleanupView(raw: unknown): CleanupView {
       notifications: bool(p.notifications, "view.preferences.notifications"),
       assistant: bool(p.assistant, "view.preferences.assistant"),
     },
+    large_files_count: count(o.large_files_count, "view.large_files_count"),
     categories: arr(o.categories, "view.categories").map((c, i) => parseCategory(c, `view.categories[${i}]`)),
   };
 }
@@ -241,5 +258,6 @@ export function parseCleanResult(raw: unknown): CleanResult {
       return { path: str(fo.path, `result.failed[${i}].path`), reason: str(fo.reason, `result.failed[${i}].reason`) };
     }),
     history_entry: o.history_entry === null ? null : parseHistoryEntry(o.history_entry, "result.history_entry"),
+    disk: parseDisk(o.disk, "result.disk"),
   };
 }

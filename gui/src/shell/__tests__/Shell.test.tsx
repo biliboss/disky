@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { App } from "../../App";
 import { NAV_ITEMS } from "../nav";
+import { resetDiskState, setFromClean, setFromView } from "../../lib/diskState";
+import { goalPos } from "../../lib/meter";
+import type { CleanResult, CleanupView } from "../../lib/contract";
 
 // vitest runs with gui/ as its root.
 const guiFile = (rel: string) => resolve(process.cwd(), rel);
@@ -67,9 +70,62 @@ function meterShowsFixtureFreeSpaceAndGoal() {
   );
 }
 
+const GB = 1e9;
+
+function liveView(disk: CleanupView["disk"], goal: number): CleanupView {
+  return {
+    disk,
+    goal_bytes: goal,
+    last_scan_at: null,
+    snapshot_taken_at: null,
+    is_stale: false,
+    preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
+    large_files_count: 0,
+    categories: [],
+  };
+}
+
+function meterShowsLiveVolumeAndFreeSpace() {
+  setFromView(liveView({ volume: "Data", capacity_bytes: 1000 * GB, free_bytes: 250 * GB }, 100 * GB));
+  renderApp();
+  const meter = screen.getByTestId("disk-meter");
+  expect(meter).toHaveTextContent("Data");
+  expect(meter).toHaveTextContent("250 GB free");
+  expect(meter).toHaveTextContent("Goal: keep 100 GB free");
+  expect(meter).not.toHaveTextContent("Macintosh HD");
+}
+
+function goalMarkerFollowsLiveGoalPos() {
+  setFromView(liveView({ volume: "Data", capacity_bytes: 1000 * GB, free_bytes: 250 * GB }, 100 * GB));
+  renderApp();
+  expect(goalPos(1000 * GB, 100 * GB)).toBeCloseTo(0.9, 10);
+  expect(screen.getByTestId("goal-marker").style.left).toBe(
+    `calc(${goalPos(1000 * GB, 100 * GB) * 100}% - var(--meter-marker-nudge))`,
+  );
+}
+
+function meterFollowsACleanWithoutRemount() {
+  setFromView(liveView({ volume: "Data", capacity_bytes: 1000 * GB, free_bytes: 250 * GB }, 100 * GB));
+  renderApp();
+  const meter = screen.getByTestId("disk-meter");
+  const result: CleanResult = {
+    mode: "trash",
+    freed_bytes: 50 * GB,
+    succeeded: ["/x"],
+    failed: [],
+    history_entry: null,
+    disk: { volume: "Data", capacity_bytes: 1000 * GB, free_bytes: 300 * GB },
+  };
+  setFromClean(result);
+  expect(screen.getByTestId("disk-meter")).toBe(meter); // same node: no remount
+  expect(meter).toHaveTextContent("300 GB free");
+  expect(meter).toHaveTextContent("Goal: keep 100 GB free"); // goal kept
+}
+
 describe("app shell", () => {
   beforeEach(() => {
     window.location.hash = "";
+    resetDiskState();
   });
   afterEach(cleanup);
 
@@ -78,4 +134,7 @@ describe("app shell", () => {
   it("secondary entries open a Coming soon placeholder (REQ-DCLEAN-032.A3)", secondaryEntriesOpenComingSoonPlaceholders);
   it("sidebar shows seven entries and the assistant badge (REQ-DCLEAN-032)", sidebarShowsSevenEntriesAndAssistantBadge);
   it("meter shows fixture free space and goal (REQ-DCLEAN-032)", meterShowsFixtureFreeSpaceAndGoal);
+  it("meter shows the live volume and free space (REQ-DCLEAN-002.A1)", meterShowsLiveVolumeAndFreeSpace);
+  it("goal marker sits at the live goal position (REQ-DCLEAN-002.A3)", goalMarkerFollowsLiveGoalPos);
+  it("meter follows a clean without a remount (REQ-DCLEAN-002.A4)", meterFollowsACleanWithoutRemount);
 });

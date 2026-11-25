@@ -193,6 +193,58 @@
   background: var(--color-accent-2-700);
 }
 
+/* ── Usage ring (REQ-DCLEAN-002.A5) ───────────────────────────── */
+.ring {
+  position: relative;
+  width: var(--ring-size);
+  height: var(--ring-size);
+}
+
+.ring-svg {
+  width: var(--ring-size);
+  height: var(--ring-size);
+  transform: rotate(-90deg);
+}
+
+.ring-track {
+  stroke: var(--color-surface);
+  stroke-width: var(--ring-stroke);
+}
+
+.ring-fill {
+  stroke-width: var(--ring-stroke);
+  stroke-linecap: round;
+  transition: var(--motion-ring);
+}
+
+.ring-fill--idle {
+  stroke: var(--color-accent);
+}
+
+.ring-fill--done {
+  stroke: var(--color-accent-2);
+}
+
+.ring-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ring-label-gap);
+}
+
+.ring-free {
+  font-family: var(--font-heading);
+  font-size: var(--fs-ring-number);
+}
+
+.ring-total {
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
 /* ── Placeholder screens ──────────────────────────────────────── */
 .screen {
   flex: 1;

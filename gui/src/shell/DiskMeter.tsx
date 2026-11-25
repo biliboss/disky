@@ -10,8 +10,10 @@ export interface DiskMeterProps {
 
 /**
  * Sidebar disk-usage meter (REQ-DCLEAN-002): volume, free space, used-share
- * bar, goal marker and the goal line. Fed fixture props by the shell until
- * REQ-DCLEAN-002 wires live physical free space from the engine.
+ * bar, goal marker and the goal line. The shell feeds it the shared disk
+ * state (`lib/diskState.ts`): physical bytes from the engine.
+ *
+ * @implements REQ-DCLEAN-002
  */
 export function DiskMeter(props: DiskMeterProps) {
   const usedPct = () => `${usedFraction(props.capacityBytes, props.freeBytes) * 100}%`;

@@ -15,6 +15,7 @@ import {
   type CleanupView,
   type ScanProgress,
 } from "./contract";
+import { setFromClean } from "./diskState";
 
 /** Event channel the backend streams scan progress on. */
 export const SCAN_PROGRESS_EVENT = "scan://progress";
@@ -47,8 +48,12 @@ export function onScanProgress(cb: (p: ScanProgress) => void, onError?: (e: unkn
 
 /**
  * Clean exactly the reviewed item paths. CLI:
- * `disky cleanup --apply [--reversible]`; undo with `disky restore <id>`.
+ * `disky cleanup --apply [--reversible]` (its envelope carries the same
+ * post-clean `disk`); undo with `disky restore <id>`.
  */
 export async function clean(itemPaths: string[], mode: CleanMode): Promise<CleanResult> {
-  return parseCleanResult(await invoke("clean", { itemPaths, mode }));
+  const result = parseCleanResult(await invoke("clean", { itemPaths, mode }));
+  // REQ-DCLEAN-002.A4: meter, ring and tag follow the post-clean disk.
+  setFromClean(result);
+  return result;
 }

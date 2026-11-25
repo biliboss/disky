@@ -77,7 +77,17 @@ async fn load_cleanup_view(
     goal_bytes: Option<u64>,
 ) -> CmdResult<CleanupView> {
     blocking(move || {
-        let path = snapshots::resolve(snapshot.as_deref().unwrap_or("@latest"))?;
+        let spec = snapshot.as_deref().unwrap_or("@latest");
+        // No snapshot yet: live disk, no categories, "No scans yet"
+        // (REQ-DCLEAN-003.A2). Nothing is reviewed, so nothing can be cleaned.
+        if spec == "@latest" && snapshots::latest_snapshot().is_none() {
+            app.state::<Engine>().reviewed.lock().unwrap().clear();
+            return contract::empty_view(
+                goal_bytes.unwrap_or(contract::DEFAULT_GOAL_BYTES),
+                Preferences::default(),
+            );
+        }
+        let path = snapshots::resolve(spec)?;
         load_view(&app, &path, goal_bytes)
     })
     .await

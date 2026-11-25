@@ -20,3 +20,22 @@ export function usedFraction(capacityBytes: number, freeBytes: number): number {
   if (!(capacityBytes > 0)) return 0;
   return clamp01((capacityBytes - freeBytes) / capacityBytes);
 }
+
+/** Goal tag state: "below" only when free < goal, strictly (REQ-DCLEAN-002.A2). */
+export type GoalStatus = "below" | "met";
+
+export function goalStatus(freeBytes: number, goalBytes: number): GoalStatus {
+  return freeBytes < goalBytes ? "below" : "met";
+}
+
+/** Circumference of the usage ring: r = 50 in its 120-unit viewBox (snapshot `C2`). */
+export const RING_CIRCUMFERENCE = 2 * Math.PI * 50;
+
+/**
+ * SVG `stroke-dasharray` for the usage ring: the used share of the
+ * circumference, then a full-length gap (snapshot `ringDash`). No capacity
+ * draws no fill.
+ */
+export function ringDash(capacityBytes: number, freeBytes: number, circumference: number): string {
+  return `${usedFraction(capacityBytes, freeBytes) * circumference} ${circumference}`;
+}

@@ -67,6 +67,43 @@ verifies:
 
 A persistent meter shows the volume name, free space, a used-share bar, a marker at the goal position, and the text "Goal: keep <goal> free". The idle and done phases also show a ring for used share, with the free amount and the total capacity as its label. A goal tag reads "Below your goal" when free space is below the goal, and "Goal met" otherwise.
 
+implementations:
+  - src/disk.rs:disk_usage
+  - src/contract.rs:disk_near
+  - src/contract.rs:clean
+  - src/contract.rs:CleanResult
+  - src/render.rs:cleanup
+  - gui/src/lib/meter.ts:goalPos
+  - gui/src/lib/meter.ts:goalStatus
+  - gui/src/lib/meter.ts:ringDash
+  - gui/src/lib/diskState.ts:setFromView
+  - gui/src/lib/diskState.ts:setFromClean
+  - gui/src/lib/engine.ts:clean
+  - gui/src/lib/contract.ts:parseCleanResult
+  - gui/src/shell/AppShell.tsx:AppShell
+  - gui/src/shell/DiskMeter.tsx:DiskMeter
+  - gui/src/shell/GoalTag.tsx:GoalTag
+  - gui/src/shell/UsageRing.tsx:UsageRing
+
+verifies:
+  - src/disk.rs:disk_usage_reports_physical_volume_space
+  - src/contract.rs:clean_result_carries_post_clean_disk
+  - src/contract.rs:disk_near_walks_up_to_an_existing_ancestor
+  - tests/agentic.rs:cleanup_apply_envelope_carries_post_clean_disk
+  - gui/src/lib/contract.test.ts:cleanResultWithoutDiskIsRejected
+  - gui/src/shell/__tests__/meter.test.ts:goalPosMatchesSnapshotFixture
+  - gui/src/shell/__tests__/meter.test.ts:goalStatusIsBelowOnlyStrictlyUnderTheGoal
+  - gui/src/shell/__tests__/meter.test.ts:ringDashIsTheUsedShareOfTheCircumference
+  - gui/src/shell/__tests__/GoalTag.test.tsx:goalTagReadsBelowStrictlyUnderGoal
+  - gui/src/shell/__tests__/GoalTag.test.tsx:goalTagReadsMetAtOrAboveGoal
+  - gui/src/shell/__tests__/UsageRing.test.tsx:ringLabelShowsFreeAndCapacity
+  - gui/src/shell/__tests__/UsageRing.test.tsx:ringFillClassFollowsPhase
+  - gui/src/shell/__tests__/UsageRing.test.tsx:ringAndBarUseTheSpecifiedTokens
+  - gui/src/shell/__tests__/Shell.test.tsx:meterShowsLiveVolumeAndFreeSpace
+  - gui/src/shell/__tests__/Shell.test.tsx:goalMarkerFollowsLiveGoalPos
+  - gui/src/shell/__tests__/Shell.test.tsx:meterFollowsACleanWithoutRemount
+  - gui/src/screens/__tests__/SmartClean.test.tsx:cleanUpdatesRingTagAndSidebar
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-002.A1 -->
 - Free and used figures are physical bytes on the device, consistent with `df` for that volume, not the logical sum of file sizes.
@@ -83,6 +120,51 @@ A persistent meter shows the volume name, free space, a used-share bar, a marker
 ## The idle phase MUST offer a scan as the primary action
 
 The idle phase shows: a last-scan kicker ("Last scan <relative time>"), the heading "Let's clear some room.", the description promising that nothing is removed until reviewed and that everything goes to the Trash first, a primary "Start scan" action, a secondary "Explore disk" action (navigates to Space Map), and three shortcut cards (Assistant, Space Map, Large files).
+
+implementations:
+  - gui/src/screens/SmartClean.tsx:SmartClean
+  - gui/src/screens/smartClean/Idle.tsx:Idle
+  - gui/src/screens/smartClean/phase.ts:startScan
+  - gui/src/screens/smartClean/phase.ts:scanProgress
+  - gui/src/screens/smartClean/phase.ts:scanFinished
+  - gui/src/screens/smartClean/phase.ts:scanStopped
+  - gui/src/screens/smartClean/idleCopy.ts:idleDescription
+  - gui/src/screens/smartClean/idleCopy.ts:lastScanKicker
+  - gui/src/screens/smartClean/idleCopy.ts:assistantShortcut
+  - gui/src/screens/smartClean/idleCopy.ts:largeFilesShortcut
+  - gui/src/lib/format.ts:relativeTime
+  - gui/src/lib/contract.ts:parseCleanupView
+  - src/contract.rs:large_files_count
+  - src/contract.rs:empty_view
+  - src/contract.rs:load
+  - gui/src-tauri/src/main.rs:load_cleanup_view
+
+verifies:
+  - gui/src/screens/__tests__/phase.test.ts:startScanResetsProgressCollapsesAndDismisses
+  - gui/src/screens/__tests__/phase.test.ts:startScanIsIgnoredWhileBusy
+  - gui/src/screens/__tests__/phase.test.ts:scanProgressNeverGoesBackwards
+  - gui/src/screens/__tests__/phase.test.ts:stoppedScanIgnoresALateFinish
+  - gui/src/screens/__tests__/idleCopy.test.ts:descriptionFollowsTrashMode
+  - gui/src/screens/__tests__/idleCopy.test.ts:kickerReadsNoScansYetWithoutASnapshot
+  - gui/src/screens/__tests__/idleCopy.test.ts:kickerUsesTheSnapshotTimestamp
+  - gui/src/screens/__tests__/idleCopy.test.ts:relativeTimeUnits
+  - gui/src/screens/__tests__/idleCopy.test.ts:assistantShortcutCopy
+  - gui/src/screens/__tests__/idleCopy.test.ts:largeFilesCopyComesFromTheCount
+  - gui/src/screens/__tests__/idleCopy.test.ts:headingMatchesTheSnapshot
+  - gui/src/screens/__tests__/SmartClean.test.tsx:idleShowsHeadingDescriptionActionsAndShortcuts
+  - gui/src/screens/__tests__/SmartClean.test.tsx:startScanEntersScanningAtZero
+  - gui/src/screens/__tests__/SmartClean.test.tsx:stopReturnsToIdleWithoutResults
+  - gui/src/screens/__tests__/SmartClean.test.tsx:kickerShowsNoScansYetWithoutASnapshot
+  - gui/src/screens/__tests__/SmartClean.test.tsx:kickerShowsTheSnapshotAge
+  - gui/src/screens/__tests__/SmartClean.test.tsx:assistantShortcutWatchesTheGoalWithNoSuggestions
+  - gui/src/screens/__tests__/SmartClean.test.tsx:largeFilesCountComesFromTheEngine
+  - gui/src/screens/__tests__/SmartClean.test.tsx:descriptionIsTruthfulWhenTrashIsOff
+  - gui/src/screens/__tests__/SmartClean.test.tsx:exploreDiskOpensSpaceMap
+  - gui/src/screens/__tests__/SmartClean.test.tsx:shortcutsOpenTheirScreens
+  - gui/src/lib/contract.test.ts:largeFilesCountMustBeAWholeCount
+  - src/contract.rs:large_files_count_uses_physical_bytes_at_2gb
+  - src/contract.rs:empty_view_has_no_scan_and_live_disk
+  - gui/tests/visual/shell.spec.ts:idlePhaseMatchesSnapshot
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-003.A1 -->

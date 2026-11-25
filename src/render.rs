@@ -310,6 +310,7 @@ pub fn cleanup(
     hits: &[CleanupHit],
     applied: Option<&[String]>,
     history_id: Option<&str>,
+    disk: Option<&crate::disk::Disk>,
     format: Format,
 ) -> Result<()> {
     let summary = crate::cleanup::summarise(hits);
@@ -317,7 +318,7 @@ pub fn cleanup(
     let total_physical_bytes: u64 = summary.iter().map(|s| s.physical_bytes).sum();
 
     if format.is_machine() {
-        let payload = json!({
+        let mut payload = json!({
             "schema_version": SCHEMA_VERSION,
             "kind": "cleanup",
             "applied": applied.is_some(),
@@ -328,6 +329,9 @@ pub fn cleanup(
             "total_bytes": total_bytes,
             "total_physical_bytes": total_physical_bytes,
         });
+        if let Some(d) = disk {
+            payload["disk"] = serde_json::to_value(d)?;
+        }
         if matches!(format, Format::Ndjson) {
             for h in hits {
                 println!("{}", serde_json::to_string(h)?);

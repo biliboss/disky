@@ -4,13 +4,17 @@
 //! * [`CleanupView`] — what the Smart Clean screen renders: disk usage, the
 //!   goal, snapshot age and the reclaimable categories with their items.
 //! * [`ScanProgress`] — one progress event while a scan runs.
-//! * [`CleanResult`] — what a clean did, with its history entry.
+//! * [`CleanResult`] — what a clean did, with its history entry and the
+//!   volume's disk usage read after the clean, so the meter, ring and goal
+//!   tag update without a manual refresh (REQ-DCLEAN-002.A4).
 //!
 //! Every byte value is a `u64` of **physical** bytes (REQ-DCLEAN-027.A1).
 //! Category ids, names, descriptions and safety come from
 //! [`cleanup::CATEGORIES`] (REQ-DCLEAN-027.A4). A category's `bytes` is the
 //! sum of its items' `bytes` by construction (REQ-DCLEAN-027.A3).
 //!
+//! @implements REQ-DCLEAN-002
+//! @implements REQ-DCLEAN-003
 //! @implements REQ-DCLEAN-027
 //! @implements REQ-DCLEAN-029
 
@@ -33,6 +37,10 @@ pub const DEFAULT_GOAL_BYTES: u64 = 80_000_000_000;
 
 /// A snapshot older than this is stale (REQ-DCLEAN-029.A2): 24 hours.
 pub const STALE_AFTER_SECS: i64 = 24 * 60 * 60;
+
+/// A file at least this large (physical bytes) counts toward the idle
+/// screen's "Large files" shortcut (REQ-DCLEAN-003.A4): 2 GB, decimal.
+pub const LARGE_FILE_BYTES: u64 = 2_000_000_000;
 
 /// Most hits a view lists. Generous: the GUI scrolls.
 pub const VIEW_LIMIT: usize = 10_000;
@@ -103,6 +111,8 @@ pub struct CleanupView {
     /// is unknown (fail safe: warn).
     pub is_stale: bool,
     pub preferences: Preferences,
+    /// Files in the snapshot of at least [`LARGE_FILE_BYTES`] physical bytes.
+    pub large_files_count: u64,
     pub categories: Vec<CategoryView>,
 }
 
@@ -126,6 +136,8 @@ pub struct CleanResult {
     pub failed: Vec<Failure>,
     /// `None` when nothing was handled (no entry is written).
     pub history_entry: Option<history::Entry>,
+    /// The volume's usage read after the clean finished (REQ-DCLEAN-002.A4).
+    pub disk: Disk,
 }
 
 fn basename(path: &str) -> String {
@@ -212,6 +224,7 @@ pub fn cleanup_view(
     disk: Disk,
     goal_bytes: u64,
     preferences: Preferences,
+    large_files_count: u64,
     now_secs: i64,
 ) -> CleanupView {
     let taken = meta.map(|m| m.started_at);
@@ -224,8 +237,46 @@ pub fn cleanup_view(
         snapshot_taken_at: taken.and_then(rfc3339),
         is_stale: is_stale(taken, now_secs),
         preferences,
+        large_files_count,
         categories: categories_from_hits(hits),
     }
+}
+
+/// Files in a snapshot of at least [`LARGE_FILE_BYTES`] physical bytes — one
+/// query. CLI: `disky query "SELECT count(*) FROM files WHERE NOT is_dir AND
+/// physical_size >= 2000000000"`.
+pub fn large_files_count(conn: &Connection) -> Result<u64> {
+    let n: i64 = conn.query_row(
+        "SELECT count(*) FROM files WHERE NOT is_dir AND physical_size >= ?",
+        [LARGE_FILE_BYTES as i64],
+        |r| r.get(0),
+    )?;
+    Ok(n.max(0) as u64)
+}
+
+/// Disk usage of the volume holding `path`: its nearest existing ancestor
+/// (a cleaned path itself is gone), else `/`.
+pub fn disk_near(path: &Path) -> Result<Disk> {
+    path.ancestors()
+        .filter(|a| !a.as_os_str().is_empty() && a.exists())
+        .find_map(|a| disk_usage(a).ok())
+        .map_or_else(|| disk_usage(Path::new("/")), Ok)
+}
+
+/// The view when no snapshot exists yet: live disk usage, no categories, and
+/// `last_scan_at` null so the idle kicker reads "No scans yet"
+/// (REQ-DCLEAN-003.A2).
+pub fn empty_view(goal_bytes: u64, preferences: Preferences) -> Result<CleanupView> {
+    let disk = disk_usage(Path::new("/"))?;
+    Ok(cleanup_view(
+        None,
+        &[],
+        disk,
+        goal_bytes,
+        preferences,
+        0,
+        Utc::now().timestamp(),
+    ))
 }
 
 /// Open a snapshot and build its view, with disk usage taken from the
@@ -240,10 +291,19 @@ pub fn load(
     let conn = crate::db::open(snapshot_path)?;
     let meta = crate::db::read_scan_meta(&conn);
     let root = meta.as_ref().map_or("/", |m| m.root.as_str());
-    let disk = disk_usage(Path::new(root)).or_else(|_| disk_usage(Path::new("/")))?;
+    let disk = disk_near(Path::new(root))?;
     let hits = view_hits(&conn)?;
+    let large = large_files_count(&conn)?;
     let now = Utc::now().timestamp();
-    let view = cleanup_view(meta.as_ref(), &hits, disk, goal_bytes, preferences, now);
+    let view = cleanup_view(
+        meta.as_ref(),
+        &hits,
+        disk,
+        goal_bytes,
+        preferences,
+        large,
+        now,
+    );
     Ok((view, hits))
 }
 
@@ -318,7 +378,7 @@ pub fn clean(
 ) -> Result<CleanResult> {
     let (selected, refused) = select_reviewed(reviewed, paths);
     let outcome = cleanup::apply(&selected, apply_mode(mode), Some(log))?;
-    Ok(clean_result(mode, &selected, outcome, refused))
+    clean_result(mode, &selected, outcome, refused)
 }
 
 /// [`clean`] with an explicit Trash root, so tests never touch `~/.Trash`.
@@ -332,7 +392,7 @@ pub(crate) fn clean_with(
 ) -> Result<CleanResult> {
     let (selected, refused) = select_reviewed(reviewed, paths);
     let outcome = cleanup::apply_with(&selected, apply_mode(mode), Some(log), trash_root)?;
-    Ok(clean_result(mode, &selected, outcome, refused))
+    clean_result(mode, &selected, outcome, refused)
 }
 
 fn clean_result(
@@ -340,20 +400,24 @@ fn clean_result(
     selected: &[CleanupHit],
     outcome: ApplyOutcome,
     mut failed: Vec<Failure>,
-) -> CleanResult {
+) -> Result<CleanResult> {
     let freed_bytes = selected
         .iter()
         .filter(|h| outcome.handled.contains(&h.path))
         .map(|h| h.physical_bytes)
         .sum();
     failed.extend(outcome.failed);
-    CleanResult {
+    // Read after every move/delete finished, on the cleaned paths' volume.
+    let near = selected.first().map_or("/", |h| h.path.as_str());
+    let disk = disk_near(Path::new(near))?;
+    Ok(CleanResult {
         mode,
         freed_bytes,
         succeeded: outcome.handled,
         failed,
         history_entry: outcome.entry,
-    }
+        disk,
+    })
 }
 
 #[cfg(test)]
@@ -434,9 +498,11 @@ mod tests {
             },
             DEFAULT_GOAL_BYTES,
             Preferences::default(),
+            8,
             0,
         );
         let json = serde_json::to_value(&view).unwrap();
+        assert_eq!(json["large_files_count"], 8);
         let back: CleanupView = serde_json::from_value(json.clone()).unwrap();
         assert_eq!(back, view);
         assert_eq!(json["categories"][0]["safety"], "review");
@@ -469,6 +535,7 @@ mod tests {
                 disk.clone(),
                 1,
                 Preferences::default(),
+                0,
                 now,
             )
         };
@@ -480,7 +547,7 @@ mod tests {
         );
         assert_eq!(fresh.last_scan_at.as_deref(), Some("2023-11-14T22:14:20Z"));
         assert!(at(meta.started_at + STALE_AFTER_SECS + 1).is_stale);
-        let unknown = cleanup_view(None, &[], disk, 1, Preferences::default(), 0);
+        let unknown = cleanup_view(None, &[], disk, 1, Preferences::default(), 0, 0);
         assert!(unknown.is_stale && unknown.last_scan_at.is_none());
     }
 
@@ -557,5 +624,67 @@ mod tests {
             "trash mode is reversible"
         );
         assert_eq!(history::load(&log).unwrap(), [entry]);
+    }
+
+    #[test]
+    fn clean_result_carries_post_clean_disk() {
+        let tmp = tempfile::tempdir().unwrap();
+        let trash = tmp.path().join("Trash");
+        let log = tmp.path().join("history.json");
+        let dir = tmp.path().join("proj/node_modules");
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.to_string_lossy().into_owned();
+        let reviewed = vec![hit("node_modules", &p, 7, Safety::Review)];
+
+        let r = clean_with(&reviewed, &[p], history::Mode::Trash, &log, &trash).unwrap();
+        assert!(r.disk.capacity_bytes > 0);
+        assert!(r.disk.free_bytes <= r.disk.capacity_bytes);
+        let json = serde_json::to_value(&r).unwrap();
+        assert!(json["disk"]["free_bytes"].is_u64());
+        // Nothing selected still reports the volume (falls back to `/`).
+        let none = clean_with(&[], &[], history::Mode::Trash, &log, &trash).unwrap();
+        assert!(none.disk.capacity_bytes > 0);
+    }
+
+    #[test]
+    fn disk_near_walks_up_to_an_existing_ancestor() {
+        let tmp = tempfile::tempdir().unwrap();
+        let gone = tmp.path().join("a/b/c");
+        let d = disk_near(&gone).unwrap();
+        assert_eq!(
+            d.capacity_bytes,
+            disk_usage(tmp.path()).unwrap().capacity_bytes
+        );
+        assert!(
+            disk_near(Path::new("relative/missing"))
+                .unwrap()
+                .capacity_bytes
+                > 0
+        );
+    }
+
+    #[test]
+    fn large_files_count_uses_physical_bytes_at_2gb() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::create_schema(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO files (path, name, ext, size, physical_size, mtime, is_dir, depth) VALUES
+             ('/a', 'a', '', 9000000000, 2000000000, 0, false, 1),
+             ('/b', 'b', '', 9000000000, 1999999999, 0, false, 1),
+             ('/c', 'c', '', 3000000000, 3000000000, 0, false, 1),
+             ('/d', 'd', '', 5000000000, 5000000000, 0, true, 1),
+             ('/e', 'e', '', 5000000000, NULL, 0, false, 1);",
+        )
+        .unwrap();
+        assert_eq!(large_files_count(&conn).unwrap(), 2);
+    }
+
+    #[test]
+    fn empty_view_has_no_scan_and_live_disk() {
+        let v = empty_view(DEFAULT_GOAL_BYTES, Preferences::default()).unwrap();
+        assert!(v.last_scan_at.is_none());
+        assert!(v.categories.is_empty());
+        assert_eq!(v.large_files_count, 0);
+        assert!(v.disk.capacity_bytes > 0);
     }
 }

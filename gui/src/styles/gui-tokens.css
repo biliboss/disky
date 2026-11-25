@@ -51,6 +51,33 @@
   --meter-marker-overhang: 3px;       /* marker extends above/below the bar */
   --meter-marker-nudge: 1px;          /* snapshot: left = calc(pos − 1px) */
 
+  /* ── Usage ring (REQ-DCLEAN-002) ────────────────────────────── */
+  --ring-size: 260px;                 /* rendered size; geometry is the 120-unit viewBox */
+  --ring-label-gap: 2px;              /* free amount ↔ "free of <capacity>" */
+
+  /* ── Smart Clean · idle (REQ-DCLEAN-003) ────────────────────── */
+  --idle-py: 48px;
+  --idle-gap: 48px;                   /* main column ↔ ring rail */
+  --idle-rail-w: 300px;
+  --idle-stack-gap: 20px;
+  --lh-hero: 1.05;
+  --fs-idle-desc: var(--fs-h5);       /* 16px */
+  --idle-desc-max: 440px;
+  --idle-actions-gap: 10px;
+  --idle-actions-mt: 8px;
+  --btn-hero-py: 14px;
+  --btn-start-px: 26px;
+  --btn-explore-px: 22px;
+  --fs-btn-start: var(--fs-h5);       /* 16px */
+  --fs-btn-explore: var(--fs-body);   /* 15px */
+  --shortcuts-gap: 12px;
+  --shortcuts-mt: 36px;
+  --shortcut-icon: var(--btn-icon-size); /* 36px disc */
+  --shortcut-glyph: var(--nav-icon);  /* 18px */
+  --shortcut-title-mt: 6px;
+  --idle-rail-gap: 14px;
+  --idle-rail-pt: 24px;
+
   /* ── Figures ────────────────────────────────────────────────── */
   --numeric-figures: tabular-nums;    /* sizes align in columns (REQ-DCLEAN-028.A4) */
 

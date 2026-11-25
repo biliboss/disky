@@ -101,10 +101,97 @@ test("traffic-light slot sits where the snapshot draws its dots (REQ-DCLEAN-032.
 test("placeholder screens keep the shell (REQ-DCLEAN-032.A3)", placeholderScreensKeepTheShell);
 test("renders offline with bundled fonts and icons (REQ-DCLEAN-032.A4)", rendersOfflineWithBundledFontsAndIcons);
 
+const WINDOW = { x: 0, y: 0, width: 1200, height: 780 };
+
+/**
+ * The snapshot prototype's idle state as an engine view: 74 of 512 GB free,
+ * 80 GB goal, last scan 7 days ago, 8 files over 2 GB.
+ */
+function idleFixtureView() {
+  return {
+    disk: { volume: "Macintosh HD", capacity_bytes: 512e9, free_bytes: 74e9 },
+    goal_bytes: 80e9,
+    last_scan_at: new Date(Date.now() - 7 * 86_400_000 - 60_000).toISOString(),
+    snapshot_taken_at: null,
+    is_stale: false,
+    preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
+    large_files_count: 8,
+    categories: [],
+  };
+}
+
+/** Answer the app's Tauri `invoke` calls in the browser build with `view`. */
+async function stubEngine(page: Page, view: unknown) {
+  await page.addInitScript((v) => {
+    (window as any).__TAURI_INTERNALS__ = {
+      invoke: async (cmd: string) => {
+        if (cmd === "load_cleanup_view") return v;
+        throw new Error(`visual stub: ${cmd} is not available`);
+      },
+      transformCallback: () => 0,
+    };
+  }, view);
+}
+
+/**
+ * Live-data text on the idle screen (numbers and data-driven copy), masked on
+ * both sides. The snapshot's Assistant line shows its 4 fixture suggestions;
+ * the app shows "Watching your space goal" until the Assistant spec lands.
+ */
+const SNAPSHOT_IDLE_LIVE = (page: Page) => {
+  // The prototype renders each `{{ value }}` in an inner inline wrapper; mask
+  // its enclosing element so both sides mask the same boxes.
+  const outer = (sel: string) => page.locator(sel).locator("xpath=..");
+  return [
+    page.locator('main div:text-is("Last scan 7 days ago")'),
+    outer('main span:text-is("74 GB")'),
+    page.locator('main span:text-is("free of 512 GB")'),
+    outer('main span:text-is("Below your goal")'),
+    outer('main span:text-is("4 suggestions waiting")'),
+    outer('main span:text-is("8 files over 2 GB")'),
+    page.locator('aside span:has-text("GB free")'),
+  ];
+};
+const APP_IDLE_LIVE = [
+  '[data-testid="last-scan"]',
+  '[data-testid="ring-free"]',
+  '[data-testid="ring-total"]',
+  '[data-testid="goal-tag"]',
+  '[data-testid="shortcut-assistant-desc"]',
+  '[data-testid="shortcut-large-desc"]',
+  ".meter-free",
+];
+
+async function idlePhaseMatchesSnapshot({ page }: { page: Page }) {
+  const at = await openSnapshot(page);
+  // The below-goal notification is REQ-DCLEAN-010's; dismiss it the way the
+  // prototype does so the idle screen itself is compared.
+  await page.getByRole("button", { name: "Later" }).click();
+  await page.locator('[data-screen-label="Smart clean · home"]').waitFor();
+  await page.screenshot({
+    path: baselinePath("phase-idle.png"),
+    clip: offset(WINDOW, at),
+    mask: [page.locator(SNAPSHOT_LIGHTS), ...SNAPSHOT_IDLE_LIVE(page)],
+    maskColor: MASK_COLOR,
+    animations: "disabled",
+  });
+
+  await page.setViewportSize(WINDOW);
+  await stubEngine(page, idleFixtureView());
+  await openApp(page);
+  await page.getByTestId("idle").waitFor();
+  await expect(page).toHaveScreenshot("phase-idle.png", {
+    ...SHELL_DIFF,
+    clip: WINDOW,
+    mask: [page.locator(APP_LIGHTS), ...APP_IDLE_LIVE.map((s) => page.locator(s))],
+  });
+}
+
+test("Smart Clean idle phase matches the snapshot within 1% (REQ-DCLEAN-032.A1, REQ-DCLEAN-003)", idlePhaseMatchesSnapshot);
+
 // Full-phase comparisons (REQ-DCLEAN-032.A1). Parked until each Smart Clean
 // phase REQ is implemented; un-fixme as the phase lands.
 const PHASES = [
-  ["idle", "REQ-DCLEAN-003"],
   ["scanning", "REQ-DCLEAN-004"],
   ["results", "REQ-DCLEAN-005"],
   ["cleaning", "REQ-DCLEAN-008"],
@@ -118,7 +205,7 @@ for (const [phase, req] of PHASES) {
     await openApp(page);
     await expect(page).toHaveScreenshot(`phase-${phase}.png`, {
       ...SHELL_DIFF,
-      clip: { x: 0, y: 0, width: 1200, height: 780 },
+      clip: WINDOW,
       mask: [page.locator(APP_LIGHTS)],
     });
   });

@@ -89,7 +89,7 @@ fn commands() -> Value {
                 "apply": "bool (default false — dry-run unless set)",
                 "reversible": "bool (default false — with apply, trash instead of rm)"
             },
-            "output": "cleanup envelope: {kind:'cleanup', applied:bool, removed:[string], history_id:string? (set when --apply recorded a history entry), records:[CleanupHit], summary:[CategorySummary], total_bytes:u64, total_physical_bytes:u64}",
+            "output": "cleanup envelope: {kind:'cleanup', applied:bool, removed:[string], history_id:string? (set when --apply recorded a history entry), records:[CleanupHit], summary:[CategorySummary], total_bytes:u64, total_physical_bytes:u64, disk:{volume:string, capacity_bytes:u64, free_bytes:u64}? (set after --apply: the volume's usage once the clean finished)}",
             "targets": cleanup_categories()
         },
         {

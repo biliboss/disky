@@ -10,6 +10,7 @@ function validView(): Record<string, any> {
     snapshot_taken_at: "2026-11-25T08:59:00Z",
     is_stale: false,
     preferences: { trash_by_default: true, safe_only: true, notifications: true, assistant: true },
+    large_files_count: 8,
     categories: [
       {
         id: "app_caches",
@@ -109,11 +110,27 @@ function cleanResultParsesWithAndWithoutEntry() {
     succeeded: ["/a"],
     failed: [{ path: "/gone", reason: "missing" }],
     history_entry: entry,
+    disk: { volume: "Macintosh HD", capacity_bytes: 512e9, free_bytes: 80e9 },
   };
   expect(parseCleanResult(raw)).toEqual(raw);
   expect(parseCleanResult({ ...raw, history_entry: null }).history_entry).toBeNull();
   expectContractError(() => parseCleanResult({ ...raw, mode: "shred" }), "result.mode");
   expectContractError(() => parseCleanResult({ ...raw, freed_bytes: 0.5 }), "result.freed_bytes");
+}
+
+function cleanResultWithoutDiskIsRejected() {
+  const raw: Record<string, unknown> = { mode: "trash", freed_bytes: 0, succeeded: [], failed: [], history_entry: null };
+  expectContractError(() => parseCleanResult(raw), "result.disk");
+  const bad = { ...raw, disk: { volume: "v", capacity_bytes: 1, free_bytes: -1 } };
+  expectContractError(() => parseCleanResult(bad), "result.disk.free_bytes");
+}
+
+function largeFilesCountMustBeAWholeCount() {
+  const missing = validView();
+  delete missing.large_files_count;
+  expectContractError(() => parseCleanupView(missing), "view.large_files_count");
+  const fractional = { ...validView(), large_files_count: 1.5 };
+  expectContractError(() => parseCleanupView(fractional), "view.large_files_count");
 }
 
 describe("GUI data contract (REQ-DCLEAN-027, REQ-DCLEAN-029)", () => {
@@ -126,4 +143,6 @@ describe("GUI data contract (REQ-DCLEAN-027, REQ-DCLEAN-029)", () => {
   it("missing fields fail the whole payload (REQ-DCLEAN-029.A4)", rejectsMissingFieldsWithoutAPartialList);
   it("scan progress fraction stays in 0..1 (REQ-DCLEAN-027)", progressFractionMustBeInZeroToOne);
   it("clean results parse with or without a history entry (REQ-DCLEAN-027)", cleanResultParsesWithAndWithoutEntry);
+  it("a clean result without its post-clean disk is rejected (REQ-DCLEAN-002.A4)", cleanResultWithoutDiskIsRejected);
+  it("the large-files count is a whole number from the engine (REQ-DCLEAN-003.A4)", largeFilesCountMustBeAWholeCount);
 });

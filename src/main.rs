@@ -230,6 +230,16 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             } else {
                 None
             };
+            // After an apply, the volume's usage as the GUI meter shows it
+            // (REQ-DCLEAN-002.A4, REQ-DCLEAN-001.A1).
+            let disk = match &outcome {
+                Some(_) => {
+                    let root =
+                        db::read_scan_meta(&conn).map_or_else(|| "/".to_string(), |m| m.root);
+                    Some(disky::contract::disk_near(std::path::Path::new(&root))?)
+                }
+                None => None,
+            };
             render::cleanup(
                 &hits,
                 outcome.as_ref().map(|o| o.handled.as_slice()),
@@ -237,6 +247,7 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                     .as_ref()
                     .and_then(|o| o.entry.as_ref())
                     .map(|e| e.id.as_str()),
+                disk.as_ref(),
                 format,
             )?;
         }

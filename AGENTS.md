@@ -48,7 +48,10 @@ disky cleanup --target node_modules,target --apply            # rm -rf
 disky cleanup --target node_modules,target --apply --reversible  # → ~/.Trash
 ```
 
-JSON output: `{kind:"cleanup", applied:bool, removed:[paths], records:[CleanupHit], summary:[CategorySummary], total_bytes:N, total_physical_bytes:N}`.
+JSON output: `{kind:"cleanup", applied:bool, removed:[paths], records:[CleanupHit], summary:[CategorySummary], total_bytes:N, total_physical_bytes:N, disk?}`.
+After `--apply`, `disk = {volume, capacity_bytes, free_bytes}` is the volume's
+usage once the clean finished, the same `disk` the GUI's `CleanResult` carries
+(REQ-DCLEAN-002.A4).
 `CleanupHit = {category, safety: safe|review, path, bytes, physical_bytes, files, note?}` (`bytes` logical, `physical_bytes` on disk).
 
 **GUI contract (REQ-DCLEAN-027).** `disky::contract` builds what the desktop

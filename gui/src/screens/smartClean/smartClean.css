@@ -1,0 +1,116 @@
+/* Smart Clean phases. Geometry mirrors snapshot.html "Smart clean · home";
+ * every value is a token (tokens.css / gui-tokens.css). */
+
+.smart-clean {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Idle (REQ-DCLEAN-003) ────────────────────────────────────── */
+.idle {
+  flex: 1;
+  padding: var(--idle-py) var(--layout-screen-px);
+  display: grid;
+  grid-template-columns: 1fr var(--idle-rail-w);
+  gap: var(--idle-gap);
+  align-content: start;
+}
+
+.idle-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--idle-stack-gap);
+}
+
+.idle-kicker {
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+.idle-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-screen-hero);
+  line-height: var(--lh-hero);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.idle-desc {
+  margin: 0;
+  font-size: var(--fs-idle-desc);
+  line-height: var(--lh-body);
+  max-width: var(--idle-desc-max);
+  color: var(--color-neutral-800);
+  text-wrap: pretty;
+}
+
+.idle-actions {
+  display: flex;
+  gap: var(--idle-actions-gap);
+  margin-top: var(--idle-actions-mt);
+}
+
+.idle-start {
+  padding: var(--btn-hero-py) var(--btn-start-px);
+  font-size: var(--fs-btn-start);
+}
+
+.idle-explore {
+  padding: var(--btn-hero-py) var(--btn-explore-px);
+  font-size: var(--fs-btn-explore);
+}
+
+.idle-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--shortcuts-gap);
+  margin-top: var(--shortcuts-mt);
+}
+
+.shortcut {
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.shortcut:hover {
+  background: var(--color-neutral-200);
+}
+
+.shortcut-icon {
+  width: var(--shortcut-icon);
+  height: var(--shortcut-icon);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  display: grid;
+  place-items: center;
+  color: var(--color-accent-700);
+}
+
+.shortcut-glyph {
+  width: var(--shortcut-glyph);
+  height: var(--shortcut-glyph);
+  stroke-width: var(--icon-stroke);
+}
+
+.shortcut-title {
+  margin-top: var(--shortcut-title-mt);
+}
+
+.idle-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--idle-rail-gap);
+  padding-top: var(--idle-rail-pt);
+}
+
+.idle-error {
+  padding: var(--idle-actions-mt) var(--layout-screen-px) 0;
+}

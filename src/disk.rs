@@ -2,6 +2,7 @@
 //! REQ-DCLEAN-027). Physical bytes from `statvfs(2)`, never a sum of file
 //! sizes.
 //!
+//! @implements REQ-DCLEAN-002
 //! @implements REQ-DCLEAN-027
 
 use anyhow::Result;
