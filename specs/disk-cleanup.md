@@ -34,6 +34,26 @@ Resolved decisions (2026-11-24, recorded in AGENTS.md):
 
 The component ships as a Tauri + SolidJS desktop app in `gui/`. Scanning, querying, cleanup, history and restore MUST be done by the disky engine, either the `disky` library crate called from the Tauri backend or the CLI's `--format json` envelopes. The GUI MUST NOT reimplement any of them. Every mutation goes through disky's cleanup contract: dry-run by default, apply only on explicit confirmation, and reversible by default.
 
+implementations:
+  - gui/src-tauri/src/main.rs:load_cleanup_view
+  - gui/src-tauri/src/main.rs:scan
+  - gui/src-tauri/src/main.rs:stop_scan
+  - gui/src-tauri/src/main.rs:clean
+  - gui/src/lib/engine.ts:loadCleanupView
+  - gui/src/lib/engine.ts:scan
+  - gui/src/lib/engine.ts:clean
+  - gui/src/lib/engine.ts:onScanProgress
+  - src/contract.rs:load
+  - src/contract.rs:clean
+  - src/contract.rs:view_hits
+  - src/scan.rs:run_observed
+  - gui/scripts/lint-boundary.mjs:check
+
+verifies:
+  - tests/agentic.rs:gui_categories_match_cli_cleanup_totals
+  - tests/lib_integration.rs:contract_totals_match_cleanup_summary
+  - src/contract.rs:select_reviewed_refuses_unreviewed_paths
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-001.A1 -->
 - Every operation the GUI performs (scan, list categories, clean, undo, restore) has an equivalent `disky` CLI command that produces the same result on the same snapshot.
@@ -418,6 +438,54 @@ Scan progress events: `fraction` 0..1, `current_path`, `completed_category_ids[]
 
 Clean result: `mode` (`trash` or `delete`), `freed_bytes`, `succeeded[]` paths, `failed[]` entries of {path, reason}, and `history_entry`.
 
+implementations:
+  - src/contract.rs:CleanupView
+  - src/contract.rs:CategoryView
+  - src/contract.rs:ItemView
+  - src/contract.rs:Preferences
+  - src/contract.rs:ScanProgress
+  - src/contract.rs:CleanResult
+  - src/contract.rs:categories_from_hits
+  - src/contract.rs:cleanup_view
+  - src/contract.rs:scan_progress
+  - src/contract.rs:scan_finished
+  - src/contract.rs:load
+  - src/disk.rs:Disk
+  - src/disk.rs:disk_usage
+  - src/cleanup.rs:Category
+  - src/cleanup.rs:CATEGORIES
+  - src/cleanup.rs:Safety
+  - src/cleanup.rs:CleanupHit
+  - src/schema.rs:cleanup_categories
+  - gui/src/lib/contract.ts:parseCleanupView
+  - gui/src/lib/contract.ts:parseScanProgress
+  - gui/src/lib/contract.ts:parseCleanResult
+  - gui/src/lib/contract.ts:ContractError
+  - gui/src/screens/SmartClean.tsx:SmartClean
+
+verifies:
+  - src/contract.rs:category_bytes_equal_item_sum
+  - src/contract.rs:item_name_is_basename
+  - src/contract.rs:category_ids_come_from_engine_table
+  - src/contract.rs:contract_round_trips_and_rejects_unknown_safety
+  - src/contract.rs:default_preferences_are_all_on
+  - src/contract.rs:scan_progress_fraction_is_clamped
+  - src/disk.rs:disk_usage_reports_physical_volume_space
+  - src/disk.rs:disk_usage_fails_for_missing_path
+  - src/disk.rs:mount_point_of_root_is_root
+  - src/schema.rs:cleanup_categories_carry_label_and_description
+  - tests/lib_integration.rs:contract_totals_match_cleanup_summary
+  - tests/lib_integration.rs:contract_load_builds_view_from_snapshot
+  - gui/src/lib/contract.test.ts:validViewPasses
+  - gui/src/lib/contract.test.ts:rejectsUnknownSafety
+  - gui/src/lib/contract.test.ts:rejectsFractionalBytes
+  - gui/src/lib/contract.test.ts:rejectsStringBytes
+  - gui/src/lib/contract.test.ts:rejectsCategoryBytesThatAreNotTheItemSum
+  - gui/src/lib/contract.test.ts:progressFractionMustBeInZeroToOne
+  - gui/src/lib/contract.test.ts:cleanResultParsesWithAndWithoutEntry
+  - gui/src/screens/__tests__/SmartClean.test.tsx:rendersExactlyTheEngineCategories
+  - gui/src/screens/__tests__/SmartClean.test.tsx:emptyViewShowsNothingToClean
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-027.A1 -->
 - All byte values are integers in physical bytes. Formatted strings are produced only at render time.
@@ -431,6 +499,17 @@ Clean result: `mode` (`trash` or `delete`), `freed_bytes`, `succeeded[]` paths, 
 <!-- id: REQ-DCLEAN-028 -->
 ## Displayed sizes MUST be formatted consistently from exact bytes
 
+implementations:
+  - gui/src/lib/format.ts:formatBytes
+  - gui/src/lib/format.ts:NUMERIC_CLASS
+  - gui/src/screens/SmartClean.tsx:SmartClean
+
+verifies:
+  - gui/src/lib/format.test.ts:formatsBoundaries
+  - gui/src/lib/format.test.ts:usesDecimalBase
+  - gui/src/lib/format.test.ts:numericClassUsesTabularFigures
+  - gui/src/shell/__tests__/meter.test.ts:formatBytesFollowsDecimalRules
+
 **Acceptance**
 <!-- id: REQ-DCLEAN-028.A1 -->
 - Sizes of at least one GB show one decimal below 100 GB and no decimals at or above 100 GB; sizes below one GB show whole MB, with a minimum of "1 MB" for any non-zero value.
@@ -443,6 +522,27 @@ Clean result: `mode` (`trash` or `delete`), `freed_bytes`, `succeeded[]` paths, 
 
 <!-- id: REQ-DCLEAN-029 -->
 ## Invalid or stale input data MUST fail safe
+
+implementations:
+  - src/contract.rs:clean
+  - src/contract.rs:select_reviewed
+  - src/contract.rs:is_stale
+  - src/contract.rs:cleanup_view
+  - src/contract.rs:view_hits_with
+  - src/cleanup.rs:apply_with
+  - src/cleanup.rs:Failure
+  - src/cleanup.rs:in_scope
+  - gui/src/lib/contract.ts:parseCleanupView
+  - gui/src/screens/SmartClean.tsx:SmartClean
+
+verifies:
+  - src/contract.rs:clean_reports_missing_and_proceeds
+  - src/contract.rs:view_marks_snapshot_stale_after_24h
+  - tests/lib_integration.rs:contract_never_lists_ignored_or_excluded_paths
+  - gui/src/lib/contract.test.ts:rejectsNegativeBytes
+  - gui/src/lib/contract.test.ts:rejectsMissingFieldsWithoutAPartialList
+  - gui/src/screens/__tests__/SmartClean.test.tsx:malformedDataShowsTheErrorStateNotAPartialList
+  - gui/src/screens/__tests__/SmartClean.test.tsx:staleSnapshotWarnsBeforeCleaning
 
 **Acceptance**
 <!-- id: REQ-DCLEAN-029.A1 -->

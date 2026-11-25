@@ -17,6 +17,7 @@ tauri-build = { version = "=2.7.6", features = [] }
 tauri = { version = "=2.12.7", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+anyhow = "1"
 # The engine. Scan / query / cleanup / history come from here and are never
 # reimplemented in the GUI (REQ-DCLEAN-001).
 disky = { path = "../.." }

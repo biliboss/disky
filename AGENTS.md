@@ -48,8 +48,14 @@ disky cleanup --target node_modules,target --apply            # rm -rf
 disky cleanup --target node_modules,target --apply --reversible  # → ~/.Trash
 ```
 
-JSON output: `{kind:"cleanup", applied:bool, removed:[paths], records:[CleanupHit], summary:[CategorySummary], total_bytes:N}`.
-`CleanupHit = {category, safety: safe|review, path, bytes, files, note?}`.
+JSON output: `{kind:"cleanup", applied:bool, removed:[paths], records:[CleanupHit], summary:[CategorySummary], total_bytes:N, total_physical_bytes:N}`.
+`CleanupHit = {category, safety: safe|review, path, bytes, physical_bytes, files, note?}` (`bytes` logical, `physical_bytes` on disk).
+
+**GUI contract (REQ-DCLEAN-027).** `disky::contract` builds what the desktop
+GUI renders (`CleanupView`, `ScanProgress`, `CleanResult`) from the same
+cleanup query, in physical bytes. The Tauri commands only delegate to it, and
+`gui/scripts/lint-boundary.mjs` (run by `npm run lint:tokens`) keeps file
+walking, size summing, deletion and category ids out of `gui/`.
 
 **Categories (REQ-DCLEAN-033).** One table, `cleanup::CATEGORIES` — the GUI
 and `disky schema` read it; nothing else defines a category.

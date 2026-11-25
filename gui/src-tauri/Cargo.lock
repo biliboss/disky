@@ -1302,6 +1302,7 @@ dependencies = [
  "humansize",
  "indicatif",
  "jwalk",
+ "libc",
  "memchr",
  "num_cpus",
  "plist",
@@ -1316,6 +1317,7 @@ dependencies = [
 name = "disky-gui"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "disky",
  "serde",
  "serde_json",

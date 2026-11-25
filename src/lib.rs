@@ -7,7 +7,9 @@
 
 pub mod cleanup;
 pub mod config;
+pub mod contract;
 pub mod db;
+pub mod disk;
 pub mod duration;
 pub mod envelope;
 pub mod exit;

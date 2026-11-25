@@ -314,6 +314,7 @@ pub fn cleanup(
 ) -> Result<()> {
     let summary = crate::cleanup::summarise(hits);
     let total_bytes: u64 = summary.iter().map(|s| s.bytes).sum();
+    let total_physical_bytes: u64 = summary.iter().map(|s| s.physical_bytes).sum();
 
     if format.is_machine() {
         let payload = json!({
@@ -325,6 +326,7 @@ pub fn cleanup(
             "records": hits,
             "summary": summary,
             "total_bytes": total_bytes,
+            "total_physical_bytes": total_physical_bytes,
         });
         if matches!(format, Format::Ndjson) {
             for h in hits {

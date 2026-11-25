@@ -411,3 +411,78 @@ fn stats_raw_emits_bare_integer() {
         .expect("--raw must print a bare integer");
     assert!(n >= 13312, "expected total bytes >= 13312, got {}", n);
 }
+
+#[test]
+fn gui_categories_match_cli_cleanup_totals() {
+    // REQ-DCLEAN-001.A1 — the GUI's category list (`disky::contract`) and
+    // `disky cleanup --format json` agree on the same snapshot.
+    let home = temp_dir();
+    let root = home.join("work");
+    fs::create_dir_all(root.join("p1/node_modules/deep")).unwrap();
+    fs::create_dir_all(root.join("p2/node_modules")).unwrap();
+    fs::create_dir_all(root.join("p1/target")).unwrap();
+    fs::create_dir_all(root.join("p3/__pycache__")).unwrap();
+    fs::write(root.join("p1/node_modules/deep/a.js"), vec![1u8; 5000]).unwrap();
+    fs::write(root.join("p2/node_modules/b.js"), vec![1u8; 70_000]).unwrap();
+    fs::write(root.join("p1/target/blob"), vec![1u8; 9000]).unwrap();
+    fs::write(root.join("p3/__pycache__/m.pyc"), vec![1u8; 300]).unwrap();
+    let db = home.join("snap.db");
+    let out = run_in_home(
+        &home,
+        &["scan", root.to_str().unwrap(), "--db", db.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "scan: {:?}", out);
+
+    let limit = disky::contract::VIEW_LIMIT.to_string();
+    let v = json_in_home(
+        &home,
+        &[
+            "cleanup",
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--limit",
+            &limit,
+            "--format",
+            "json",
+        ],
+    );
+    let cli: std::collections::BTreeMap<String, (u64, u64, String)> = v["summary"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| {
+            (
+                s["category"].as_str().unwrap().to_string(),
+                (
+                    s["physical_bytes"].as_u64().unwrap(),
+                    s["paths"].as_u64().unwrap(),
+                    s["safety"].as_str().unwrap().to_string(),
+                ),
+            )
+        })
+        .collect();
+
+    let conn = disky::db::open(db.to_str().unwrap()).unwrap();
+    let mut ctx = disky::cleanup::ScanContext::from_snapshot(&conn);
+    ctx.home = Some(home.clone()); // the CLI ran with HOME = `home`
+    let hits = disky::contract::view_hits_with(&conn, &ctx).unwrap();
+    let gui: std::collections::BTreeMap<String, (u64, u64, String)> =
+        disky::contract::categories_from_hits(&hits)
+            .into_iter()
+            .map(|c| {
+                (
+                    c.id,
+                    (c.bytes, c.items.len() as u64, c.safety.as_str().to_string()),
+                )
+            })
+            .collect();
+
+    assert_eq!(gui, cli);
+    assert_eq!(
+        gui.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["node_modules", "pycache", "target"]
+    );
+    let total: u64 = gui.values().map(|(b, _, _)| b).sum();
+    assert_eq!(total, v["total_physical_bytes"].as_u64().unwrap());
+    let _ = fs::remove_dir_all(&home);
+}

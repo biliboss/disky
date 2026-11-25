@@ -89,7 +89,7 @@ fn commands() -> Value {
                 "apply": "bool (default false — dry-run unless set)",
                 "reversible": "bool (default false — with apply, trash instead of rm)"
             },
-            "output": "cleanup envelope: {kind:'cleanup', applied:bool, removed:[string], history_id:string? (set when --apply recorded a history entry), records:[CleanupHit], summary:[CategorySummary], total_bytes:u64}",
+            "output": "cleanup envelope: {kind:'cleanup', applied:bool, removed:[string], history_id:string? (set when --apply recorded a history entry), records:[CleanupHit], summary:[CategorySummary], total_bytes:u64, total_physical_bytes:u64}",
             "targets": cleanup_categories()
         },
         {
@@ -114,6 +114,8 @@ fn cleanup_categories() -> Value {
         .map(|c| match c.matcher {
             Matcher::Basename(b) => json!({
                 "name": c.name,
+                "label": c.label,
+                "description": c.description,
                 "safety": c.safety,
                 "kind": "basename",
                 "basenames": b,
@@ -122,6 +124,8 @@ fn cleanup_categories() -> Value {
                 locations, filter, ..
             } => json!({
                 "name": c.name,
+                "label": c.label,
+                "description": c.description,
                 "safety": c.safety,
                 "kind": "location",
                 "locations": locations
@@ -167,8 +171,8 @@ fn records() -> Value {
         },
         "Scalar":     { "bytes": "u64", "files": "u64" },
         "Snapshot":   { "path": "string", "id": "string?", "bytes": "u64" },
-        "CleanupHit":      { "category": "string", "safety": "safe|review", "path": "string", "bytes": "u64", "files": "u64", "note": "string? (e.g. trash: permanent, refused with --reversible)" },
-        "CategorySummary": { "category": "string", "safety": "safe|review (review if any hit is)", "paths": "u64", "bytes": "u64", "files": "u64" },
+        "CleanupHit":      { "category": "string", "safety": "safe|review", "path": "string", "bytes": "u64 (logical)", "physical_bytes": "u64 (on disk)", "files": "u64", "note": "string? (e.g. trash: permanent, refused with --reversible)" },
+        "CategorySummary": { "category": "string", "safety": "safe|review (review if any hit is)", "paths": "u64", "bytes": "u64 (logical)", "physical_bytes": "u64 (on disk)", "files": "u64" },
         "HistoryEntry":    { "id": "string (YYYY-MM-DD_HH-MM-SS-xxxx)", "ts": "string (RFC3339 UTC)", "mode": "trash|delete", "categories": "string[]", "bytes": "u64", "items": "HistoryItem[]", "restored_at": "string? (RFC3339 UTC, set once every item is restored)" },
         "HistoryItem":     { "original_path": "string", "trash_path": "string? (null in delete mode)", "bytes": "u64", "status": "in_trash|restored|conflict|missing|deleted" },
         "RestoreReport":   { "id": "string", "restored": "string[]", "conflicts": "string[]", "missing": "string[] (no longer in Trash)" },
@@ -208,6 +212,31 @@ mod tests {
         // ExitCode 0..=6 inclusive
         for c in 0..=6 {
             assert!(codes.contains(&c), "missing error code {} in schema", c);
+        }
+    }
+
+    #[test]
+    fn cleanup_categories_carry_label_and_description() {
+        let doc = document();
+        let cleanup = doc["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "cleanup")
+            .expect("cleanup command in schema");
+        let targets = cleanup["targets"].as_array().expect("targets");
+        assert_eq!(targets.len(), CATEGORIES.len());
+        for (t, c) in targets.iter().zip(CATEGORIES) {
+            assert_eq!(t["name"], c.name);
+            assert_eq!(t["label"], c.label);
+            assert_eq!(t["description"], c.description);
+            assert!(
+                !c.label.is_empty() && !c.description.is_empty(),
+                "{}",
+                c.name
+            );
+            let safety = t["safety"].as_str().unwrap();
+            assert!(safety == "safe" || safety == "review");
         }
     }
 

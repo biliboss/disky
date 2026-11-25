@@ -574,6 +574,7 @@ fn cleanup_trash_is_refused_in_reversible_mode() {
         safety: cleanup::Safety::Safe,
         path: f.to_string_lossy().into_owned(),
         bytes: 1,
+        physical_bytes: 1,
         files: 1,
         note: None,
     };
@@ -660,4 +661,98 @@ fn growth_over_n_fits_linear_growth_with_high_r2() {
     assert_eq!(stable.slope_bytes_per_day, 0);
     // No projection for a flat series.
     assert!(stable.projected_fill_date.is_none());
+}
+
+#[test]
+fn contract_totals_match_cleanup_summary() {
+    // REQ-DCLEAN-027.A3 / REQ-DCLEAN-001.A1 — the GUI view is the CLI's
+    // `cleanup` summary regrouped, in physical bytes.
+    let rows: &[(&str, bool, i64, i64)] = &[
+        ("/h/src/a/node_modules", true, 0, T0),
+        ("/h/src/a/node_modules/x.js", false, 120, T0),
+        ("/h/src/b/node_modules", true, 0, T0),
+        ("/h/src/b/node_modules/y.js", false, 30, T0),
+        ("/h/src/b/target", true, 0, T0),
+        ("/h/src/b/target/out", false, 4000, T0),
+        ("/h/Library/Caches/com.foo", true, 0, T0),
+        ("/h/Library/Caches/com.foo/c", false, 77, T0),
+        ("/h/Library/Logs/x.log", false, 9, T0),
+    ];
+    let (_d, conn) = small_snapshot(rows, "/h");
+    let ctx = synth_ctx("/h", "/h");
+    let hits = disky::contract::view_hits_with(&conn, &ctx).unwrap();
+    let summary = cleanup::summarise(&hits);
+    let cats = disky::contract::categories_from_hits(&hits);
+
+    assert_eq!(cats.len(), summary.len());
+    for c in &cats {
+        let s = summary.iter().find(|s| s.category == c.id).unwrap();
+        assert_eq!(c.bytes, s.physical_bytes, "{}", c.id);
+        assert_eq!(c.items.len() as u64, s.paths, "{}", c.id);
+        assert_eq!(c.safety, s.safety, "{}", c.id);
+        assert_eq!(c.bytes, c.items.iter().map(|i| i.bytes).sum::<u64>());
+    }
+    let ids: Vec<&str> = cats.iter().map(|c| c.id.as_str()).collect();
+    assert_eq!(ids, ["node_modules", "target", "app_caches", "logs"]);
+}
+
+#[test]
+fn contract_never_lists_ignored_or_excluded_paths() {
+    // REQ-DCLEAN-029.A3 — `.diskyignore` segments and excluded folders
+    // never reach the GUI's category list.
+    let rows: &[(&str, bool, i64, i64)] = &[
+        ("/h/src/a/node_modules", true, 0, T0),
+        ("/h/src/a/node_modules/x", false, 1, T0),
+        ("/h/src/keepme/node_modules", true, 0, T0),
+        ("/h/src/keepme/node_modules/x", false, 1, T0),
+        ("/h/src/private/target", true, 0, T0),
+        ("/h/src/private/target/x", false, 1, T0),
+        ("/h/Library/Caches/secret", true, 0, T0),
+        ("/h/Library/Caches/secret/x", false, 1, T0),
+    ];
+    let (_d, conn) = small_snapshot(rows, "/h");
+    let mut ctx = synth_ctx("/h", "/h");
+    ctx.ignore = vec!["keepme".to_string()];
+    ctx.excluded = vec![
+        "/h/src/private".to_string(),
+        "/h/Library/Caches".to_string(),
+    ];
+    let hits = disky::contract::view_hits_with(&conn, &ctx).unwrap();
+    let paths: Vec<String> = disky::contract::categories_from_hits(&hits)
+        .into_iter()
+        .flat_map(|c| c.items.into_iter().map(|i| i.path))
+        .collect();
+    assert_eq!(paths, ["/h/src/a/node_modules"]);
+}
+
+#[test]
+fn contract_load_builds_view_from_snapshot() {
+    // REQ-DCLEAN-027 — one call yields the whole view: disk usage of the
+    // scan root's volume, snapshot age, default preferences, categories.
+    let rows: &[(&str, bool, i64, i64)] = &[
+        ("/h/src/a/node_modules", true, 0, T0),
+        ("/h/src/a/node_modules/x.js", false, 120, T0),
+    ];
+    let (dir, conn) = small_snapshot(rows, "/h");
+    drop(conn);
+    let path = dir.path().join("small.db");
+    let goal = disky::contract::DEFAULT_GOAL_BYTES;
+    let (view, hits) = disky::contract::load(
+        path.to_str().unwrap(),
+        goal,
+        disky::contract::Preferences::default(),
+    )
+    .unwrap();
+    assert_eq!(view.goal_bytes, 80_000_000_000);
+    assert!(view.disk.capacity_bytes > 0 && view.disk.free_bytes <= view.disk.capacity_bytes);
+    assert!(view.is_stale, "a 2023 snapshot is older than 24 h");
+    assert_eq!(
+        view.snapshot_taken_at.as_deref(),
+        Some("2023-11-14T22:13:20Z")
+    );
+    assert!(view.preferences.trash_by_default && view.preferences.safe_only);
+    assert_eq!(view.categories.len(), 1);
+    assert_eq!(view.categories[0].id, "node_modules");
+    assert_eq!(view.categories[0].bytes, 120);
+    assert_eq!(hits.len(), 1);
 }

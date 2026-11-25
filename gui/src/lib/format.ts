@@ -4,6 +4,9 @@
  * (trailing ".0" dropped, as the snapshot does), none at or above 100 GB.
  * Below 1 GB: whole MB, minimum "1 MB" for any non-zero value.
  */
+/** Class for numeric cells: tabular figures, so totals align (REQ-DCLEAN-028.A4). */
+export const NUMERIC_CLASS = "num";
+
 const GB = 1e9;
 const MB = 1e6;
 

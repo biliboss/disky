@@ -9,13 +9,15 @@
     "preview": "vite preview --port 4173 --strictPort",
     "test": "vitest run",
     "test:visual": "playwright test",
-    "lint:tokens": "node scripts/lint-tokens.mjs",
-    "tauri": "tauri"
+    "lint:tokens": "node scripts/lint-tokens.mjs && node scripts/lint-boundary.mjs",
+    "tauri": "tauri",
+    "lint:boundary": "node scripts/lint-boundary.mjs"
   },
   "dependencies": {
     "@fontsource/caprasimo": "5.3.0",
     "@fontsource/figtree": "5.3.0",
     "@solidjs/router": "0.15.4",
+    "@tauri-apps/api": "2.12.5",
     "lucide-solid": "0.527.0",
     "solid-js": "1.9.20"
   },

@@ -12,6 +12,11 @@ body {
   color: var(--color-text);
 }
 
+/* Numeric cells: tabular figures so sizes and totals align (REQ-DCLEAN-028.A4). */
+.num {
+  font-variant-numeric: var(--numeric-figures);
+}
+
 a {
   color: var(--color-accent-700);
 }

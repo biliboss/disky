@@ -113,7 +113,45 @@ pub fn run(root: &str, db_path: &str) -> Result<ScanOutcome> {
     run_cancellable(root, db_path, Arc::new(AtomicBool::new(false)))
 }
 
+/// Progress of a running scan, reported after each batch is written.
+#[derive(Debug, Clone, Default)]
+pub struct ScanTick {
+    /// Entries (files and dirs) recorded so far.
+    pub entries: u64,
+    /// Logical bytes seen so far.
+    pub bytes: u64,
+    /// Physical bytes seen so far (`st_blocks * 512`; logical off Unix).
+    pub physical_bytes: u64,
+    /// Last path of the batch just written.
+    pub current_path: String,
+}
+
+/// What a scan reports to its observer.
+#[derive(Debug, Clone)]
+pub enum ScanEvent<'a> {
+    Tick(&'a ScanTick),
+    /// The walk is over; indexes are being built.
+    Indexing,
+}
+
 pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Result<ScanOutcome> {
+    let mut progress = Progress::new();
+    let outcome = run_observed(root, db_path, cancel, &mut |ev| match ev {
+        ScanEvent::Tick(t) => progress.tick(t.entries, t.bytes),
+        ScanEvent::Indexing => progress.message("Building indexes..."),
+    })?;
+    progress.finish(outcome.entries, outcome.bytes, db_path);
+    Ok(outcome)
+}
+
+/// [`run_cancellable`] that reports progress to `observe` instead of the
+/// terminal. The desktop GUI uses this to stream scan progress.
+pub fn run_observed(
+    root: &str,
+    db_path: &str,
+    cancel: Arc<AtomicBool>,
+    observe: &mut dyn FnMut(ScanEvent<'_>),
+) -> Result<ScanOutcome> {
     let conn = db::open(db_path)?;
     db::create_schema(&conn)?;
 
@@ -125,15 +163,15 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
 
     let cpus = num_cpus::get();
 
-    let mut progress = Progress::new();
-
     let counter = Arc::new(AtomicU64::new(0));
     let bytes_seen = Arc::new(AtomicU64::new(0));
+    let physical_seen = Arc::new(AtomicU64::new(0));
     let (tx, rx) = bounded::<Vec<FileRecord>>(CHANNEL_CAP);
 
     let root_owned = root.to_string();
     let counter_clone = Arc::clone(&counter);
     let bytes_clone = Arc::clone(&bytes_seen);
+    let physical_clone = Arc::clone(&physical_seen);
     let cancel_clone = Arc::clone(&cancel);
 
     let walker = thread::Builder::new()
@@ -211,6 +249,10 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
                 if size > 0 {
                     bytes_clone.fetch_add(size as u64, Ordering::Relaxed);
                 }
+                let physical = physical_size.unwrap_or(size);
+                if physical > 0 {
+                    physical_clone.fetch_add(physical as u64, Ordering::Relaxed);
+                }
 
                 if batch.len() >= BATCH_SIZE {
                     let send = std::mem::replace(&mut batch, Vec::with_capacity(BATCH_SIZE));
@@ -226,18 +268,23 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
             Ok(())
         })?;
 
+    let mut tick = ScanTick::default();
     for batch in rx {
         db::append_batch(&conn, &batch)?;
-        let n = counter.load(Ordering::Relaxed);
-        let b = bytes_seen.load(Ordering::Relaxed);
-        progress.tick(n, b);
+        tick.entries = counter.load(Ordering::Relaxed);
+        tick.bytes = bytes_seen.load(Ordering::Relaxed);
+        tick.physical_bytes = physical_seen.load(Ordering::Relaxed);
+        if let Some(last) = batch.last() {
+            tick.current_path.clone_from(&last.path);
+        }
+        observe(ScanEvent::Tick(&tick));
     }
 
     walker.join().expect("walker thread panicked")?;
 
     let cancelled = cancel.load(Ordering::Relaxed);
 
-    progress.message("Building indexes...");
+    observe(ScanEvent::Indexing);
     db::build_indexes(&conn)?;
 
     let total = counter.load(Ordering::Relaxed);
@@ -247,7 +294,6 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
         .map(|d| d.as_secs() as i64)
         .ok();
     db::write_scan_meta(&conn, root, started_at, ended_at, !cancelled, total, bytes)?;
-    progress.finish(total, bytes, db_path);
     Ok(ScanOutcome {
         complete: !cancelled,
         entries: total,

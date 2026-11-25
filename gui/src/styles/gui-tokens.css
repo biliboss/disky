@@ -51,6 +51,9 @@
   --meter-marker-overhang: 3px;       /* marker extends above/below the bar */
   --meter-marker-nudge: 1px;          /* snapshot: left = calc(pos − 1px) */
 
+  /* ── Figures ────────────────────────────────────────────────── */
+  --numeric-figures: tabular-nums;    /* sizes align in columns (REQ-DCLEAN-028.A4) */
+
   /* ── Screens ────────────────────────────────────────────────── */
   --screen-py: 36px;                  /* secondary-screen top/bottom padding */
   --screen-gap: 6px;                  /* kicker ↔ title stack */

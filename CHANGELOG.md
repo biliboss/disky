@@ -19,9 +19,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entries are refused.
 - `cleanup` envelope gains `history_id`. `disky schema` documents
   `history`, `restore`, `HistoryEntry`, `HistoryItem` and `RestoreReport`.
+- GUI data contract (REQ-DCLEAN-027/028/029/001): `disky::contract` builds the
+  desktop GUI's `CleanupView` (disk usage, goal, snapshot age and staleness,
+  preferences, categories with items), `ScanProgress` and `CleanResult` in the
+  engine. `disky::disk::disk_usage` reports volume capacity and free space
+  via `statvfs`, as `df` does. `scan::run_observed` streams scan progress.
+- Every cleanup category carries a `label` and `description`, listed by
+  `disky schema`.
+- `CleanupHit` and `CategorySummary` gain `physical_bytes`; the `cleanup`
+  envelope gains `total_physical_bytes`.
+- Tauri commands `load_cleanup_view`, `scan`, `stop_scan` and `clean`.
+  `clean` acts only on the item paths of the reviewed view. The GUI parses
+  every payload strictly (`gui/src/lib/contract.ts`). `npm run lint:boundary`
+  rejects file walking, size summing, remove/rename calls and hard-coded
+  category ids in `gui/`.
 
 ### Changed
-- `cleanup::apply(hits, mode, log)` now returns `ApplyOutcome { handled, entry }`.
+- `cleanup::apply(hits, mode, log)` now returns `ApplyOutcome { handled, failed, entry }`.
+  `failed` lists skipped paths with a reason (`missing`, `already in Trash`,
+  `move to Trash failed`).
 - The agentic cleanup test runs under a temp `HOME`, so it no longer touches
   the real `~/.Trash`.
 

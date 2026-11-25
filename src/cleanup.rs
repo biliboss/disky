@@ -18,12 +18,14 @@
 
 use anyhow::Result;
 use duckdb::Connection;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// How confident the engine is that a hit can be removed without loss.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// Deserialisation is strict: any value other than `safe` / `review` is a
+/// contract violation and is rejected (REQ-DCLEAN-027.A2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Safety {
     /// Regenerable data (caches, scratch files). Removing it loses nothing.
@@ -81,7 +83,12 @@ pub enum Matcher {
 /// be more cautious than its sibling, e.g. `temp`).
 #[derive(Debug, Clone, Copy)]
 pub struct Category {
+    /// Stable slug: the `--target` name, and `id` in the GUI contract.
     pub name: &'static str,
+    /// Display name shown to the user (`name` in the GUI contract).
+    pub label: &'static str,
+    /// One-line explanation of what the category holds.
+    pub description: &'static str,
     pub safety: Safety,
     pub matcher: Matcher,
     /// Caveat copied onto every hit of this category.
@@ -141,54 +148,72 @@ pub const CATEGORIES: &[Category] = &[
     // ── Developer artefacts (folder-name rules, all `review`) ──────────
     Category {
         name: "node_modules",
+        label: "node_modules",
+        description: "Installed JavaScript packages; npm install restores them",
         safety: Safety::Review,
         matcher: Matcher::Basename(&["node_modules"]),
         note: None,
     },
     Category {
         name: "target",
+        label: "Cargo target dirs",
+        description: "Rust build output; cargo build recreates it",
         safety: Safety::Review,
         matcher: Matcher::Basename(&["target"]),
         note: None,
     },
     Category {
         name: "pycache",
+        label: "Python bytecode",
+        description: "__pycache__ folders; Python regenerates them on import",
         safety: Safety::Review,
         matcher: Matcher::Basename(&["__pycache__"]),
         note: None,
     },
     Category {
         name: "next",
+        label: "Next.js build caches",
+        description: ".next folders; next build recreates them",
         safety: Safety::Review,
         matcher: Matcher::Basename(&[".next"]),
         note: None,
     },
     Category {
         name: "dist",
+        label: "dist folders",
+        description: "Build output; check it is not the only copy of a release",
         safety: Safety::Review,
         matcher: Matcher::Basename(&["dist"]),
         note: None,
     },
     Category {
         name: "build",
+        label: "build folders",
+        description: "Build output; check it is not hand-written source",
         safety: Safety::Review,
         matcher: Matcher::Basename(&["build"]),
         note: None,
     },
     Category {
         name: "venv",
+        label: "Python virtualenvs",
+        description: ".venv / venv folders; reinstall from requirements to restore",
         safety: Safety::Review,
         matcher: Matcher::Basename(&[".venv", "venv"]),
         note: None,
     },
     Category {
         name: "gradle",
+        label: "Gradle caches",
+        description: ".gradle folders; Gradle re-downloads and rebuilds them",
         safety: Safety::Review,
         matcher: Matcher::Basename(&[".gradle"]),
         note: None,
     },
     Category {
         name: "pytest",
+        label: "pytest caches",
+        description: ".pytest_cache folders; pytest recreates them",
         safety: Safety::Review,
         matcher: Matcher::Basename(&[".pytest_cache"]),
         note: None,
@@ -196,6 +221,8 @@ pub const CATEGORIES: &[Category] = &[
     // ── System-level categories (location rules) ───────────────────────
     Category {
         name: "system_caches",
+        label: "System caches",
+        description: "Rebuilt automatically when needed",
         safety: Safety::Safe,
         matcher: Matcher::Location {
             locations: &[Location {
@@ -211,6 +238,8 @@ pub const CATEGORIES: &[Category] = &[
     },
     Category {
         name: "app_caches",
+        label: "App caches",
+        description: "Rebuilt by each app the next time it runs",
         safety: Safety::Safe,
         matcher: Matcher::Location {
             locations: &[Location {
@@ -232,6 +261,8 @@ pub const CATEGORIES: &[Category] = &[
     },
     Category {
         name: "temp",
+        label: "Temporary files",
+        description: "Left behind by installers and apps",
         safety: Safety::Review,
         matcher: Matcher::Location {
             locations: &[
@@ -253,6 +284,8 @@ pub const CATEGORIES: &[Category] = &[
     },
     Category {
         name: "logs",
+        label: "Logs & crash reports",
+        description: "App and system logs; kept only for troubleshooting",
         safety: Safety::Review,
         matcher: Matcher::Location {
             locations: &[
@@ -272,6 +305,8 @@ pub const CATEGORIES: &[Category] = &[
     },
     Category {
         name: TRASH_CATEGORY,
+        label: "Trash",
+        description: "Items already in the Trash; cleaning empties them permanently",
         safety: Safety::Safe,
         matcher: Matcher::Location {
             locations: &[Location {
@@ -285,6 +320,8 @@ pub const CATEGORIES: &[Category] = &[
     },
     Category {
         name: "app_leftovers",
+        label: "App leftovers",
+        description: "Support files of apps that are no longer installed",
         safety: Safety::Review,
         matcher: Matcher::Location {
             locations: &[
@@ -306,6 +343,8 @@ pub const CATEGORIES: &[Category] = &[
     },
     Category {
         name: "old_downloads",
+        label: "Old downloads",
+        description: "Downloads untouched for more than 90 days",
         safety: Safety::Review,
         matcher: Matcher::Location {
             locations: &[Location {
@@ -388,7 +427,11 @@ pub struct CleanupHit {
     pub category: String,
     pub safety: Safety,
     pub path: String,
+    /// Logical bytes (sum of `st_size`).
     pub bytes: u64,
+    /// Physical bytes on disk (sum of `st_blocks * 512`, falling back to the
+    /// logical size where a snapshot lacks it). What removing the hit frees.
+    pub physical_bytes: u64,
     pub files: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
@@ -401,6 +444,7 @@ pub struct CategorySummary {
     pub safety: Safety,
     pub paths: u64,
     pub bytes: u64,
+    pub physical_bytes: u64,
     pub files: u64,
 }
 
@@ -417,6 +461,7 @@ pub fn summarise(hits: &[CleanupHit]) -> Vec<CategorySummary> {
                 safety: h.safety,
                 paths: 0,
                 bytes: 0,
+                physical_bytes: 0,
                 files: 0,
             });
         if h.safety == Safety::Review {
@@ -424,6 +469,7 @@ pub fn summarise(hits: &[CleanupHit]) -> Vec<CategorySummary> {
         }
         entry.paths += 1;
         entry.bytes += h.bytes;
+        entry.physical_bytes += h.physical_bytes;
         entry.files += h.files;
     }
     let mut out: Vec<CategorySummary> = acc.into_values().collect();
@@ -959,7 +1005,8 @@ pub fn scan_with(
         "SELECT t.idx,
                 COALESCE(SUM(f.size), 0) AS bytes,
                 COUNT(f.path)             AS files,
-                MAX(f.mtime)              AS newest
+                MAX(f.mtime)              AS newest,
+                COALESCE(SUM(COALESCE(f.physical_size, f.size)), 0) AS physical
          FROM _cleanup_targets t
          LEFT JOIN files f
            ON f.is_dir = false
@@ -973,11 +1020,12 @@ pub fn scan_with(
             row.get::<_, i64>(1)?,
             row.get::<_, i64>(2)?,
             row.get::<_, Option<i64>>(3)?,
+            row.get::<_, i64>(4)?,
         ))
     })?;
 
     let mut out: Vec<CleanupHit> = Vec::with_capacity(roots.len());
-    for (idx, bytes, files, newest) in rows.flatten() {
+    for (idx, bytes, files, newest, physical) in rows.flatten() {
         let Some(r) = roots.get(idx as usize) else {
             continue;
         };
@@ -1001,6 +1049,7 @@ pub fn scan_with(
             safety: r.safety,
             path: r.path.clone(),
             bytes: bytes as u64,
+            physical_bytes: physical as u64,
             files: files as u64,
             note: r.category.note.map(String::from),
         });
@@ -1042,11 +1091,28 @@ pub enum ApplyMode {
     Trash,
 }
 
-/// What [`apply`] did: the paths it handled and the history entry it
-/// recorded (REQ-DCLEAN-034). `entry` is `None` when nothing was handled.
+/// Reason recorded when a path that no longer exists is skipped
+/// (REQ-DCLEAN-029.A1).
+pub const FAILURE_MISSING: &str = "missing";
+/// Reason recorded when a Trash item is refused in Trash mode.
+pub const FAILURE_IN_TRASH: &str = "already in Trash";
+/// Reason recorded when moving an existing path to the Trash failed.
+pub const FAILURE_TRASH_MOVE: &str = "move to Trash failed";
+
+/// One path [`apply`] did not handle, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Failure {
+    pub path: String,
+    pub reason: String,
+}
+
+/// What [`apply`] did: the paths it handled, the paths it skipped and the
+/// history entry it recorded (REQ-DCLEAN-034). `entry` is `None` when
+/// nothing was handled.
 #[derive(Debug, Clone)]
 pub struct ApplyOutcome {
     pub handled: Vec<String>,
+    pub failed: Vec<Failure>,
     pub entry: Option<crate::history::Entry>,
 }
 
@@ -1082,6 +1148,13 @@ pub(crate) fn apply_with(
     use crate::history::{Entry, Item, ItemStatus, Mode};
 
     let mut handled = Vec::new();
+    let mut failed: Vec<Failure> = Vec::new();
+    let fail = |failed: &mut Vec<Failure>, path: &str, reason: &str| {
+        failed.push(Failure {
+            path: path.to_string(),
+            reason: reason.to_string(),
+        })
+    };
     let mut items = Vec::new();
     let mut categories: Vec<String> = Vec::new();
     for h in hits {
@@ -1096,7 +1169,10 @@ pub(crate) fn apply_with(
                 };
                 match res {
                     Ok(()) => None,
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                        fail(&mut failed, &h.path, FAILURE_MISSING);
+                        continue;
+                    }
                     Err(e) => return Err(e.into()),
                 }
             }
@@ -1110,13 +1186,21 @@ pub(crate) fn apply_with(
                          delete it permanently",
                         h.path
                     );
+                    fail(&mut failed, &h.path, FAILURE_IN_TRASH);
+                    continue;
+                }
+                if Path::new(&h.path).symlink_metadata().is_err() {
+                    fail(&mut failed, &h.path, FAILURE_MISSING);
                     continue;
                 }
                 match move_to_trash(&h.path, trash_root) {
                     Ok(dest) => Some(dest.to_string_lossy().into_owned()),
                     Err(_) => {
-                        if Path::new(&h.path).exists() {
+                        if Path::new(&h.path).symlink_metadata().is_ok() {
                             eprintln!("cleanup: skip {} (move-to-trash failed)", h.path);
+                            fail(&mut failed, &h.path, FAILURE_TRASH_MOVE);
+                        } else {
+                            fail(&mut failed, &h.path, FAILURE_MISSING);
                         }
                         continue;
                     }
@@ -1158,7 +1242,11 @@ pub(crate) fn apply_with(
         }
         _ => None,
     };
-    Ok(ApplyOutcome { handled, entry })
+    Ok(ApplyOutcome {
+        handled,
+        failed,
+        entry,
+    })
 }
 
 fn move_to_trash(path: &str, trash: &Path) -> Result<PathBuf> {
@@ -1192,6 +1280,7 @@ mod tests {
             safety: Safety::Review,
             path: format!("/tmp/{}-{}", category, bytes),
             bytes,
+            physical_bytes: bytes,
             files,
             note: None,
         }
