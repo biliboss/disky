@@ -1,0 +1,205 @@
+import { createMemo, createResource, createSignal, For, Show } from "solid-js";
+import { useNavigate } from "@solidjs/router";
+import ArrowLeft from "lucide-solid/icons/arrow-left";
+import { loadMap, revealInFinder } from "../lib/engine";
+import { parseEngineError, type EngineError, type MapChild } from "../lib/contract";
+import { useDelayedBusy } from "../lib/busy";
+import { formatBytes, NUMERIC_CLASS } from "../lib/format";
+import { layout, tileColor } from "./spaceMap/treemap";
+import {
+  EMPTY_FOLDER,
+  HINT,
+  NO_SCANS,
+  NO_SCANS_NOTE,
+  OPEN_FOLDER,
+  REVEAL,
+  SELECTED,
+  SHARE,
+  SIZE,
+  START_SCAN,
+  UP,
+  crumbLine,
+  mapTitle,
+  shareOfDisk,
+  tileLabel,
+} from "./spaceMap/mapCopy";
+import "./spaceMap/spaceMap.css";
+
+/**
+ * The Space map screen (REQ-DSCR-012): a treemap of one folder's immediate
+ * children, from the engine's `load_map` (`disky map`). The engine supplies
+ * every size and the volume capacity; the screen lays the sizes out with the
+ * snapshot's split algorithm and lets the user select and drill in.
+ *
+ * Keyboard (A5): each tile is a button named "<name>, <size>"; Enter or
+ * Space selects it, and Enter on the selected tile opens it.
+ *
+ * @implements REQ-DSCR-012
+ */
+export function SpaceMap() {
+  const navigate = useNavigate();
+  /** Folders opened below the root, outermost first; empty at the root. */
+  const [trail, setTrail] = createSignal<string[]>([]);
+  const [pick, setPick] = createSignal(0);
+  const [error, setError] = createSignal<EngineError | null>(null);
+  const [view] = createResource(
+    () => ({ path: trail().at(-1) ?? null }),
+    (s) => loadMap(s.path),
+  );
+  /** The last loaded map; never throws (an errored load reads as none). */
+  const latest = () => (view.state === "errored" ? undefined : view.latest);
+  const busy = useDelayedBusy(() => view.loading);
+  const loadError = () => (view.state === "errored" ? parseEngineError(view.error) : null);
+
+  /** Tiles: children with bytes, laid out in the engine's order (largest first). */
+  const tiles = createMemo(() => {
+    const v = latest();
+    if (!v) return [];
+    return layout(v.records.filter((c) => c.bytes > 0).map((c) => ({ ...c, weight: c.bytes })));
+  });
+  const selected = (): MapChild | undefined => tiles()[Math.min(pick(), tiles().length - 1)];
+
+  function open(c: MapChild | undefined) {
+    if (!c?.has_children) return;
+    setError(null);
+    setPick(0);
+    setTrail([...trail(), c.path]);
+  }
+
+  function up() {
+    setError(null);
+    setPick(0);
+    setTrail(trail().slice(0, -1));
+  }
+
+  async function reveal(path: string) {
+    setError(null);
+    try {
+      await revealInFinder(path);
+    } catch (e) {
+      setError(parseEngineError(e));
+    }
+  }
+
+  function onTileKey(e: KeyboardEvent, i: number, c: MapChild) {
+    if (e.key === "Enter" && i === pick()) {
+      e.preventDefault();
+      open(c);
+    }
+  }
+
+  const noSnapshot = () => view.state === "ready" && view() === null;
+
+  return (
+    <Show
+      when={!noSnapshot()}
+      fallback={
+        <section class="screen" data-screen-label="Space map" aria-labelledby="map-title" data-testid="space-map">
+          <h1 class="screen-title" id="map-title">
+            {NO_SCANS}
+          </h1>
+          <p class="screen-note">{NO_SCANS_NOTE}</p>
+          <div>
+            <button type="button" class="btn btn-primary" onClick={() => navigate("/")}>
+              {START_SCAN}
+            </button>
+          </div>
+        </section>
+      }
+    >
+      <section class="map" data-screen-label="Space map" aria-labelledby="map-title" data-testid="space-map">
+        <div class="map-head">
+          <Show when={trail().length > 0}>
+            <button type="button" class="btn btn-icon btn-secondary" aria-label={UP} onClick={up}>
+              <ArrowLeft class="map-up-glyph" aria-hidden="true" />
+            </button>
+          </Show>
+          <div class="map-heading">
+            <Show when={latest()}>{(v) => <div class="map-crumb">{crumbLine(v())}</div>}</Show>
+            <h1 class="map-title" id="map-title">
+              <Show when={latest()} fallback="Space map">
+                {(v) => <>{mapTitle(v())}</>}
+              </Show>
+            </h1>
+          </div>
+        </div>
+        <div class="map-tiles" role="group" aria-label="Treemap" aria-busy={view.loading ? "true" : "false"}>
+          <Show when={busy()}>
+            <div class="busy" role="status" aria-busy="true" data-testid="busy">
+              <span class="busy-spinner" aria-hidden="true" />
+              Loading…
+            </div>
+          </Show>
+          <Show when={latest() && tiles().length === 0 && !view.loading}>
+            <p class="map-empty">{EMPTY_FOLDER}</p>
+          </Show>
+          <For each={tiles()}>
+            {(t, i) => (
+              <button
+                type="button"
+                class="map-tile"
+                aria-label={tileLabel(t.name, t.bytes)}
+                aria-pressed={i() === pick() ? "true" : "false"}
+                style={{
+                  left: `calc(${t.x}% + var(--map-tile-inset))`,
+                  top: `calc(${t.y}% + var(--map-tile-inset))`,
+                  width: `calc(${t.w}% - var(--map-tile-gutter))`,
+                  height: `calc(${t.h}% - var(--map-tile-gutter))`,
+                  "background-color": tileColor(i()),
+                }}
+                onClick={() => setPick(i())}
+                onDblClick={() => open(t)}
+                onKeyDown={(e) => onTileKey(e, i(), t)}
+              >
+                <span class="map-tile-name">{t.name}</span>
+                {/* A space between the spans so the visible text ("Users 212 GB") sits
+                    inside the accessible name; flex layout never renders it. */}
+                {" "}
+                <span class={`map-tile-size ${NUMERIC_CLASS}`}>{formatBytes(t.bytes)}</span>
+              </button>
+            )}
+          </For>
+        </div>
+        <div class="map-side">
+          <Show when={loadError() ?? error()}>
+            {(e) => (
+              <p class="map-error" role="alert">
+                {e().detail}
+              </p>
+            )}
+          </Show>
+          <Show when={selected()}>
+            {(s) => (
+              <div class="card map-card" data-testid="map-selected">
+                <span class="card-kicker map-card-kicker">{SELECTED}</span>
+                <span class="card-title map-card-title">{s().name}</span>
+                <span class="map-card-path">{s().path}</span>
+                <div class="map-card-row map-card-row-first">
+                  <span>{SIZE}</span>
+                  <span class={`map-card-value ${NUMERIC_CLASS}`}>{formatBytes(s().bytes)}</span>
+                </div>
+                <div class="map-card-row">
+                  <span>{SHARE}</span>
+                  <span class={`map-card-value ${NUMERIC_CLASS}`}>
+                    {shareOfDisk(s().bytes, latest()?.capacity_bytes ?? 0)}
+                  </span>
+                </div>
+                <div class="map-card-actions">
+                  <Show when={s().has_children}>
+                    <button type="button" class="btn btn-primary" onClick={() => open(s())}>
+                      {OPEN_FOLDER}
+                    </button>
+                  </Show>
+                  <button type="button" class="btn btn-secondary" onClick={() => reveal(s().path)}>
+                    {REVEAL}
+                  </button>
+                </div>
+              </div>
+            )}
+          </Show>
+          <span class="map-hint">{HINT}</span>
+        </div>
+      </section>
+    </Show>
+  );
+}

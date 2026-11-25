@@ -262,4 +262,51 @@
   --chip-remove-glyph: 12px;
   --chip-remove-hover: var(--overlay-hover);
   --chip-remove-active: var(--overlay-active);
+
+  /* ── History (REQ-DSCR-015; snapshot History markup) ────────── */
+  --history-max-w: 860px;             /* snapshot: max-width:860px */
+  --history-gap: 12px;                /* rows, and header ↔ first row */
+  --history-head-gap: var(--screen-gap); /* kicker ↔ title, 6px */
+  --history-head-mb: 6px;
+  --history-row-gap: 16px;
+  --history-row-py: 14px;
+  --history-row-px: 20px;
+  --history-icon: var(--result-icon); /* 38px disc */
+  --history-glyph: var(--nav-icon);   /* 18px */
+  --history-text-gap: 2px;
+  --fw-history-name: 600;
+  --fw-history-size: 600;
+
+  /* ── Space map (REQ-DSCR-012; snapshot Space map markup) ────── */
+  --map-pt: var(--screen-py);         /* 36px */
+  --map-pr: 32px;
+  --map-pb: 32px;
+  --map-pl: var(--layout-screen-px);  /* 56px */
+  --map-side-w: 260px;
+  --map-row-gap: 20px;
+  --map-col-gap: 24px;
+  --map-head-gap: 14px;
+  --map-title-gap: 2px;
+  --fs-map-title: 34px;
+  --map-tile-inset: 3px;              /* half the gutter between tiles */
+  --map-tile-gutter: 6px;
+  --map-tile-pad: 14px;
+  --map-tile-gap: 2px;
+  --fs-map-tile-name: var(--fs-nav);  /* 14px */
+  --fw-map-tile-name: 600;
+  --fs-map-tile-size: var(--fs-small); /* 13px */
+  --map-tile-ring: inset 0 0 0 3px var(--color-accent-700); /* selected tile */
+  --map-tile-hover: var(--overlay-hover);
+  --map-tile-active: var(--overlay-active);
+  --map-side-gap: 12px;
+  --map-card-pad: 20px;
+  --map-card-gap: 10px;
+  --fs-map-card-title: 22px;
+  --fs-map-card-row: var(--fs-nav);   /* 14px */
+  --map-card-rows-mt: 6px;
+  --fw-map-card-value: 600;
+  --map-card-actions-gap: 6px;
+  --map-card-actions-mt: 8px;
+  --fs-map-hint: var(--fs-xs);        /* 12px */
+  --map-hint-px: 6px;
 }

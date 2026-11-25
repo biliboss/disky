@@ -1,0 +1,112 @@
+/* History (REQ-DSCR-015) — the snapshot's History markup, in tokens. */
+
+.history {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--screen-py) var(--layout-screen-px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--history-gap);
+  max-width: var(--history-max-w);
+}
+
+.history-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--history-head-gap);
+  margin-bottom: var(--history-head-mb);
+}
+
+.history-kicker {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+.history-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-screen-title);
+  margin: 0;
+}
+
+.history-error {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--color-danger);
+}
+
+.history-notices {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-small);
+  color: var(--color-danger);
+}
+
+.history .busy {
+  padding: 0;
+}
+
+.history-empty {
+  margin: 0;
+  color: var(--color-neutral-700);
+}
+
+.history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--history-gap);
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: var(--history-row-gap);
+  padding: var(--history-row-py) var(--history-row-px);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.history-icon {
+  width: var(--history-icon);
+  height: var(--history-icon);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  display: grid;
+  place-items: center;
+  color: var(--color-accent-700);
+  flex: none;
+}
+
+.history-glyph {
+  width: var(--history-glyph);
+  height: var(--history-glyph);
+  stroke-width: var(--icon-stroke);
+}
+
+.history-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--history-text-gap);
+}
+
+.history-name {
+  font-weight: var(--fw-history-name);
+}
+
+.history-meta {
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+.history-size {
+  font-weight: var(--fw-history-size);
+  font-variant-numeric: var(--numeric-figures);
+}

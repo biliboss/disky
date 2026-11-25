@@ -13,6 +13,11 @@
 //! * [`CleanProgress`] — one event per cleaned item, naming the category in
 //!   progress (REQ-DCLEAN-008).
 //! * [`RestoreResult`] — what an Undo restored (REQ-DCLEAN-009.A4, A7).
+//! * [`HistoryView`] — the History screen's rows, each entry with its detail
+//!   and state, and the total cleared (REQ-DSCR-015). `disky history` prints
+//!   the same rows.
+//! * [`MapView`] — a folder's immediate children for the Space map
+//!   (REQ-DSCR-003), the same as `disky map`.
 //! * [`EngineError`] — a failed command, typed by disky's exit-code slug so
 //!   the GUI never matches on message text (REQ-DCLEAN-018).
 //!
@@ -31,6 +36,8 @@
 //! @implements REQ-DCLEAN-029
 //! @implements REQ-DSCR-001
 //! @implements REQ-DSCR-002
+//! @implements REQ-DSCR-003
+//! @implements REQ-DSCR-015
 
 use anyhow::Result;
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -383,6 +390,20 @@ pub fn load(snapshot_path: &str, prefs: &Preferences) -> Result<(CleanupView, Ve
     Ok((view, hits))
 }
 
+pub use crate::map::{MapChild, MapView};
+
+/// The Space map of `path` (default: the scan root) in the snapshot at
+/// `snapshot_path` (REQ-DSCR-003): immediate children by physical bytes,
+/// excluded folders left out (REQ-DSCR-002.A1), and the capacity of the
+/// scan root's volume for share of disk. CLI: `disky map [<path>]`.
+pub fn map_view(snapshot_path: &str, path: Option<&str>, prefs: &Preferences) -> Result<MapView> {
+    let conn = crate::db::open(snapshot_path)?;
+    let ctx = cleanup::ScanContext::from_snapshot(&conn).with_prefs(prefs);
+    let root = ctx.scan_root.clone().unwrap_or_else(|| "/".to_string());
+    let capacity = disk_near(Path::new(&root))?.capacity_bytes;
+    crate::map::map(&conn, path, &ctx.excluded, capacity)
+}
+
 /// Progress event for a running scan. The walk's total is unknown up front,
 /// so `fraction` is physical bytes seen over the volume's used bytes, held
 /// below 1 until [`scan_finished`]. Categories are classified after the
@@ -584,6 +605,114 @@ pub fn restore(log: &Path, id: &str) -> Result<RestoreResult> {
         .map_or("/", String::as_str);
     let disk = disk_near(Path::new(near))?;
     Ok(RestoreResult { report, disk })
+}
+
+/// Where a history entry stands, as the History screen tags it
+/// (REQ-DSCR-015.A3, A4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HistoryState {
+    /// A Trash clean younger than [`history::RESTORE_WINDOW_DAYS`] with items
+    /// not yet back: "Restore". A partial restore (some items no longer in
+    /// the Trash) stays here, since `disky restore` retries the rest.
+    Restorable,
+    /// Every item is back (`restored_at` set): the "Restored" tag.
+    Restored,
+    /// A Trash clean [`history::RESTORE_WINDOW_DAYS`] or more old, or of
+    /// unknown age: the "Emptied" tag.
+    Emptied,
+    /// A permanent delete: the "Deleted" tag, never restorable (gap-fill).
+    Deleted,
+}
+
+/// One History row: the log entry plus what the screen shows for it. The
+/// CLI's `disky history` records are these same rows (one derivation).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HistoryRow {
+    #[serde(flatten)]
+    pub entry: history::Entry,
+    /// Category names, or for "Large files" and "Duplicates" entries the
+    /// file names ("<n> files" past three) (REQ-DSCR-015.A2).
+    pub detail: String,
+    pub state: HistoryState,
+}
+
+/// Everything the History screen renders (REQ-DSCR-015).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HistoryView {
+    /// Physical bytes freed over every entry: "<total> cleared".
+    pub total_bytes: u64,
+    /// Newest first.
+    pub rows: Vec<HistoryRow>,
+}
+
+/// Most file names a row's detail lists before it reads "<n> files".
+pub const HISTORY_DETAIL_MAX_FILES: usize = 3;
+
+/// The detail line of an entry (REQ-DSCR-015.A2). Category ids become their
+/// display names from [`CATEGORIES`]; an unknown id is shown as given.
+pub fn history_detail(e: &history::Entry) -> String {
+    if e.title == history::TITLE_LARGE_FILES || e.title == history::TITLE_DUPLICATES {
+        let n = e.items.len();
+        if n > HISTORY_DETAIL_MAX_FILES {
+            return format!("{n} files");
+        }
+        return e
+            .items
+            .iter()
+            .map(|i| basename(&i.original_path))
+            .collect::<Vec<_>>()
+            .join(", ");
+    }
+    e.categories
+        .iter()
+        .map(|id| cleanup::category(id).map_or(id.as_str(), |c| c.label))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Where an entry stands at `now` (REQ-DSCR-015.A3, A4).
+pub fn history_state(e: &history::Entry, now: DateTime<Utc>) -> HistoryState {
+    if e.mode == history::Mode::Delete {
+        return HistoryState::Deleted;
+    }
+    if e.restored_at.is_some() {
+        return HistoryState::Restored;
+    }
+    match DateTime::parse_from_rfc3339(&e.ts) {
+        Ok(ts) if (now - ts.with_timezone(&Utc)).num_days() < history::RESTORE_WINDOW_DAYS => {
+            HistoryState::Restorable
+        }
+        _ => HistoryState::Emptied,
+    }
+}
+
+/// Build the History view from `entries` (any order) at `now`.
+pub fn history_view_of(mut entries: Vec<history::Entry>, now: DateTime<Utc>) -> HistoryView {
+    entries.sort_by(|a, b| b.ts.cmp(&a.ts).then_with(|| b.id.cmp(&a.id)));
+    HistoryView {
+        total_bytes: entries.iter().map(|e| e.bytes).sum(),
+        rows: entries
+            .into_iter()
+            .map(|entry| HistoryRow {
+                detail: history_detail(&entry),
+                state: history_state(&entry, now),
+                entry,
+            })
+            .collect(),
+    }
+}
+
+/// The History screen's view of the log at `log`, newest first. CLI:
+/// `disky history --format json` (same rows, `total_bytes` on the envelope).
+pub fn history_view(log: &Path, now: DateTime<Utc>) -> Result<HistoryView> {
+    Ok(history_view_of(history::list(log)?, now))
+}
+
+/// [`history_view`] at the current time — what `disky history` and the
+/// GUI's `list_history` call.
+pub fn history_view_now(log: &Path) -> Result<HistoryView> {
+    history_view(log, Utc::now())
 }
 
 /// A failed engine call as the GUI receives it: disky's RFC 9457 fields,
@@ -1132,6 +1261,163 @@ mod tests {
         assert_eq!(other.code, "generic");
         let json = serde_json::to_value(&held).unwrap();
         assert_eq!(json["code"], "lock-held");
+    }
+
+    fn entry(
+        title: &str,
+        mode: history::Mode,
+        ts: &str,
+        cats: &[&str],
+        files: &[&str],
+    ) -> history::Entry {
+        let items = files
+            .iter()
+            .map(|f| history::Item {
+                original_path: format!("/Users/me/Downloads/{f}"),
+                trash_path: Some(format!("/Users/me/.Trash/{f}")),
+                bytes: 10,
+                status: history::ItemStatus::InTrash,
+            })
+            .collect();
+        let mut e = history::Entry::new(
+            title,
+            mode,
+            cats.iter().map(|c| c.to_string()).collect(),
+            items,
+        );
+        e.ts = ts.to_string();
+        e.bytes = 100;
+        e
+    }
+
+    fn now() -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339("2026-11-24T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
+    fn days_ago(d: i64) -> String {
+        (now() - chrono::Duration::days(d)).to_rfc3339_opts(SecondsFormat::Millis, true)
+    }
+
+    #[test]
+    fn history_rows_newest_first_with_total() {
+        let tmp = tempfile::tempdir().unwrap();
+        let log = tmp.path().join("history.json");
+        assert_eq!(
+            history_view(&log, now()).unwrap(),
+            HistoryView {
+                total_bytes: 0,
+                rows: vec![]
+            }
+        );
+        let old = entry(
+            "Smart Clean",
+            history::Mode::Trash,
+            &days_ago(49),
+            &["logs"],
+            &[],
+        );
+        let new = entry(
+            "Smart Clean",
+            history::Mode::Trash,
+            &days_ago(7),
+            &["trash"],
+            &[],
+        );
+        history::append(&log, old.clone()).unwrap();
+        history::append(&log, new.clone()).unwrap();
+        let v = history_view(&log, now()).unwrap();
+        assert_eq!(v.total_bytes, 200);
+        let ids: Vec<&str> = v.rows.iter().map(|r| r.entry.id.as_str()).collect();
+        assert_eq!(ids, [new.id.as_str(), old.id.as_str()]);
+        // The CLI record is the entry plus the derived fields.
+        let j = serde_json::to_value(&v.rows[0]).unwrap();
+        assert_eq!(j["title"], "Smart Clean");
+        assert_eq!(j["state"], "restorable");
+        assert_eq!(j["detail"], cleanup::category("trash").unwrap().label);
+        assert!(j["items"].is_array());
+    }
+
+    #[test]
+    fn detail_uses_category_names() {
+        let e = entry(
+            "Smart Clean",
+            history::Mode::Trash,
+            &days_ago(1),
+            &["app_caches", "temp", "made_up"],
+            &["x"],
+        );
+        let want = format!(
+            "{}, {}, made_up",
+            cleanup::category("app_caches").unwrap().label,
+            cleanup::category("temp").unwrap().label
+        );
+        assert_eq!(history_detail(&e), want);
+    }
+
+    #[test]
+    fn detail_lists_file_names_up_to_three() {
+        let three = entry(
+            history::TITLE_LARGE_FILES,
+            history::Mode::Trash,
+            &days_ago(1),
+            &[],
+            &["a.iso", "b.dmg", "c.zip"],
+        );
+        assert_eq!(history_detail(&three), "a.iso, b.dmg, c.zip");
+        let four = entry(
+            history::TITLE_DUPLICATES,
+            history::Mode::Trash,
+            &days_ago(1),
+            &[],
+            &["a", "b", "c", "d"],
+        );
+        assert_eq!(history_detail(&four), "4 files");
+    }
+
+    #[test]
+    fn state_deleted_for_delete_mode() {
+        let e = entry(
+            "Cleanup",
+            history::Mode::Delete,
+            &days_ago(1),
+            &["target"],
+            &[],
+        );
+        assert_eq!(history_state(&e, now()), HistoryState::Deleted);
+    }
+
+    #[test]
+    fn state_emptied_at_thirty_days() {
+        let at = |d| {
+            history_state(
+                &entry("Smart Clean", history::Mode::Trash, &days_ago(d), &[], &[]),
+                now(),
+            )
+        };
+        assert_eq!(at(0), HistoryState::Restorable);
+        assert_eq!(at(29), HistoryState::Restorable);
+        assert_eq!(at(30), HistoryState::Emptied);
+        let mut bad = entry("Smart Clean", history::Mode::Trash, "garbage", &[], &[]);
+        assert_eq!(history_state(&bad, now()), HistoryState::Emptied);
+        bad.ts = days_ago(29) + "x";
+        assert_eq!(history_state(&bad, now()), HistoryState::Emptied);
+    }
+
+    #[test]
+    fn state_restored_when_restored_at() {
+        let mut e = entry(
+            "Smart Clean",
+            history::Mode::Trash,
+            &days_ago(2),
+            &[],
+            &["a"],
+        );
+        e.items[0].status = history::ItemStatus::Missing; // partial: still restorable
+        assert_eq!(history_state(&e, now()), HistoryState::Restorable);
+        e.restored_at = Some(days_ago(1));
+        assert_eq!(history_state(&e, now()), HistoryState::Restored);
     }
 
     #[test]

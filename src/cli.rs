@@ -289,7 +289,19 @@ pub enum Command {
         apply: bool,
     },
 
-    /// List the clean-history log (every applied `cleanup`), newest first.
+    /// A folder's immediate children by physical size, largest first — the
+    /// desktop GUI's Space map. Default folder: the snapshot's scan root.
+    /// Excluded folders (`disky prefs`) are left out. A folder that is not in
+    /// the snapshot exits 4.
+    Map {
+        /// Absolute folder path (`~/` is expanded). Default: the scan root.
+        path: Option<String>,
+        #[arg(short, long, default_value = "@latest", help = SNAPSHOT_HELP)]
+        snapshot: String,
+    },
+
+    /// List the clean-history log (every applied `cleanup`), newest first,
+    /// with each entry's detail and state and the total cleared.
     History {
         #[arg(short, long, default_value_t = 50)]
         limit: usize,

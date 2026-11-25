@@ -7,6 +7,8 @@ import {
   parseCleanResult,
   parseCleanupView,
   parseEngineError,
+  parseHistoryView,
+  parseMapView,
   parseRestoreResult,
   parseScanProgress,
 } from "./contract";
@@ -248,4 +250,44 @@ describe("GUI data contract (REQ-DCLEAN-027, REQ-DCLEAN-029)", () => {
   it("a clean result without its post-clean disk is rejected (REQ-DCLEAN-002.A4)", cleanResultWithoutDiskIsRejected);
   it("category and catalogue icons are required strings (REQ-DCLEAN-005)", categoryAndCatalogueIconsAreRequired);
   it("the large-files count is a whole number from the engine (REQ-DCLEAN-003.A4)", largeFilesCountMustBeAWholeCount);
+});
+
+describe("history and map views (REQ-DSCR-015, REQ-DSCR-003)", () => {
+  const row = {
+    id: "e1",
+    title: "Smart Clean",
+    ts: "2026-11-17T10:00:00.000Z",
+    mode: "trash", // lint-boundary-allow: clean mode, not a category
+    categories: ["x"],
+    bytes: 6_800_000_000,
+    items: [],
+    restored_at: null,
+    detail: "App caches, Temporary files, Trash",
+    state: "restorable",
+  };
+
+  it("parsesHistoryRowsWithDerivedFields", () => {
+    const v = parseHistoryView({ total_bytes: 6_800_000_000, rows: [row] });
+    expect(v.total_bytes).toBe(6_800_000_000);
+    expect(v.rows[0]).toMatchObject({ id: "e1", detail: row.detail, state: "restorable" });
+  });
+
+  it("rejectsAnUnknownHistoryState", () => {
+    expect(() => parseHistoryView({ total_bytes: 0, rows: [{ ...row, state: "maybe" }] })).toThrow(ContractError);
+    expect(() => parseHistoryView({ total_bytes: -1, rows: [] })).toThrow(ContractError);
+  });
+
+  it("parsesAMapViewAndRejectsBadBytes", () => {
+    const map = {
+      path: "/",
+      name: "/",
+      root: "/",
+      total_bytes: 3,
+      capacity_bytes: 512e9,
+      records: [{ name: "Users", path: "/Users", bytes: 3, has_children: true }],
+    };
+    expect(parseMapView(map).records[0]).toEqual(map.records[0]);
+    expect(() => parseMapView({ ...map, records: [{ ...map.records[0], bytes: 1.5 }] })).toThrow(ContractError);
+    expect(() => parseMapView({ ...map, records: [{ ...map.records[0], has_children: "yes" }] })).toThrow(ContractError);
+  });
 });

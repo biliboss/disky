@@ -431,3 +431,84 @@ export function parseCleanResult(raw: unknown): CleanResult {
     disk: parseDisk(o.disk, "result.disk"),
   };
 }
+
+/** Where a history entry stands (REQ-DSCR-015.A3, A4), from the engine. */
+export type HistoryState = "restorable" | "restored" | "emptied" | "deleted";
+export const HISTORY_STATES: readonly HistoryState[] = ["restorable", "restored", "emptied", "deleted"];
+
+/**
+ * One History row: the log entry plus what the screen shows, derived by the
+ * engine (`contract::history_view`) — the GUI only formats when and size.
+ */
+export interface HistoryRow extends HistoryEntry {
+  /** Category names, or file names for "Large files" / "Duplicates" entries. */
+  detail: string;
+  state: HistoryState;
+}
+
+export interface HistoryView {
+  /** Physical bytes freed over every entry. */
+  total_bytes: number;
+  /** Newest first. */
+  rows: HistoryRow[];
+}
+
+/** The History screen's view (REQ-DSCR-015). CLI: `disky history --format json`. */
+export function parseHistoryView(raw: unknown): HistoryView {
+  const o = obj(raw, "history");
+  return {
+    total_bytes: bytes(o.total_bytes, "history.total_bytes"),
+    rows: arr(o.rows, "history.rows").map((r, i) => {
+      const path = `history.rows[${i}]`;
+      const ro = obj(r, path);
+      return {
+        ...parseHistoryEntry(ro, path),
+        detail: str(ro.detail, `${path}.detail`),
+        state: oneOf(ro.state, HISTORY_STATES, `${path}.state`),
+      };
+    }),
+  };
+}
+
+/** One immediate child of a mapped folder (REQ-DSCR-003). */
+export interface MapChild {
+  name: string;
+  path: string;
+  /** Physical bytes of everything beneath it. */
+  bytes: number;
+  has_children: boolean;
+}
+
+/** A mapped folder. CLI: `disky map [<path>] --format json`. */
+export interface MapView {
+  path: string;
+  name: string;
+  /** The snapshot's scan root: "Up" stops here. */
+  root: string;
+  /** Physical bytes under the folder (the engine's sum of its children). */
+  total_bytes: number;
+  /** The volume's capacity, for share of disk. */
+  capacity_bytes: number;
+  /** Largest first. */
+  records: MapChild[];
+}
+
+export function parseMapView(raw: unknown): MapView {
+  const o = obj(raw, "map");
+  return {
+    path: str(o.path, "map.path"),
+    name: str(o.name, "map.name"),
+    root: str(o.root, "map.root"),
+    total_bytes: bytes(o.total_bytes, "map.total_bytes"),
+    capacity_bytes: bytes(o.capacity_bytes, "map.capacity_bytes"),
+    records: arr(o.records, "map.records").map((c, i) => {
+      const co = obj(c, `map.records[${i}]`);
+      return {
+        name: str(co.name, `map.records[${i}].name`),
+        path: str(co.path, `map.records[${i}].path`),
+        bytes: bytes(co.bytes, `map.records[${i}].bytes`),
+        has_children: bool(co.has_children, `map.records[${i}].has_children`),
+      };
+    }),
+  };
+}

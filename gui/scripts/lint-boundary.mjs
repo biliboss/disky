@@ -31,6 +31,9 @@ const COMMANDS = [
   "get_prefs",
   "set_prefs",
   "pick_folder",
+  "list_history",
+  "load_map",
+  "reveal_in_finder",
 ];
 
 /** Category ids, read from the engine's single table. */

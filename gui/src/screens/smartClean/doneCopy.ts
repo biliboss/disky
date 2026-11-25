@@ -4,6 +4,7 @@
  */
 import { DELETE_MODE, type CleanMode, type Failure, type RestoreReport } from "../../lib/contract";
 import { formatBytes } from "../../lib/format";
+import { restoreNotices } from "../../lib/restoreNotices";
 
 /** "<freed> cleared": the physical bytes actually reclaimed (A1). */
 export function doneHeading(freedBytes: number): string {
@@ -55,12 +56,7 @@ export function cleanFailedMessage(failed: readonly Failure[], detail?: string):
 }
 
 /** Undo's outcome lines (A7): every item that did not come back, and why. */
-export function undoNotices(r: RestoreReport): string[] {
-  return [
-    ...r.missing.map((p) => `${p} is no longer in Trash, so it couldn't be restored.`),
-    ...r.conflicts.map((p) => `${p} wasn't restored: something else is already there. It's still in the Trash.`),
-  ];
-}
+export const undoNotices: (r: RestoreReport) => string[] = restoreNotices;
 
 /** Undo that failed outright, shown on the done phase. */
 export function undoFailedMessage(detail: string): string {

@@ -136,6 +136,32 @@ verifies:
 <!-- id: REQ-DSCR-003 -->
 ## The engine MUST report a folder's immediate children by size for the space map
 
+implementations:
+  - src/map.rs:MapChild
+  - src/map.rs:MapView
+  - src/map.rs:map
+  - src/map.rs:normalize
+  - src/contract.rs:map_view
+  - src/render.rs:map
+  - src/cli.rs:Command
+  - src/schema.rs:commands
+  - gui/src-tauri/src/main.rs:load_map
+  - gui/src/lib/contract.ts:parseMapView
+  - gui/src/lib/engine.ts:loadMap
+
+verifies:
+  - src/map.rs:map_lists_immediate_children_largest_first
+  - src/map.rs:map_drills_into_a_child_folder
+  - src/map.rs:map_outside_the_snapshot_is_not_found
+  - src/map.rs:map_leaves_out_excluded_folders
+  - src/map.rs:map_of_the_filesystem_root
+  - src/map.rs:map_json_shape
+  - tests/lib_integration.rs:map_is_fast_on_large_snapshot
+  - tests/lib_integration.rs:map_view_honours_excluded_folders
+  - tests/agentic.rs:map_lists_children_largest_first_and_outside_exits_not_found
+  - tests/agentic.rs:schema_lists_the_map_command_and_history_rows
+  - gui/src/lib/contract.test.ts:parsesAMapViewAndRejectsBadBytes
+
 **Acceptance**
 <!-- id: REQ-DSCR-003.A1 -->
 - `disky map [<path>] --snapshot <ref> --format json` returns the folder's immediate children, each with:
@@ -288,6 +314,34 @@ verifies:
 <!-- id: REQ-DSCR-012 -->
 ## The Space map screen MUST show a treemap of the selected folder and let the user drill in
 
+implementations:
+  - gui/src/screens/SpaceMap.tsx:SpaceMap
+  - gui/src/screens/spaceMap/treemap.ts:layout
+  - gui/src/screens/spaceMap/treemap.ts:tileColor
+  - gui/src/screens/spaceMap/mapCopy.ts:crumbLine
+  - gui/src/screens/spaceMap/mapCopy.ts:mapTitle
+  - gui/src/screens/spaceMap/mapCopy.ts:tileLabel
+  - gui/src/screens/spaceMap/mapCopy.ts:shareOfDisk
+  - gui/src/lib/engine.ts:revealInFinder
+  - gui/src-tauri/src/main.rs:reveal_in_finder
+  - gui/src/App.tsx:ROUTES
+
+verifies:
+  - gui/src/screens/__tests__/treemap.test.ts:matchesTheSnapshotSplitExactly
+  - gui/src/screens/__tests__/treemap.test.ts:areaIsProportionalToWeight
+  - gui/src/screens/__tests__/treemap.test.ts:tilesCycleTheSnapshotsSevenTokens
+  - gui/src/screens/__tests__/treemap.test.ts:crumbTitleAndShareAreWorded
+  - gui/src/screens/__tests__/SpaceMap.test.tsx:rendersTilesLargestSelectedOnEntry
+  - gui/src/screens/__tests__/SpaceMap.test.tsx:clickSelectsAndOpenFolderOnlyWithChildren
+  - gui/src/screens/__tests__/SpaceMap.test.tsx:openFolderDrillsInAndUpGoesBack
+  - gui/src/screens/__tests__/SpaceMap.test.tsx:enterOnTheSelectedTileOpensIt
+  - gui/src/screens/__tests__/SpaceMap.test.tsx:revealAsksTheBackendForTheSelectedPath
+  - gui/src/screens/__tests__/SpaceMap.test.tsx:noSnapshotOffersStartScan
+  - gui/tests/visual/spaceMap.spec.ts:spaceMapMatchesSnapshot
+  - gui/tests/visual/spaceMap.spec.ts:spaceMapPassesAxe
+  - gui/tests/visual/spaceMap.spec.ts:keyboardDrillsIntoAFolder
+  - gui/tests/visual/spaceMap.spec.ts:noSnapshotOffersStartScan
+
 **Acceptance**
 <!-- id: REQ-DSCR-012.A1 -->
 - The layout matches the snapshot's Space map at 1200×780 within 1%. It has:
@@ -365,6 +419,46 @@ verifies:
 
 <!-- id: REQ-DSCR-015 -->
 ## The History screen MUST list every recorded clean and restore eligible ones
+
+implementations:
+  - src/contract.rs:HistoryRow
+  - src/contract.rs:HistoryState
+  - src/contract.rs:HistoryView
+  - src/contract.rs:history_detail
+  - src/contract.rs:history_state
+  - src/contract.rs:history_view_of
+  - src/contract.rs:history_view
+  - src/contract.rs:history_view_now
+  - src/history.rs:RESTORE_WINDOW_DAYS
+  - src/render.rs:history
+  - gui/src-tauri/src/main.rs:list_history
+  - gui/src/lib/contract.ts:parseHistoryView
+  - gui/src/lib/engine.ts:listHistory
+  - gui/src/lib/restoreNotices.ts:restoreNotices
+  - gui/src/screens/History.tsx:History
+  - gui/src/screens/history/historyCopy.ts:headerLine
+  - gui/src/screens/history/historyCopy.ts:rowMeta
+
+verifies:
+  - src/contract.rs:history_rows_newest_first_with_total
+  - src/contract.rs:detail_uses_category_names
+  - src/contract.rs:detail_lists_file_names_up_to_three
+  - src/contract.rs:state_deleted_for_delete_mode
+  - src/contract.rs:state_emptied_at_thirty_days
+  - src/contract.rs:state_restored_when_restored_at
+  - tests/agentic.rs:history_records_carry_detail_state_and_total
+  - gui/src/lib/contract.test.ts:parsesHistoryRowsWithDerivedFields
+  - gui/src/lib/contract.test.ts:rejectsAnUnknownHistoryState
+  - gui/src/screens/__tests__/History.test.tsx:rendersOneRowPerEntryNewestFirst
+  - gui/src/screens/__tests__/History.test.tsx:rowShowsTitleWhenDetailAndSize
+  - gui/src/screens/__tests__/History.test.tsx:restorableRowRestoresAndShowsRestoredTag
+  - gui/src/screens/__tests__/History.test.tsx:missingItemsAreReported
+  - gui/src/screens/__tests__/History.test.tsx:emptiedAndDeletedShowTagsNoRestore
+  - gui/src/screens/__tests__/History.test.tsx:emptyLogReadsNothingCleanedYet
+  - gui/src/screens/__tests__/History.test.tsx:aFailedRestoreIsReported
+  - gui/tests/visual/history.spec.ts:historyMatchesSnapshot
+  - gui/tests/visual/history.spec.ts:historyPassesAxe
+  - gui/tests/visual/history.spec.ts:keyboardRestoresARow
 
 **Acceptance**
 <!-- id: REQ-DSCR-015.A1 -->

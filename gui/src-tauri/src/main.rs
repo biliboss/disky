@@ -15,6 +15,9 @@
 //! | `get_prefs`         | `disky prefs --format json`                      |
 //! | `set_prefs`         | `disky prefs --set <key>=<value>`                |
 //! | `pick_folder`       | (native picker only; the path is then saved with `set_prefs`) |
+//! | `list_history`      | `disky history --format json`                    |
+//! | `load_map`          | `disky map [<path>] --format json`               |
+//! | `reveal_in_finder`  | `open -R <path>` (a path `load_map` listed)      |
 //!
 //! Preferences live in the engine's one store (`disky::prefs`): every view
 //! reads its goal and toggles from it, and Settings writes it through
@@ -32,6 +35,9 @@
 //! @implements REQ-DCLEAN-027
 //! @implements REQ-DSCR-001
 //! @implements REQ-DSCR-016
+//! @implements REQ-DSCR-003
+//! @implements REQ-DSCR-012
+//! @implements REQ-DSCR-015
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -39,7 +45,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use disky::cleanup::CleanupHit;
-use disky::contract::{self, CleanResult, CleanupView, EngineError, RestoreResult};
+use disky::contract::{
+    self, CleanResult, CleanupView, EngineError, HistoryView, MapView, RestoreResult,
+};
 use disky::prefs::{self, Prefs};
 use disky::{history, scan as engine_scan, snapshots};
 use tauri::{AppHandle, Emitter, Manager};
@@ -56,6 +64,9 @@ struct Engine {
     reviewed: Mutex<Vec<CleanupHit>>,
     /// Cancel flag of the running scan, if any.
     cancel: Mutex<Option<Arc<AtomicBool>>>,
+    /// Paths the last Space map listed. `reveal_in_finder` reveals only
+    /// these (REQ-DSCR-012.A4).
+    mapped: Mutex<Vec<String>>,
 }
 
 type CmdResult<T> = Result<T, EngineError>;
@@ -204,6 +215,55 @@ async fn restore(history_id: String) -> CmdResult<RestoreResult> {
     blocking(move || contract::restore(&history::log_path(), &history_id)).await
 }
 
+/// The History screen's rows (REQ-DSCR-015): the log newest first, each with
+/// its detail and state, and the total cleared. CLI: `disky history`.
+#[tauri::command]
+async fn list_history() -> CmdResult<HistoryView> {
+    blocking(|| contract::history_view_now(&history::log_path())).await
+}
+
+/// The Space map of `path` (default: the scan root) in the latest snapshot
+/// (REQ-DSCR-003, REQ-DSCR-012); null when no snapshot exists yet. CLI:
+/// `disky map [<path>] --format json`.
+#[tauri::command]
+async fn load_map(app: AppHandle, path: Option<String>) -> CmdResult<Option<MapView>> {
+    blocking(move || {
+        let Some(snapshot) = snapshots::latest_snapshot() else {
+            app.state::<Engine>().mapped.lock().unwrap().clear();
+            return Ok(None);
+        };
+        let view = contract::map_view(&snapshot, path.as_deref(), &read_prefs()?)?;
+        *app.state::<Engine>().mapped.lock().unwrap() =
+            view.records.iter().map(|c| c.path.clone()).collect();
+        Ok(Some(view))
+    })
+    .await
+}
+
+/// Reveal a path in Finder (REQ-DSCR-012.A4) — only one the last
+/// `load_map` listed; any other path is refused.
+#[tauri::command]
+async fn reveal_in_finder(app: AppHandle, path: String) -> CmdResult<()> {
+    blocking(move || {
+        let listed = app.state::<Engine>().mapped.lock().unwrap().contains(&path);
+        if !listed {
+            return Err(disky::exit::DiskyError::new(
+                disky::exit::ExitCode::NotFound,
+                "not on the map",
+                format!("{path} is not on the Space map shown"),
+            )
+            .into());
+        }
+        let status = std::process::Command::new("open")
+            .arg("-R")
+            .arg(&path)
+            .status()?;
+        anyhow::ensure!(status.success(), "open -R exited with {status}");
+        Ok(())
+    })
+    .await
+}
+
 /// Open System Settings at Full Disk Access (REQ-DCLEAN-018.A2).
 #[tauri::command]
 async fn open_full_disk_access() -> CmdResult<()> {
@@ -230,6 +290,9 @@ fn main() {
             stop_scan,
             clean,
             restore,
+            list_history,
+            load_map,
+            reveal_in_finder,
             open_full_disk_access
         ])
         .run(tauri::generate_context!())

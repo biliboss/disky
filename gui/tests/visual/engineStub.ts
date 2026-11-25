@@ -194,3 +194,118 @@ export async function stubPrefs(page: Page, prefs: unknown = snapshotSettingsPre
     [prefs, picked] as const,
   );
 }
+
+const DAY_MS = 86_400_000;
+
+/**
+ * The snapshot's History state as engine rows: its three entries (7, 22
+ * and 49 days old; 6.8, 11.2 and 3.9 GB), newest first. The detail text is
+ * the snapshot's own.
+ */
+export function snapshotHistoryRows(now = Date.now()) {
+  const row = (id: string, title: string, days: number, detail: string, bytes: number, state: string) => ({
+    id,
+    title,
+    ts: new Date(now - days * DAY_MS - 60_000).toISOString(),
+    mode: "trash",
+    categories: [],
+    bytes,
+    items: [],
+    restored_at: null,
+    detail,
+    state,
+  });
+  return [
+    row("visual-e1", "Smart Clean", 7, "App caches, Temporary files, Trash", 6_800_000_000, "restorable"),
+    row("visual-e2", "Large files", 22, "3 files from Downloads", 11_200_000_000, "restorable"),
+    row("visual-e3", "Smart Clean", 49, "System caches, Logs", 3_900_000_000, "emptied"),
+  ];
+}
+
+/**
+ * Answer the History screen's commands from an in-page log
+ * (`window.__historyRows`), as `disky history` / `disky restore` would:
+ * `list_history` reads it and `restore` marks the entry restored. Each
+ * restore id is recorded in `window.__restored`.
+ */
+export async function stubHistory(page: Page, rows: unknown[] = snapshotHistoryRows()) {
+  await page.addInitScript((initial) => {
+    const w = window as any;
+    w.__historyRows = structuredClone(initial);
+    w.__restored = [];
+    w.__TAURI_INTERNALS__ = {
+      invoke: async (cmd: string, args: any) => {
+        if (cmd === "list_history") {
+          const rows = w.__historyRows;
+          return { total_bytes: rows.reduce((a: number, r: any) => a + r.bytes, 0), rows: structuredClone(rows) };
+        }
+        if (cmd === "restore") {
+          w.__restored.push(args.historyId);
+          const r = w.__historyRows.find((x: any) => x.id === args.historyId);
+          r.state = "restored";
+          return {
+            report: { id: args.historyId, restored: ["/Users/me/x"], conflicts: [], missing: [] },
+            disk: { volume: "Macintosh HD", capacity_bytes: 512e9, free_bytes: 80.8e9 },
+          };
+        }
+        throw new Error(`visual stub: ${cmd} is not available`);
+      },
+      transformCallback: () => 0,
+    };
+  }, rows);
+}
+
+const GB = 1e9;
+
+/** The snapshot's MAP (root and its two folders), as `disky map` answers per folder. */
+export function snapshotMapFolders() {
+  const kids = (parent: string, list: [string, number, boolean?][]) =>
+    list.map(([name, gb, has]) => ({ name, path: `${parent === "/" ? "" : parent}/${name}`, bytes: gb * GB, has_children: !!has }));
+  const view = (path: string, name: string, records: ReturnType<typeof kids>) => ({
+    path,
+    name,
+    root: "/",
+    total_bytes: records.reduce((a, r) => a + r.bytes, 0),
+    capacity_bytes: 512 * GB,
+    records,
+  });
+  return {
+    "/": view("/", "/", kids("/", [["Users", 212, true], ["Applications", 92, true], ["System", 58], ["Library", 34], ["Containers", 26], ["Other", 16]])),
+    "/Users": view("/Users", "Users", kids("/Users", [["Library", 74], ["Documents", 48], ["Movies", 41], ["Developer", 31], ["Pictures", 12], ["Music", 6]])),
+    "/Applications": view("/Applications", "Applications", kids("/Applications", [["Adobe Creative Cloud", 22], ["Xcode", 18], ["Logic Pro", 12], ["Final Cut Pro", 9], ["Other apps", 31]])),
+  } as Record<string, unknown>;
+}
+
+/**
+ * Answer the Space map's commands from the snapshot's MAP: `load_map`
+ * returns the folder (null with `noSnapshot`), `reveal_in_finder` records
+ * its path in `window.__revealed`. Every `load_map` path is recorded in
+ * `window.__mapped`.
+ */
+export async function stubMap(page: Page, noSnapshot = false) {
+  await page.addInitScript(
+    ([folders, none]) => {
+      const w = window as any;
+      w.__mapped = [];
+      w.__revealed = [];
+      w.__TAURI_INTERNALS__ = {
+        invoke: async (cmd: string, args: any) => {
+          if (cmd === "load_map") {
+            w.__mapped.push(args.path);
+            if (none) return null;
+            const f = (folders as any)[args.path ?? "/"];
+            if (!f) throw { code: "not-found", title: "folder not in snapshot", detail: `${args.path} is not in this snapshot`, retryable: false };
+            return structuredClone(f);
+          }
+          if (cmd === "reveal_in_finder") {
+            w.__revealed.push(args.path);
+            return null;
+          }
+          throw new Error(`visual stub: ${cmd} is not available`);
+        },
+        transformCallback: () => 0,
+      };
+    },
+    [snapshotMapFolders(), noSnapshot] as const,
+  );
+}

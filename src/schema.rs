@@ -95,7 +95,13 @@ fn commands() -> Value {
         {
             "name": "history",
             "args": { "limit": "int=50" },
-            "output": "HistoryEntry[] under kind='history', newest first: {id, title ('Smart Clean' | 'Assistant cleanup' | 'Cleanup'), ts, mode: trash|delete, categories:[string], bytes:u64 (physical, freed), items:[{original_path, trash_path:string?, bytes:u64, status}], restored_at:string?}. Log file: <data dir>/history.json"
+            "output": "history envelope: {kind:'history', total_bytes:u64 (physical, freed over the whole log), records:[HistoryRow]} newest first. HistoryRow = HistoryEntry + {detail:string, state:restorable|restored|emptied|deleted}: the rows the desktop GUI's History screen shows. Log file: <data dir>/history.json"
+        },
+        {
+            "name": "map",
+            "args": { "path": "string? (absolute folder; default the scan root)", "snapshot": "@latest|<id>|<path>" },
+            "output": "map envelope: {kind:'map', path, name, root (scan root), total_bytes:u64 (physical), capacity_bytes:u64 (volume), records:[MapChild]} — immediate children, largest first; excluded folders (prefs) left out",
+            "errors": "not-found (folder not in the snapshot)"
         },
         {
             "name": "restore",
@@ -182,7 +188,9 @@ fn records() -> Value {
         "Snapshot":   { "path": "string", "id": "string?", "bytes": "u64" },
         "CleanupHit":      { "category": "string", "safety": "safe|review", "path": "string", "bytes": "u64 (logical)", "physical_bytes": "u64 (on disk)", "files": "u64", "note": "string? (e.g. trash: permanent, refused with --reversible)" },
         "CategorySummary": { "category": "string", "safety": "safe|review (review if any hit is)", "paths": "u64", "bytes": "u64 (logical)", "physical_bytes": "u64 (on disk)", "files": "u64" },
-        "HistoryEntry":    { "id": "string (YYYY-MM-DD_HH-MM-SS-xxxx)", "ts": "string (RFC3339 UTC)", "mode": "trash|delete", "categories": "string[]", "bytes": "u64", "items": "HistoryItem[]", "restored_at": "string? (RFC3339 UTC, set once every item is restored)" },
+        "HistoryEntry":    { "id": "string (YYYY-MM-DD_HH-MM-SS-xxxx)", "title": "Smart Clean|Assistant cleanup|Large files|Duplicates|Cleanup", "ts": "string (RFC3339 UTC)", "mode": "trash|delete", "categories": "string[]", "bytes": "u64", "items": "HistoryItem[]", "restored_at": "string? (RFC3339 UTC, set once every item is restored)" },
+        "HistoryRow":      { "...": "every HistoryEntry field", "detail": "string (category names, or file names for 'Large files' / 'Duplicates'; '<n> files' past three)", "state": "restorable|restored|emptied|deleted (emptied: trash entry 30+ days old)" },
+        "MapChild":        { "name": "string", "path": "string (absolute)", "bytes": "u64 (physical, recursive)", "has_children": "bool" },
         "HistoryItem":     { "original_path": "string", "trash_path": "string? (null in delete mode)", "bytes": "u64", "status": "in_trash|restored|conflict|missing|deleted" },
         "RestoreReport":   { "id": "string", "restored": "string[]", "conflicts": "string[]", "missing": "string[] (no longer in Trash)" },
         "Prefs":           { "trash_by_default": "bool", "skip_recently_used": "bool (leave out items modified in the last 30 days)", "safe_only": "bool", "warn_below_goal": "bool", "goal_bytes": "u64", "checks": { "enabled": "bool", "frequency": "hourly|daily|weekly" }, "agent": "claude|codex|gemini", "scheduled_scan": "off|weekly|monthly", "excluded": "string[] (absolute or ~/ folders; never touched by cleanup)" },
@@ -282,6 +290,8 @@ mod tests {
             "DiffRow",
             "HistoryEntry",
             "HistoryItem",
+            "HistoryRow",
+            "MapChild",
             "RestoreReport",
             "Prefs",
         ] {

@@ -617,8 +617,9 @@ async function exploreDiskOpensSpaceMap() {
   renderApp();
   fireEvent.click(within(await idle()).getByRole("button", { name: "Explore disk" }));
   const main = screen.getByRole("main");
-  expect(await within(main).findByRole("heading", { level: 1, name: "Space Map" })).toBeInTheDocument();
-  expect(within(main).getByText("Coming soon")).toBeInTheDocument();
+  // The real Space map screen (REQ-DSCR-012).
+  expect(await within(main).findByTestId("space-map")).toBeInTheDocument();
+  expect(within(main).queryByText("Coming soon")).toBeNull();
 }
 
 async function shortcutsOpenTheirScreens() {
@@ -1350,7 +1351,7 @@ async function laterHidesItForTheSession() {
   expect(notification()).toBeNull();
   // Away to another screen and back: still hidden this session.
   fireEvent.click(screen.getByRole("button", { name: /^History/ }));
-  await screen.findByText("Coming soon");
+  await screen.findByTestId("history");
   fireEvent.click(screen.getByRole("button", { name: /^Smart Clean/ }));
   await idle();
   expect(notification()).toBeNull();
@@ -1465,7 +1466,7 @@ async function currentEntryIsExposedAsTheCurrentPage() {
   await idle();
   expect(screen.getByRole("button", { name: /^Smart Clean/ })).toHaveAttribute("aria-current", "page");
   fireEvent.click(screen.getByRole("button", { name: /^History/ }));
-  await screen.findByText("Coming soon");
+  await screen.findByTestId("history");
   expect(screen.getByRole("button", { name: /^History/ })).toHaveAttribute("aria-current", "page");
   expect(screen.getByRole("button", { name: /^Smart Clean/ })).not.toHaveAttribute("aria-current");
 }
@@ -1481,7 +1482,7 @@ async function navigatingFromDoneShowsIdle() {
   window.location.hash = "";
   await finishCleanToDone(cleanResultFixture());
   fireEvent.click(screen.getByRole("button", { name: /^History/ }));
-  await screen.findByText("Coming soon");
+  await screen.findByTestId("history");
   fireEvent.click(screen.getByRole("button", { name: /^Smart Clean/ }));
   expect(await idle()).toBeInTheDocument();
   expect(screen.queryByTestId("done")).toBeNull();

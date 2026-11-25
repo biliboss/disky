@@ -778,3 +778,137 @@ fn schema_lists_the_prefs_command() {
     assert!(prefs["keys"].as_array().unwrap().len() >= 10);
     assert!(v["records"]["Prefs"].is_object());
 }
+
+/// REQ-DSCR-015 parity: `disky history` records are the GUI's History rows
+/// (entry + `detail` + `state`) and the envelope carries the total cleared.
+#[test]
+fn history_records_carry_detail_state_and_total() {
+    let home = temp_dir();
+    let v = trash_node_modules(&home);
+    let freed = v["total_physical_bytes"].as_u64().unwrap_or(0);
+    let h = json_in_home(&home, &["history", "--format", "json"]);
+    let rec = &h["records"][0];
+    assert_eq!(rec["state"], "restorable", "{h}");
+    let label = disky::cleanup::category("node_modules").unwrap().label;
+    assert_eq!(rec["detail"], label);
+    let total = h["total_bytes"].as_u64().expect("total_bytes");
+    assert_eq!(total, rec["bytes"].as_u64().unwrap());
+    assert!(total > 0 || freed == 0);
+
+    let id = rec["id"].as_str().unwrap().to_string();
+    json_in_home(&home, &["restore", &id, "--format", "json"]);
+    let h = json_in_home(&home, &["history", "--format", "json"]);
+    assert_eq!(h["records"][0]["state"], "restored");
+    // `--limit` trims the rows, never the total.
+    let h0 = json_in_home(&home, &["history", "--limit", "0", "--format", "json"]);
+    assert!(h0["records"].as_array().unwrap().is_empty());
+    assert_eq!(h0["total_bytes"], total);
+    let _ = fs::remove_dir_all(&home);
+}
+
+/// REQ-DSCR-003.A1–A3 through the CLI: `disky map` lists the scan root's
+/// immediate children by physical bytes, drills into a folder, carries the
+/// total and capacity, and exits 4 for a folder outside the snapshot.
+#[test]
+fn map_lists_children_largest_first_and_outside_exits_not_found() {
+    let home = temp_dir();
+    let root = home.join("tree");
+    fs::create_dir_all(root.join("big/inner")).unwrap();
+    fs::create_dir_all(root.join("small")).unwrap();
+    fs::write(root.join("big/inner/a.bin"), vec![1u8; 64 * 1024]).unwrap();
+    fs::write(root.join("small/b.bin"), vec![1u8; 8 * 1024]).unwrap();
+    fs::write(root.join("c.txt"), vec![1u8; 100]).unwrap();
+    let db = home.join("snap.db");
+    let out = run_in_home(
+        &home,
+        &["scan", root.to_str().unwrap(), "--db", db.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "scan: {:?}", out);
+
+    let m = json_in_home(
+        &home,
+        &[
+            "map",
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(m["kind"], "map");
+    assert_eq!(m["path"], root.to_str().unwrap());
+    let names: Vec<&str> = m["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["big", "small", "c.txt"], "{m}");
+    assert_eq!(m["records"][0]["has_children"], true);
+    assert_eq!(m["records"][2]["has_children"], false);
+    let sum: u64 = m["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["bytes"].as_u64().unwrap())
+        .sum();
+    assert_eq!(m["total_bytes"].as_u64().unwrap(), sum);
+    assert!(m["records"][0]["bytes"].as_u64().unwrap() >= 64 * 1024);
+    assert!(m["capacity_bytes"].as_u64().unwrap() > 0);
+
+    let big = root.join("big");
+    let inner = json_in_home(
+        &home,
+        &[
+            "map",
+            big.to_str().unwrap(),
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(inner["records"][0]["name"], "inner");
+
+    let out = run_in_home(
+        &home,
+        &[
+            "map",
+            "/definitely/not/scanned",
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(4));
+    let err: Value = serde_json::from_str(String::from_utf8(out.stderr).unwrap().trim()).unwrap();
+    assert_eq!(err["type"], "https://disky.dev/errors/not-found");
+
+    // Excluded folders are left out (REQ-DSCR-002.A1).
+    json_in_home(
+        &home,
+        &["prefs", "--set", &format!("excluded={}", big.display())],
+    );
+    let m = json_in_home(
+        &home,
+        &[
+            "map",
+            "--snapshot",
+            db.to_str().unwrap(),
+            "--format",
+            "json",
+        ],
+    );
+    assert_eq!(m["records"][0]["name"], "small", "{m}");
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn schema_lists_the_map_command_and_history_rows() {
+    let v = run_json(&["schema"]);
+    let cmds = v["commands"].as_array().unwrap();
+    assert!(cmds.iter().any(|c| c["name"] == "map"));
+    assert!(v["records"]["MapChild"].is_object());
+    assert!(v["records"]["HistoryRow"].is_object());
+}

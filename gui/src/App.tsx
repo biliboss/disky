@@ -2,14 +2,18 @@ import { HashRouter, type RouteDefinition } from "@solidjs/router";
 import type { JSX } from "solid-js";
 import { AppShell } from "./shell/AppShell";
 import { NAV_ITEMS } from "./shell/nav";
+import { History } from "./screens/History";
 import { Placeholder } from "./screens/Placeholder";
 import { Settings } from "./screens/Settings";
 import { SmartClean } from "./screens/SmartClean";
+import { SpaceMap } from "./screens/SpaceMap";
 import type { NavId } from "./shell/nav";
 
 /** Screens that are implemented; every other nav entry is a placeholder. */
 const SCREENS: Partial<Record<NavId, () => JSX.Element>> = {
   clean: () => <SmartClean />,
+  map: () => <SpaceMap />,
+  history: () => <History />,
   settings: () => <Settings />,
 };
 

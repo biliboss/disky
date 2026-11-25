@@ -27,6 +27,14 @@ pub const TITLE_ASSISTANT: &str = "Assistant cleanup";
 /// Title of a `disky cleanup --apply` run, and of entries written before
 /// titles existed.
 pub const TITLE_CLI: &str = "Cleanup";
+/// Title of a clean run from the Large files screen (REQ-DSCR-013.A4).
+pub const TITLE_LARGE_FILES: &str = "Large files";
+/// Title of a clean run from the Duplicates screen (REQ-DSCR-014.A4).
+pub const TITLE_DUPLICATES: &str = "Duplicates";
+
+/// Trashed items stay restorable this long; older entries read "Emptied"
+/// (REQ-DSCR-015.A3, A4).
+pub const RESTORE_WINDOW_DAYS: i64 = 30;
 
 fn default_title() -> String {
     TITLE_CLI.to_string()

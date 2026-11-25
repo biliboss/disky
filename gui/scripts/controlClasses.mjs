@@ -20,6 +20,7 @@ export const THEMED_EXCEPTIONS = [
   { cls: "shortcut", css: "src/screens/smartClean/smartClean.css", backgroundFrom: "card" },
   { cls: "switch", css: "src/screens/settings/settings.css" },
   { cls: "chip-remove", css: "src/screens/settings/settings.css" },
+  { cls: "map-tile", css: "src/screens/spaceMap/spaceMap.css" },
 ];
 
 export const THEMED_EXCEPTION_CLASSES = THEMED_EXCEPTIONS.map((e) => e.cls);

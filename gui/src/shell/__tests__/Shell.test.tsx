@@ -3,13 +3,16 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { App } from "../../App";
-import { NAV_ITEMS } from "../nav";
+import { NAV_ITEMS, type NavId } from "../nav";
 import { resetDiskState, setFromClean, setFromView } from "../../lib/diskState";
 import { goalPos } from "../../lib/meter";
 import type { CleanResult, CleanupView } from "../../lib/contract";
 
 // vitest runs with gui/ as its root.
 const guiFile = (rel: string) => resolve(process.cwd(), rel);
+
+/** Nav entries whose own screen is implemented, by the screen's test id. */
+const REAL_SCREENS: Partial<Record<NavId, string>> = { map: "space-map", history: "history", settings: "settings" };
 
 function renderApp() {
   render(() => <App />);
@@ -42,10 +45,15 @@ async function secondaryEntriesOpenComingSoonPlaceholders() {
     fireEvent.click(navButton(item.label));
     const main = screen.getByRole("main");
     // Router navigation commits in a transition, so wait for the new screen.
-    expect(await within(main).findByRole("heading", { level: 1, name: item.label })).toBeInTheDocument();
-    // Settings is a real screen (REQ-DSCR-016); the rest are still placeholders.
-    if (item.id === "settings") expect(within(main).queryByText("Coming soon")).toBeNull();
-    else expect(within(main).getByText("Coming soon")).toBeInTheDocument();
+    const real = REAL_SCREENS[item.id];
+    if (real) {
+      // A real screen (REQ-DSCR-012, -015, -016), not a placeholder.
+      expect(await within(main).findByTestId(real)).toBeInTheDocument();
+      expect(within(main).queryByText("Coming soon")).toBeNull();
+    } else {
+      expect(await within(main).findByRole("heading", { level: 1, name: item.label })).toBeInTheDocument();
+      expect(within(main).getByText("Coming soon")).toBeInTheDocument();
+    }
     await waitFor(() => expect(navButton(item.label)).toHaveAttribute("aria-current", "page"));
   }
   fireEvent.click(navButton("Smart Clean"));

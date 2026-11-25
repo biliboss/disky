@@ -859,3 +859,76 @@ fn contract_load_honours_the_preferences_store() {
     let got: Vec<&str> = hits.iter().map(|h| h.path.as_str()).collect();
     assert_eq!(got, ["/h/src/a/node_modules"]);
 }
+
+/// REQ-DSCR-003.A4: one `disky map` call on a ~1 M-row snapshot is a single
+/// grouped query — under 1 s in a release build (generous bound in debug).
+#[test]
+fn map_is_fast_on_large_snapshot() {
+    let (_dir, db_path) = synth_big_snapshot(2_000, 500);
+    let conn = db::open(db_path.to_str().unwrap()).unwrap();
+
+    let start = std::time::Instant::now();
+    let root = disky::map::map(&conn, None, &[], 1).unwrap();
+    let elapsed_root = start.elapsed();
+    // 2 000 projects + the synthetic home, largest first.
+    assert_eq!(root.records.len(), 2_001);
+    assert_eq!(root.records[0].name, "home");
+    let per_dir = SYNTH_LOCATION_FILES as u64 * 1024;
+    assert_eq!(
+        root.records[0].bytes,
+        2 * SYNTH_LOCATION_DIRS as u64 * per_dir
+    );
+    assert!(root.records[1..].iter().all(|c| c.bytes == 500 * 1024));
+    assert_eq!(
+        root.total_bytes,
+        2_000 * 500 * 1024 + 2 * SYNTH_LOCATION_DIRS as u64 * per_dir
+    );
+
+    let start = std::time::Instant::now();
+    let caches =
+        disky::map::map(&conn, Some(&format!("{SYNTH_HOME}/Library/Caches")), &[], 1).unwrap();
+    let elapsed_child = start.elapsed();
+    assert_eq!(caches.records.len(), SYNTH_LOCATION_DIRS);
+
+    let bound = if cfg!(debug_assertions) {
+        std::time::Duration::from_secs(5)
+    } else {
+        std::time::Duration::from_secs(1)
+    };
+    for (what, t) in [("root", elapsed_root), ("child", elapsed_child)] {
+        assert!(
+            t < bound,
+            "map of {what} took {t:?} on a ~1 M-row snapshot (bound {bound:?})"
+        );
+    }
+    eprintln!("map_is_fast_on_large_snapshot: root {elapsed_root:?}, child {elapsed_child:?}");
+}
+
+/// REQ-DSCR-003 / REQ-DSCR-002.A1 through the library: the GUI's
+/// `contract::map_view` honours the preferences store's excluded folders.
+#[test]
+fn map_view_honours_excluded_folders() {
+    let (dir, conn) = small_snapshot(
+        &[
+            ("/m", true, 0, T0),
+            ("/m/keep", true, 0, T0),
+            ("/m/keep/a", false, 300, T0),
+            ("/m/private", true, 0, T0),
+            ("/m/private/b", false, 900, T0),
+        ],
+        "/m",
+    );
+    let path = dir.path().join("small.db").to_string_lossy().into_owned();
+    drop(conn);
+    let prefs = disky::prefs::Prefs {
+        excluded: vec!["/m/private".into()],
+        ..Default::default()
+    };
+    let v = disky::contract::map_view(&path, None, &prefs).unwrap();
+    let names: Vec<&str> = v.records.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, ["keep"]);
+    assert_eq!(v.total_bytes, 300);
+    assert!(v.capacity_bytes > 0);
+    let all = disky::contract::map_view(&path, None, &disky::prefs::Prefs::default()).unwrap();
+    assert_eq!(all.records[0].name, "private");
+}

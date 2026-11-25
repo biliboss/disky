@@ -12,6 +12,8 @@ import {
   parseCleanResult,
   parseCleanupView,
   parseEngineError,
+  parseHistoryView,
+  parseMapView,
   parsePreferences,
   parseRestoreResult,
   parseScanProgress,
@@ -19,6 +21,8 @@ import {
   type CleanProgress,
   type CleanResult,
   type CleanupView,
+  type HistoryView,
+  type MapView,
   type Preferences,
   type RestoreResult,
   type ScanProgress,
@@ -129,4 +133,30 @@ export async function pickFolder(): Promise<string | null> {
   const picked = await call("pick_folder");
   if (picked !== null && typeof picked !== "string") throw parseEngineError(new Error("pick_folder: expected a path"));
   return picked;
+}
+
+/**
+ * The History screen's rows, newest first, with the total cleared
+ * (REQ-DSCR-015). CLI: `disky history --format json` (same rows).
+ */
+export async function listHistory(): Promise<HistoryView> {
+  return parseHistoryView(await call("list_history"));
+}
+
+/**
+ * A folder's immediate children by physical size (REQ-DSCR-003); `path`
+ * null maps the scan root. Resolves null when there is no snapshot yet.
+ * CLI: `disky map [<path>] --format json`.
+ */
+export async function loadMap(path: string | null = null): Promise<MapView | null> {
+  const raw = await call("load_map", { path });
+  return raw === null ? null : parseMapView(raw);
+}
+
+/**
+ * Reveal `path` in Finder (REQ-DSCR-012.A4). The backend only reveals a
+ * path its last map listed. CLI: `open -R <path>`.
+ */
+export async function revealInFinder(path: string): Promise<void> {
+  await call("reveal_in_finder", { path });
 }

@@ -5,7 +5,8 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::cleanup::CleanupHit;
-use crate::history::{Entry, RestoreReport};
+use crate::contract::{HistoryView, MapView};
+use crate::history::RestoreReport;
 use crate::query::{DiffRow, DirRow, ExtRow, FileRow, Stats, SCHEMA_VERSION};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -393,7 +394,6 @@ pub fn cleanup(
     Ok(())
 }
 
-/// Clean-history log (REQ-DCLEAN-034), newest first.
 /// `disky prefs` (REQ-DSCR-001.A1): one `Prefs` record under kind `prefs`,
 /// or `key = value` lines on a TTY (dotted keys for nested values).
 pub fn prefs(p: &crate::prefs::Prefs, format: Format) -> Result<()> {
@@ -420,34 +420,87 @@ pub fn prefs(p: &crate::prefs::Prefs, format: Format) -> Result<()> {
     Ok(())
 }
 
-pub fn history(entries: &[Entry], format: Format) -> Result<()> {
-    if format.is_machine() {
-        return emit_records(entries, "history", format);
+/// Clean-history log (REQ-DCLEAN-034, REQ-DSCR-015), newest first. JSON
+/// records are [`HistoryRow`]s — each entry plus the `detail` and `state` the
+/// GUI's History screen shows — and the envelope carries `total_bytes` over
+/// the whole log, from the same [`crate::contract::history_view`].
+pub fn history(view: &HistoryView, limit: usize, format: Format) -> Result<()> {
+    let rows = &view.rows[..view.rows.len().min(limit)];
+    match format {
+        Format::Json => {
+            let payload = json!({
+                "schema_version": SCHEMA_VERSION,
+                "kind": "history",
+                "total_bytes": view.total_bytes,
+                "records": rows,
+            });
+            println!("{}", serde_json::to_string(&payload)?);
+            return Ok(());
+        }
+        Format::Ndjson => return emit_records(rows, "history", format),
+        Format::Text => {}
     }
-    if entries.is_empty() {
+    if rows.is_empty() {
         println!("No cleanup history yet.");
         return Ok(());
     }
     println!(
-        "{:<28} {:<18} {:<24} {:<6} {:>12} {:>6}  STATUS",
-        "ID", "TITLE", "WHEN", "MODE", "FREED", "ITEMS"
+        "{:<28} {:<18} {:<24} {:<6} {:>12} {:>6}  {:<10} DETAIL",
+        "ID", "TITLE", "WHEN", "MODE", "FREED", "ITEMS", "STATE"
     );
-    println!("{}", "-".repeat(115));
-    for e in entries {
-        let status = match (&e.restored_at, e.mode) {
-            (Some(at), _) => format!("restored {at}"),
-            (None, crate::history::Mode::Delete) => "permanent".to_string(),
-            (None, crate::history::Mode::Trash) => "in trash".to_string(),
-        };
+    println!("{}", "-".repeat(125));
+    for r in rows {
+        let e = &r.entry;
         println!(
-            "{:<28} {:<18} {:<24} {:<6} {:>12} {:>6}  {}",
+            "{:<28} {:<18} {:<24} {:<6} {:>12} {:>6}  {:<10} {}",
             e.id,
             e.title,
             e.ts,
             serde_json::to_value(e.mode)?.as_str().unwrap_or(""),
             format_size(e.bytes, BINARY),
             e.items.len(),
-            status,
+            serde_json::to_value(r.state)?.as_str().unwrap_or(""),
+            r.detail,
+        );
+    }
+    println!(
+        "{} cleared in total.",
+        format_size(view.total_bytes, BINARY)
+    );
+    Ok(())
+}
+
+/// `disky map` (REQ-DSCR-003): one envelope `{kind:"map", path, name, root,
+/// total_bytes, capacity_bytes, records:[MapChild]}`, or a size table.
+pub fn map(view: &MapView, format: Format) -> Result<()> {
+    match format {
+        Format::Json => {
+            let mut payload = serde_json::to_value(view)?;
+            payload["schema_version"] = json!(SCHEMA_VERSION);
+            payload["kind"] = json!("map");
+            println!("{}", serde_json::to_string(&payload)?);
+            return Ok(());
+        }
+        Format::Ndjson => return emit_records(&view.records, "map", format),
+        Format::Text => {}
+    }
+    println!(
+        "{} · {} (physical)",
+        view.path,
+        format_size(view.total_bytes, BINARY)
+    );
+    println!("{:<70} {:>12}", "NAME", "SIZE");
+    println!("{}", "-".repeat(83));
+    for c in &view.records {
+        let name = if c.has_children {
+            format!("{}/", c.name)
+        } else {
+            c.name.clone()
+        };
+        println!(
+            "{:<70} {:>12}",
+            truncate(&name, 70),
+            format_size(c.bytes, BINARY)
         );
     }
     Ok(())

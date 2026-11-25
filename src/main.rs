@@ -8,7 +8,7 @@ use disky::exit::{classify, DiskyError, ExitCode};
 use disky::policy::{apply_policy, Policy, SnapshotMeta};
 use disky::query::SCHEMA_VERSION;
 use disky::render::{resolve_format, Format};
-use disky::{cleanup, db, history, prefs, query, render, scan, schema, snapshots};
+use disky::{cleanup, contract, db, history, prefs, query, render, scan, schema, snapshots};
 use serde_json::json;
 use std::process::ExitCode as ProcExit;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -647,9 +647,20 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             }
         }
         Command::History { limit } => {
-            let mut entries = history::list(&history::log_path())?;
-            entries.truncate(limit);
-            render::history(&entries, format)?;
+            let view = contract::history_view_now(&history::log_path())?;
+            render::history(&view, limit, format)?;
+        }
+        Command::Map { path, snapshot } => {
+            let db = snapshots::resolve(&snapshot)?;
+            let path = path.map(|p| match p.strip_prefix("~/") {
+                Some(rest) => dirs::home_dir()
+                    .map(|h| h.join(rest).to_string_lossy().into_owned())
+                    .unwrap_or(p.clone()),
+                None => p,
+            });
+            let p = prefs::load(&prefs::prefs_path())?;
+            let view = contract::map_view(&db, path.as_deref(), &p)?;
+            render::map(&view, format)?;
         }
         Command::Restore { id } => {
             let report = history::restore(&history::log_path(), &id)?;

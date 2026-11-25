@@ -105,9 +105,18 @@ entry to `<data dir>/history.json`, next to the snapshots. The `.json`
 extension keeps it out of `@latest` and `disky list`.
 
 ```
-disky history [--limit N] --format json   # kind:"history", newest first
+disky history [--limit N] --format json   # kind:"history", newest first, total_bytes
 disky restore <id> --format json          # kind:"restore", records:[RestoreReport]
 ```
+
+`history` records are `HistoryRow`s: each `Entry` plus `detail` (category
+names, or file names for "Large files" / "Duplicates" entries, "<n> files"
+past three) and `state` (`restorable | restored | emptied | deleted`;
+`emptied` = a Trash entry 30+ days old, `history::RESTORE_WINDOW_DAYS`).
+The envelope's `total_bytes` sums every entry, whatever `--limit` says. The
+GUI's History screen (REQ-DSCR-015) renders exactly these rows from
+`contract::history_view`, so neither side derives them twice. A partially
+restored entry (items no longer in the Trash) stays `restorable`.
 
 `Entry = {id, title, ts, mode: trash|delete, categories, bytes, items:[Item], restored_at?}`,
 `Item = {original_path, trash_path (null in delete mode), bytes, status}`, with
@@ -131,6 +140,27 @@ Every read-modify-write holds `flock` on `history.lock` and swaps the file in
 with temp + rename, so concurrent GUI/CLI writers never lose an entry. Tests
 pass a `trash_root` to `cleanup::apply_with` (crate-private), and the CLI
 tests set a temp `HOME`. No test touches the real `~/.Trash` or log.
+
+## Space map (REQ-DSCR-003/012)
+
+```
+disky map [<path>] --snapshot @latest --format json
+```
+
+Envelope `{kind:"map", path, name, root, total_bytes, capacity_bytes,
+records:[MapChild {name, path, bytes, has_children}]}`: the folder's
+immediate children by physical bytes (recursive), largest first. The default
+path is the scan root, and a folder not in the snapshot exits 4. Excluded
+folders (prefs) are left out. `src/map.rs` runs one grouped range query
+(`split_part` over the rows beneath the folder, with no per-child loop).
+`tests/lib_integration.rs::map_is_fast_on_large_snapshot` asserts < 1 s on
+~1 M rows in release.
+
+The GUI's Space map screen calls the `load_map` Tauri command (null with no
+snapshot) and lays the engine's sizes out with the snapshot's own split,
+ported verbatim to `gui/src/screens/spaceMap/treemap.ts::layout`. A unit
+test checks it against the `layout()` in `snapshot.html`. `reveal_in_finder`
+runs `open -R` only for a path the last `load_map` listed.
 
 ## Preferences (REQ-DSCR-001/002)
 
