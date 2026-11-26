@@ -5,15 +5,17 @@
  */
 import type { MapView } from "../../lib/contract";
 import { formatBytes } from "../../lib/format";
+import { OS, revealLabel, rootLabel } from "../../lib/os";
 
 /** The volume's display name when the scan root is the filesystem root. */
-export const ROOT_LABEL = "Macintosh HD";
+export const ROOT_LABEL = rootLabel(OS);
 export const HINT = "Click a block to inspect it, double-click to open.";
 export const SELECTED = "Selected";
 export const SIZE = "Size";
 export const SHARE = "Share of disk";
 export const OPEN_FOLDER = "Open folder";
-export const REVEAL = "Reveal in Finder";
+/** "Reveal in Finder", "Show in Explorer" or "Show in folder" (REQ-XPLAT-008). */
+export const REVEAL = revealLabel(OS);
 export const UP = "Up";
 export const NO_SCANS = "No scans yet";
 export const NO_SCANS_NOTE = "Run a scan to see what's taking up room.";

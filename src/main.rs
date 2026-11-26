@@ -656,12 +656,8 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             snapshot,
         } => {
             let db = snapshots::resolve(&snapshot)?;
-            let path = path.map(|p| match p.strip_prefix("~/") {
-                Some(rest) => dirs::home_dir()
-                    .map(|h| h.join(rest).to_string_lossy().into_owned())
-                    .unwrap_or(p.clone()),
-                None => p,
-            });
+            let home = disky::platform::home_dir();
+            let path = path.map(|p| disky::platform::expand_user(&p, home.as_deref()));
             let p = prefs::load(&prefs::prefs_path())?;
             let mut view = contract::map_view(&db, path.as_deref(), &p)?;
             if let Some(n) = tiles {
@@ -683,14 +679,12 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
         }
         Command::Trash { paths, title } => {
             let cwd = std::env::current_dir()?;
+            let home = disky::platform::home_dir();
             let paths: Vec<String> = paths
                 .into_iter()
                 .map(|p| {
-                    let expanded = match p.strip_prefix("~/") {
-                        Some(rest) => dirs::home_dir().map_or(p.clone().into(), |h| h.join(rest)),
-                        None => std::path::PathBuf::from(&p),
-                    };
-                    cwd.join(expanded).to_string_lossy().into_owned()
+                    let expanded = disky::platform::expand_user(&p, home.as_deref());
+                    disky::platform::to_slash(&cwd.join(expanded))
                 })
                 .collect();
             // Named on the command line = reviewed by the user (REQ-DSCR-006).
@@ -720,7 +714,7 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                 Some(snapshots::resolve(&snapshot)?)
             };
             let (view, hits) = contract::assistant_inputs(db.as_deref(), &p)?;
-            let home = dirs::home_dir();
+            let home = disky::platform::home_dir();
             let records = contract::suggestions_for(
                 &view,
                 &hits,

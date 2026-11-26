@@ -48,6 +48,23 @@ pub const AGENTS: &[AgentDef] = &[
 /// Folders searched after `PATH` (A1). `~` expands to the home directory.
 pub const EXTRA_DIRS: &[&str] = &["~/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"];
 
+/// The Windows equivalent of [`EXTRA_DIRS`] (REQ-XPLAT-009): npm's global
+/// launchers (`%APPDATA%/npm`), then `~/.local/bin`.
+pub const WINDOWS_EXTRA_DIRS: &[&str] = &["%APPDATA%/npm", "~/.local/bin"];
+
+/// The file names an agent's CLI may have on `os` (REQ-XPLAT-009): the bare
+/// name on Unix; `.exe`, `.cmd` and `.bat` launchers on Windows.
+pub fn candidates(bin: &str, os: crate::platform::Os) -> Vec<String> {
+    if os == crate::platform::Os::Windows {
+        ["exe", "cmd", "bat"]
+            .iter()
+            .map(|e| format!("{bin}.{e}"))
+            .collect()
+    } else {
+        vec![bin.to_string()]
+    }
+}
+
 /// One agent and whether it is installed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Agent {
@@ -75,14 +92,22 @@ pub fn search_dirs(path_var: Option<&OsStr>, home: Option<&Path>) -> Vec<PathBuf
     let mut dirs: Vec<PathBuf> = path_var
         .map(|p| std::env::split_paths(p).collect())
         .unwrap_or_default();
-    for extra in EXTRA_DIRS {
-        match extra.strip_prefix("~/") {
-            Some(rest) => {
-                if let Some(h) = home {
-                    dirs.push(h.join(rest));
-                }
+    let extras = if cfg!(windows) {
+        WINDOWS_EXTRA_DIRS
+    } else {
+        EXTRA_DIRS
+    };
+    for extra in extras {
+        if let Some(rest) = extra.strip_prefix("~/") {
+            if let Some(h) = home {
+                dirs.push(h.join(rest));
             }
-            None => dirs.push(PathBuf::from(extra)),
+        } else if let Some(rest) = extra.strip_prefix("%APPDATA%/") {
+            if let Some(a) = std::env::var_os("APPDATA").filter(|v| !v.is_empty()) {
+                dirs.push(PathBuf::from(a).join(rest));
+            }
+        } else {
+            dirs.push(PathBuf::from(extra));
         }
     }
     let mut seen = std::collections::HashSet::new();
@@ -96,29 +121,33 @@ fn is_executable(path: &Path) -> bool {
     let Ok(meta) = std::fs::metadata(path) else {
         return false;
     };
-    if !meta.is_file() {
-        return false;
-    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        meta.permissions().mode() & 0o111 != 0
+        meta.is_file() && meta.permissions().mode() & 0o111 != 0
     }
+    // No executable bit: the launcher's extension (`.exe`, `.cmd`) is what
+    // makes it runnable (REQ-XPLAT-009).
     #[cfg(not(unix))]
     {
-        true
+        meta.is_file()
     }
 }
 
 /// Each agent in [`AGENTS`] order, found in the first of `dirs` that holds
 /// an executable of its name.
 pub fn detect_in(dirs: &[PathBuf], home: Option<&Path>) -> Vec<Agent> {
+    detect_for(crate::platform::Os::current(), dirs, home)
+}
+
+fn detect_for(os: crate::platform::Os, dirs: &[PathBuf], home: Option<&Path>) -> Vec<Agent> {
     AGENTS
         .iter()
         .map(|a| {
+            let names = candidates(a.bin, os);
             let hit = dirs
                 .iter()
-                .map(|d| d.join(a.bin))
+                .flat_map(|d| names.iter().map(move |n| d.join(n)))
                 .find(|p| is_executable(p));
             Agent {
                 id: a.id.to_string(),
@@ -127,7 +156,7 @@ pub fn detect_in(dirs: &[PathBuf], home: Option<&Path>) -> Vec<Agent> {
                 display_path: hit
                     .as_deref()
                     .map(|p| crate::prefs::abbreviate_home(p, home)),
-                path: hit.map(|p| p.to_string_lossy().into_owned()),
+                path: hit.map(|p| crate::platform::to_slash(&p)),
             }
         })
         .collect()
@@ -135,7 +164,7 @@ pub fn detect_in(dirs: &[PathBuf], home: Option<&Path>) -> Vec<Agent> {
 
 /// [`detect_in`] over this process's `PATH` and `HOME`.
 pub fn detect() -> Vec<Agent> {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let home = crate::platform::home_dir();
     let path = std::env::var_os("PATH");
     detect_in(
         &search_dirs(path.as_deref(), home.as_deref()),
@@ -170,6 +199,35 @@ mod tests {
         assert_eq!(display_name("other"), "other");
     }
 
+    #[test]
+    fn windows_candidates_include_cmd_launchers() {
+        use crate::platform::Os;
+        assert_eq!(
+            candidates("claude", Os::Windows),
+            ["claude.exe", "claude.cmd", "claude.bat"]
+        );
+        assert_eq!(candidates("claude", Os::Linux), ["claude"]);
+        // npm's global launcher folder holds `claude.cmd` (A1).
+        let tmp = tempfile::tempdir().unwrap();
+        let npm = tmp.path().join("AppData/Roaming/npm");
+        fs::create_dir_all(&npm).unwrap();
+        let cmd = npm.join("claude.cmd");
+        fs::write(&cmd, "@echo off\r\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&cmd, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let got = detect_for(Os::Windows, &[npm], None);
+        assert!(got[0].found);
+        assert_eq!(
+            got[0].path.as_deref(),
+            Some(crate::platform::to_slash(&cmd).as_str())
+        );
+        assert!(!got[1].found && !got[2].found);
+    }
+
+    #[cfg(unix)]
     #[test]
     fn search_covers_path_then_the_extra_folders() {
         let home = Path::new("/Users/me");

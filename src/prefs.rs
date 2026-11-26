@@ -139,9 +139,12 @@ impl Prefs {
 /// A picked folder in the store's display form: under `home` it reads
 /// `~/…` (as the Settings chips show it), elsewhere it stays absolute.
 pub fn abbreviate_home(folder: &Path, home: Option<&Path>) -> String {
-    let full = folder.to_string_lossy();
-    let full = normalise_folder(&full);
-    let Some(home) = home.map(|h| h.to_string_lossy().trim_end_matches('/').to_string()) else {
+    let full = normalise_folder(&crate::platform::to_slash(folder));
+    let Some(home) = home.map(|h| {
+        crate::platform::to_slash(h)
+            .trim_end_matches('/')
+            .to_string()
+    }) else {
         return full;
     };
     if home.is_empty() {
@@ -165,7 +168,7 @@ fn expand_home(entry: &str, home: Option<&Path>) -> Option<String> {
     match rest {
         None => Some(entry.to_string()),
         Some(rest) => {
-            let home = home?.to_string_lossy();
+            let home = crate::platform::to_slash(home?);
             let home = home.trim_end_matches('/');
             Some(if rest.is_empty() {
                 home.to_string()
@@ -361,7 +364,8 @@ fn parse_folders(v: &str) -> Result<Vec<String>> {
 
 /// Trim whitespace and trailing slashes (but keep `/` and `~`).
 fn normalise_folder(f: &str) -> String {
-    let f = f.trim();
+    let f = crate::platform::to_slash_str(f.trim());
+    let f = f.as_str();
     let t = f.trim_end_matches('/');
     if t.is_empty() && f.starts_with('/') {
         "/".to_string()
@@ -371,7 +375,7 @@ fn normalise_folder(f: &str) -> String {
 }
 
 fn check_folder(f: &str) -> Result<()> {
-    if f == "~" || f.starts_with("~/") || f.starts_with('/') {
+    if f == "~" || f.starts_with("~/") || crate::platform::is_absolute_str(f) {
         Ok(())
     } else {
         Err(usage(format!(

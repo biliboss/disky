@@ -17,6 +17,11 @@ export default defineConfig({
     baseURL: "http://localhost:4173",
     viewport: { width: 1200, height: 780 },
     deviceScaleFactor: 1,
+    // The baselines are the macOS design ("Reveal in Finder", "Macintosh
+    // HD"); the "Desktop Chrome" profile reports Windows, which the app
+    // would word as "Show in Explorer" (gui/src/lib/os.ts, REQ-XPLAT-008).
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
   },
   webServer: {
     command: "npm run build && npm run preview",

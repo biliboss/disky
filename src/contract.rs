@@ -344,14 +344,17 @@ pub fn disk_near(path: &Path) -> Result<Disk> {
     path.ancestors()
         .filter(|a| !a.as_os_str().is_empty() && a.exists())
         .find_map(|a| disk_usage(a).ok())
-        .map_or_else(|| disk_usage(Path::new("/")), Ok)
+        .map_or_else(
+            || disk_usage(Path::new(&crate::platform::default_root())),
+            Ok,
+        )
 }
 
 /// The view when no snapshot exists yet: live disk usage, no categories, and
 /// `last_scan_at` null so the idle kicker reads "No scans yet"
 /// (REQ-DCLEAN-003.A2). Goal and preferences come from `prefs`.
 pub fn empty_view(prefs: &Preferences) -> Result<CleanupView> {
-    let disk = disk_usage(Path::new("/"))?;
+    let disk = disk_usage(Path::new(&crate::platform::default_root()))?;
     Ok(cleanup_view(
         None,
         &[],

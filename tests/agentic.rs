@@ -22,8 +22,13 @@ static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 
 fn temp_dir() -> PathBuf {
     let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    // One level below a shared folder: on Linux `/tmp` is itself a
+    // cleanup location (`temp`, REQ-XPLAT-005), so a home directly in it
+    // would be reported whole and hide what it holds. Its child
+    // `/tmp/disky-it` lies above the scan root and is never in scope.
     let mut d = std::env::temp_dir();
-    d.push(format!("disky-it-{}-{}", std::process::id(), id));
+    d.push("disky-it");
+    d.push(format!("{}-{}", std::process::id(), id));
     let _ = fs::remove_dir_all(&d);
     fs::create_dir_all(&d).unwrap();
     d
@@ -213,12 +218,67 @@ fn scan_emit_bundle_includes_top_and_stats() {
     assert!(!v["ext"].as_array().unwrap().is_empty());
 }
 
+/// Point every per-user folder disky reads at `home`, on every OS
+/// (REQ-XPLAT-002): `HOME`, `USERPROFILE`, `%LOCALAPPDATA%`, `%APPDATA%`.
+/// On Windows the Recycle Bin lives on the drive, not in the home, so the
+/// Trash root is pinned under `home` too (`DISKY_TRASH_ROOT`).
+fn in_home<'a>(cmd: &'a mut Command, home: &std::path::Path) -> &'a mut Command {
+    cmd.env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("LOCALAPPDATA", home.join("AppData/Local"))
+        .env("APPDATA", home.join("AppData/Roaming"));
+    if cfg!(windows) {
+        cmd.env("DISKY_TRASH_ROOT", home.join("RecycleBin"));
+    }
+    cmd
+}
+
+/// Where a reversible clean under the temp `home` puts items on this OS.
+fn trash_items(home: &std::path::Path) -> PathBuf {
+    if cfg!(target_os = "macos") {
+        home.join(".Trash")
+    } else if cfg!(windows) {
+        home.join("RecycleBin")
+    } else {
+        home.join(".local/share/Trash/files")
+    }
+}
+
+/// Count of items in the temp Trash (records such as `$I…` left out).
+fn trash_count(home: &std::path::Path) -> usize {
+    fs::read_dir(trash_items(home))
+        .unwrap()
+        .filter(|e| {
+            !e.as_ref()
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with("$I")
+        })
+        .count()
+}
+
+/// A path as the engine prints it: `/` separators on every OS.
+fn slash(p: &std::path::Path) -> String {
+    disky::platform::to_slash(p)
+}
+
+/// The per-OS app cache folder under `home` (REQ-XPLAT-005).
+fn app_cache_dir(home: &std::path::Path) -> PathBuf {
+    if cfg!(target_os = "macos") {
+        home.join("Library/Caches")
+    } else if cfg!(windows) {
+        home.join("AppData/Local/Microsoft/Windows/INetCache")
+    } else {
+        home.join(".cache")
+    }
+}
+
 /// Run disky with `HOME` pointed at `home`, so the Trash, the data dir and
 /// the clean-history log all live under the test's temp dir — never the
 /// real user's.
 fn run_in_home(home: &std::path::Path, args: &[&str]) -> std::process::Output {
-    Command::new(disky_bin())
-        .env("HOME", home)
+    in_home(&mut Command::new(disky_bin()), home)
         .env_remove("XDG_DATA_HOME")
         .env_remove("DISKY_CONFIG_PATH")
         .env_remove("DISKY_FORMAT")
@@ -301,7 +361,7 @@ fn cleanup_reversible_moves_to_trash() {
         !home.join("proj/node_modules").exists(),
         "node_modules should have been moved to trash"
     );
-    let in_trash = fs::read_dir(home.join(".Trash")).unwrap().count();
+    let in_trash = trash_count(&home);
     assert_eq!(in_trash, 1, "moved into the temp HOME's Trash");
     let _ = fs::remove_dir_all(&home);
 }
@@ -558,6 +618,8 @@ fn gui_categories_match_cli_cleanup_totals() {
 fn prefs_file(home: &std::path::Path) -> PathBuf {
     let data = if cfg!(target_os = "macos") {
         home.join("Library/Application Support")
+    } else if cfg!(windows) {
+        home.join("AppData/Local")
     } else {
         home.join(".local/share")
     };
@@ -671,7 +733,7 @@ fn prefs_malformed_store_is_reported_not_replaced() {
 #[test]
 fn skip_recently_used_keeps_fresh_safe_categories() {
     let home = temp_dir();
-    let cache = home.join("Library/Caches/com.example.fresh");
+    let cache = app_cache_dir(&home).join("com.example.fresh");
     fs::create_dir_all(&cache).unwrap();
     fs::write(cache.join("blob"), vec![1u8; 4096]).unwrap();
     let db = home.join("snap.db");
@@ -836,7 +898,7 @@ fn map_lists_children_largest_first_and_outside_exits_not_found() {
         ],
     );
     assert_eq!(m["kind"], "map");
-    assert_eq!(m["path"], root.to_str().unwrap());
+    assert_eq!(m["path"], slash(&root).as_str());
     let names: Vec<&str> = m["records"]
         .as_array()
         .unwrap()
@@ -1080,12 +1142,12 @@ fn trash_moves_named_paths_and_records_one_titled_entry() {
     );
     assert_eq!(v["kind"], "trash");
     assert_eq!(v["handled"].as_array().unwrap().len(), 2, "{v}");
-    assert_eq!(v["failed"][0]["path"], gone.to_str().unwrap());
+    assert_eq!(v["failed"][0]["path"], slash(&gone).as_str());
     assert_eq!(v["failed"][0]["reason"], "missing");
     assert!(v["freed_physical_bytes"].as_u64().unwrap() >= 72 * 1024);
     assert!(v["disk"]["capacity_bytes"].as_u64().unwrap() > 0);
     assert!(!a.exists() && !b.exists());
-    let in_trash = fs::read_dir(home.join(".Trash")).unwrap().count();
+    let in_trash = trash_count(&home);
     assert_eq!(in_trash, 2, "moved into the temp HOME's Trash");
 
     let h = json_in_home(&home, &["history", "--format", "json"]);
@@ -1226,6 +1288,7 @@ fn schema_lists_the_dupes_command() {
 
 /// REQ-DSCR-007.A1, A2: `disky agents` lists claude, codex and gemini in that
 /// order, finds an executable on PATH, and never runs it.
+#[cfg(unix)]
 #[test]
 fn agents_lists_three_in_order_and_never_runs_them() {
     use std::os::unix::fs::PermissionsExt;
@@ -1238,6 +1301,7 @@ fn agents_lists_three_in_order_and_never_runs_them() {
     fs::set_permissions(&exe, fs::Permissions::from_mode(0o755)).unwrap();
     let out = Command::new(disky_bin())
         .env("HOME", &home)
+        .env("USERPROFILE", &home)
         .env("PATH", &bin)
         .env_remove("DISKY_CONFIG_PATH")
         .env_remove("DISKY_FORMAT")
@@ -1253,7 +1317,7 @@ fn agents_lists_three_in_order_and_never_runs_them() {
     let names: Vec<&str> = recs.iter().map(|r| r["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["Claude Code", "Codex CLI", "Gemini CLI"]);
     assert_eq!(recs[1]["found"], true);
-    assert_eq!(recs[1]["path"], exe.to_str().unwrap());
+    assert_eq!(recs[1]["path"], slash(&exe).as_str());
     assert_eq!(recs[1]["display_path"], "~/bin/codex");
     assert!(!marker.exists(), "detection ran the CLI");
 }

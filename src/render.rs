@@ -573,7 +573,9 @@ tr:hover{{background:#222}}h1{{color:#0ff}}</style></head>
     );
 
     fs::write(&out, html)?;
-    std::process::Command::new("open").arg(&out).spawn()?;
+    if let Err(e) = crate::platform::open_path(&out) {
+        eprintln!("render: {e}");
+    }
     eprintln!("Report: {}", out);
     Ok(())
 }

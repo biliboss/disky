@@ -7,6 +7,7 @@ import type { CategoryView, CleanupView } from "../../lib/contract";
 import { NUMERIC_CLASS, formatBytes } from "../../lib/format";
 import { iconByName } from "../../shell/iconByName";
 import { FULL_DISK_ACCESS_LINK, SKIPPED_HINT, skippedPaths } from "./errorCopy";
+import { hasFullDiskAccess, OS } from "../../lib/os";
 import { listedCategories, type SmartCleanState } from "./phase";
 import {
   EMPTY_RESULTS,
@@ -87,9 +88,11 @@ export function Results(props: ResultsProps) {
       <Show when={props.view.skipped_paths > 0}>
         <p class="notice skipped-note" role="status" data-testid="skipped-paths">
           {skippedPaths(props.view.skipped_paths)}. {SKIPPED_HINT}{" "}
-          <button type="button" class="notice-link" onClick={() => props.onOpenFullDiskAccess?.()}>
-            {FULL_DISK_ACCESS_LINK}
-          </button>
+          <Show when={hasFullDiskAccess(OS)}>
+            <button type="button" class="notice-link" onClick={() => props.onOpenFullDiskAccess?.()}>
+              {FULL_DISK_ACCESS_LINK}
+            </button>
+          </Show>
         </p>
       </Show>
       <Show when={listed().length > 0} fallback={<EmptyResults onBack={props.onBack} />}>

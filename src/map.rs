@@ -89,6 +89,7 @@ impl MapView {
 
 /// `path` without a trailing `/`; the filesystem root stays `/`.
 pub fn normalize(path: &str) -> String {
+    let path = crate::platform::to_slash_str(path);
     let t = path.trim_end_matches('/');
     if t.is_empty() {
         "/".to_string()
@@ -309,6 +310,30 @@ mod tests {
         // Components, not string prefixes: `/r/App` excludes nothing here.
         let v = map(&sample(), None, &["/r/App".into()], 1).unwrap();
         assert_eq!(v.total_bytes, 1_059);
+    }
+
+    /// A Windows drive root, stored `/`-separated (REQ-XPLAT-001.A3).
+    #[test]
+    fn drive_root_children_are_listed() {
+        let conn = snapshot(
+            &[
+                ("C:/", true, 0),
+                ("C:/Users", true, 0),
+                ("C:/Users/me/f", false, 5),
+                ("C:/Windows", true, 0),
+                ("C:/Windows/x.dll", false, 3),
+                ("D:/other", false, 99),
+            ],
+            "C:/",
+        );
+        for p in [None, Some("C:/"), Some("C:")] {
+            let v = map(&conn, p, &[], 1).unwrap();
+            assert_eq!(v.path, "C:", "{p:?}");
+            assert_eq!(names(&v), [("Users", 5, true), ("Windows", 3, true)]);
+            assert_eq!(v.records[0].path, "C:/Users");
+        }
+        let users = map(&conn, Some("C:/Users"), &[], 1).unwrap();
+        assert_eq!(names(&users), [("me", 5, true)]);
     }
 
     #[test]

@@ -46,8 +46,8 @@ const SNAPSHOT_HELP: &str = "Snapshot to query: @latest, an ID, or a path";
 pub enum Command {
     /// Scan a directory and store results
     Scan {
-        /// Path to scan
-        #[arg(default_value = "/")]
+        /// Path to scan (default: `/`, or the system drive on Windows)
+        #[arg(default_value_t = disky::platform::default_root())]
         path: String,
 
         /// Output DuckDB file path (default: auto-named in data dir)

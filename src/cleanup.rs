@@ -145,6 +145,219 @@ const LEFTOVER_SKIP: &[&str] = &[
     "Spotlight",
 ];
 
+/// One location category's folders on one OS.
+#[derive(Debug, Clone, Copy)]
+pub struct LocationSet {
+    pub locations: &'static [Location],
+    /// Child basename prefixes never reported.
+    pub skip_children: &'static [&'static str],
+    /// The most cautious class among `locations`.
+    pub safety: Safety,
+}
+
+impl LocationSet {
+    const fn matcher(self, filter: LocationFilter) -> Matcher {
+        Matcher::Location {
+            locations: self.locations,
+            filter,
+            skip_children: self.skip_children,
+        }
+    }
+}
+
+/// The folders each location category targets on one OS (REQ-XPLAT-005).
+/// The category names, labels and icons are the same everywhere; only the
+/// folders differ.
+#[derive(Debug, Clone, Copy)]
+pub struct OsLocations {
+    pub system_caches: LocationSet,
+    pub app_caches: LocationSet,
+    pub temp: LocationSet,
+    pub logs: LocationSet,
+    pub trash: LocationSet,
+    pub app_leftovers: LocationSet,
+}
+
+const fn loc(pattern: &'static str, safety: Safety) -> Location {
+    Location { pattern, safety }
+}
+
+const NONE: LocationSet = LocationSet {
+    locations: &[],
+    skip_children: &[],
+    safety: Safety::Review,
+};
+
+/// macOS (the original table).
+pub const MACOS_LOCATIONS: OsLocations = OsLocations {
+    system_caches: LocationSet {
+        locations: &[loc("/Library/Caches", Safety::Safe)],
+        // Apple's own system caches are SIP-managed or rebuilt by daemons
+        // that misbehave while they are missing.
+        skip_children: &["com.apple."],
+        safety: Safety::Safe,
+    },
+    app_caches: LocationSet {
+        locations: &[loc("~/Library/Caches", Safety::Safe)],
+        // iCloud sync state lives here; deleting it forces a full resync.
+        skip_children: &[
+            "CloudKit",
+            "com.apple.bird",
+            "com.apple.cloudd",
+            "com.apple.nsurlsessiond",
+            "FamilyCircle",
+            "disky",
+        ],
+        safety: Safety::Safe,
+    },
+    temp: LocationSet {
+        locations: &[
+            loc("/private/tmp", Safety::Safe),
+            // Per-user temp dirs hold live files of running apps.
+            loc("/private/var/folders/*/*/T", Safety::Review),
+        ],
+        // launchd sockets and Finder's in-flight copies.
+        skip_children: &["com.apple.", "TemporaryItems"],
+        safety: Safety::Review,
+    },
+    logs: LocationSet {
+        locations: &[
+            loc("~/Library/Logs", Safety::Review),
+            loc("/Library/Logs", Safety::Review),
+        ],
+        skip_children: &[],
+        safety: Safety::Review,
+    },
+    trash: LocationSet {
+        locations: &[loc("~/.Trash", Safety::Safe)],
+        skip_children: &[],
+        safety: Safety::Safe,
+    },
+    app_leftovers: LocationSet {
+        locations: &[
+            // Keyed by app name.
+            loc("~/Library/Application Support", Safety::Review),
+            // Keyed by bundle id.
+            loc("~/Library/Containers", Safety::Review),
+        ],
+        skip_children: LEFTOVER_SKIP,
+        safety: Safety::Review,
+    },
+};
+
+/// Linux (freedesktop / FHS folders).
+pub const LINUX_LOCATIONS: OsLocations = OsLocations {
+    system_caches: LocationSet {
+        locations: &[loc("/var/cache", Safety::Review)],
+        // debconf holds the package configuration database, not a cache;
+        // ldconfig's cache is rebuilt only by root.
+        skip_children: &["debconf", "ldconfig"],
+        safety: Safety::Review,
+    },
+    app_caches: LocationSet {
+        locations: &[loc("~/.cache", Safety::Safe)],
+        skip_children: &["disky"],
+        safety: Safety::Safe,
+    },
+    temp: LocationSet {
+        // Both hold live files of running programs.
+        locations: &[loc("/tmp", Safety::Review), loc("/var/tmp", Safety::Review)],
+        // Live sockets and per-service private tmp (dot-names, such as
+        // `.X11-unix`, are never offered).
+        skip_children: &[
+            "systemd-private-",
+            "ssh-",
+            "tmux-",
+            "snap-private-tmp",
+            "pulse-",
+        ],
+        safety: Safety::Review,
+    },
+    logs: LocationSet {
+        locations: &[loc("/var/log", Safety::Review)],
+        skip_children: &[],
+        safety: Safety::Review,
+    },
+    trash: LocationSet {
+        locations: &[loc("~/.local/share/Trash/files", Safety::Safe)],
+        skip_children: &[],
+        safety: Safety::Safe,
+    },
+    // No installed-app list: when in doubt, don't report (REQ-XPLAT-005.A3).
+    app_leftovers: NONE,
+};
+
+/// Windows. `%SystemDrive%` expands to the system drive (`C:`).
+pub const WINDOWS_LOCATIONS: OsLocations = OsLocations {
+    system_caches: LocationSet {
+        // Windows Update's download cache; it re-downloads what it needs.
+        locations: &[loc(
+            "%SystemDrive%/Windows/SoftwareDistribution/Download",
+            Safety::Review,
+        )],
+        skip_children: &[],
+        safety: Safety::Review,
+    },
+    app_caches: LocationSet {
+        locations: &[loc(
+            "~/AppData/Local/Microsoft/Windows/INetCache",
+            Safety::Safe,
+        )],
+        skip_children: &["desktop.ini"],
+        safety: Safety::Safe,
+    },
+    temp: LocationSet {
+        locations: &[
+            loc("~/AppData/Local/Temp", Safety::Review),
+            loc("%SystemDrive%/Windows/Temp", Safety::Review),
+        ],
+        skip_children: &[],
+        safety: Safety::Review,
+    },
+    logs: LocationSet {
+        locations: &[loc("%SystemDrive%/Windows/Logs", Safety::Review)],
+        skip_children: &[],
+        safety: Safety::Review,
+    },
+    trash: LocationSet {
+        // Each user's bin is a SID folder; `$I` records go with their `$R`
+        // item, so they are not offered on their own.
+        locations: &[loc("%SystemDrive%/$Recycle.Bin/*", Safety::Safe)],
+        skip_children: &["$I", "desktop.ini"],
+        safety: Safety::Safe,
+    },
+    app_leftovers: NONE,
+};
+
+impl OsLocations {
+    /// The folders for location category `name`; `None` for a category
+    /// whose folders are the same on every OS (`old_downloads`).
+    pub fn set_for(&self, name: &str) -> Option<LocationSet> {
+        Some(match name {
+            "system_caches" => self.system_caches,
+            "app_caches" => self.app_caches,
+            "temp" => self.temp,
+            "logs" => self.logs,
+            TRASH_CATEGORY => self.trash,
+            "app_leftovers" => self.app_leftovers,
+            _ => return None,
+        })
+    }
+}
+
+impl Default for OsLocations {
+    fn default() -> Self {
+        OS_LOCATIONS
+    }
+}
+
+/// This build's table.
+pub const OS_LOCATIONS: OsLocations = match crate::platform::Os::current() {
+    crate::platform::Os::MacOs => MACOS_LOCATIONS,
+    crate::platform::Os::Linux => LINUX_LOCATIONS,
+    crate::platform::Os::Windows => WINDOWS_LOCATIONS,
+};
+
 /// The single table of cleanup categories (REQ-DCLEAN-033.A2). The GUI and
 /// `disky schema` read this; nothing else defines a category.
 pub const CATEGORIES: &[Category] = &[
@@ -230,23 +443,14 @@ pub const CATEGORIES: &[Category] = &[
         matcher: Matcher::Basename(&[".pytest_cache"]),
         note: None,
     },
-    // ── System-level categories (location rules) ───────────────────────
+    // ── System-level categories (location rules, per OS: REQ-XPLAT-005) ─
     Category {
         name: "system_caches",
         label: "System caches",
         icon: "box",
         description: "Rebuilt automatically when needed",
-        safety: Safety::Safe,
-        matcher: Matcher::Location {
-            locations: &[Location {
-                pattern: "/Library/Caches",
-                safety: Safety::Safe,
-            }],
-            filter: LocationFilter::All,
-            // Apple's own system caches are SIP-managed or rebuilt by
-            // daemons that misbehave while they are missing.
-            skip_children: &["com.apple."],
-        },
+        safety: OS_LOCATIONS.system_caches.safety,
+        matcher: OS_LOCATIONS.system_caches.matcher(LocationFilter::All),
         note: None,
     },
     Category {
@@ -254,23 +458,8 @@ pub const CATEGORIES: &[Category] = &[
         label: "App caches",
         icon: "app-window",
         description: "Rebuilt by each app the next time it runs",
-        safety: Safety::Safe,
-        matcher: Matcher::Location {
-            locations: &[Location {
-                pattern: "~/Library/Caches",
-                safety: Safety::Safe,
-            }],
-            filter: LocationFilter::All,
-            // iCloud sync state lives here; deleting it forces a full resync.
-            skip_children: &[
-                "CloudKit",
-                "com.apple.bird",
-                "com.apple.cloudd",
-                "com.apple.nsurlsessiond",
-                "FamilyCircle",
-                "disky",
-            ],
-        },
+        safety: OS_LOCATIONS.app_caches.safety,
+        matcher: OS_LOCATIONS.app_caches.matcher(LocationFilter::All),
         note: None,
     },
     Category {
@@ -278,23 +467,8 @@ pub const CATEGORIES: &[Category] = &[
         label: "Temporary files",
         icon: "clock",
         description: "Left behind by installers and apps",
-        safety: Safety::Review,
-        matcher: Matcher::Location {
-            locations: &[
-                Location {
-                    pattern: "/private/tmp",
-                    safety: Safety::Safe,
-                },
-                // Per-user temp dirs hold live files of running apps.
-                Location {
-                    pattern: "/private/var/folders/*/*/T",
-                    safety: Safety::Review,
-                },
-            ],
-            filter: LocationFilter::All,
-            // launchd sockets and Finder's in-flight copies.
-            skip_children: &["com.apple.", "TemporaryItems"],
-        },
+        safety: OS_LOCATIONS.temp.safety,
+        matcher: OS_LOCATIONS.temp.matcher(LocationFilter::All),
         note: None,
     },
     Category {
@@ -302,21 +476,8 @@ pub const CATEGORIES: &[Category] = &[
         label: "Logs & crash reports",
         icon: "file-text",
         description: "App and system logs; kept only for troubleshooting",
-        safety: Safety::Review,
-        matcher: Matcher::Location {
-            locations: &[
-                Location {
-                    pattern: "~/Library/Logs",
-                    safety: Safety::Review,
-                },
-                Location {
-                    pattern: "/Library/Logs",
-                    safety: Safety::Review,
-                },
-            ],
-            filter: LocationFilter::All,
-            skip_children: &[],
-        },
+        safety: OS_LOCATIONS.logs.safety,
+        matcher: OS_LOCATIONS.logs.matcher(LocationFilter::All),
         note: None,
     },
     Category {
@@ -324,15 +485,8 @@ pub const CATEGORIES: &[Category] = &[
         label: "Trash",
         icon: "trash",
         description: "Items already in the Trash; cleaning empties them permanently",
-        safety: Safety::Safe,
-        matcher: Matcher::Location {
-            locations: &[Location {
-                pattern: "~/.Trash",
-                safety: Safety::Safe,
-            }],
-            filter: LocationFilter::All,
-            skip_children: &[],
-        },
+        safety: OS_LOCATIONS.trash.safety,
+        matcher: OS_LOCATIONS.trash.matcher(LocationFilter::All),
         note: Some(TRASH_NOTE),
     },
     Category {
@@ -340,23 +494,10 @@ pub const CATEGORIES: &[Category] = &[
         label: "App leftovers",
         icon: "package",
         description: "Support files of apps that are no longer installed",
-        safety: Safety::Review,
-        matcher: Matcher::Location {
-            locations: &[
-                // Keyed by app name.
-                Location {
-                    pattern: "~/Library/Application Support",
-                    safety: Safety::Review,
-                },
-                // Keyed by bundle id.
-                Location {
-                    pattern: "~/Library/Containers",
-                    safety: Safety::Review,
-                },
-            ],
-            filter: LocationFilter::AppLeftovers,
-            skip_children: LEFTOVER_SKIP,
-        },
+        safety: OS_LOCATIONS.app_leftovers.safety,
+        matcher: OS_LOCATIONS
+            .app_leftovers
+            .matcher(LocationFilter::AppLeftovers),
         note: None,
     },
     Category {
@@ -741,6 +882,9 @@ pub struct ScanContext {
     /// Installed apps for the leftover check. `None` → read from disk the
     /// first time `app_leftovers` needs it.
     pub installed_apps: Option<InstalledApps>,
+    /// The location table to match: this OS's ([`OS_LOCATIONS`]); tests
+    /// pick another OS's to check its folders anywhere.
+    pub locations: OsLocations,
 }
 
 impl ScanContext {
@@ -755,13 +899,14 @@ impl ScanContext {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
         ScanContext {
-            home: dirs::home_dir(),
+            home: crate::platform::home_dir(),
             scan_root,
             ignore,
             excluded: Vec::new(),
             recent_cutoff: None,
             now_secs,
             installed_apps: None,
+            locations: OS_LOCATIONS,
         }
     }
 
@@ -787,9 +932,13 @@ impl ScanContext {
 
     /// Expand a location pattern; `None` if it needs `~` and home is unknown.
     fn expand(&self, pattern: &str) -> Option<String> {
+        if let Some(rest) = pattern.strip_prefix("%SystemDrive%") {
+            let root = crate::platform::default_root();
+            return Some(format!("{}{rest}", root.trim_end_matches('/')));
+        }
         match pattern.strip_prefix("~/") {
             Some(rest) => {
-                let home = self.home.as_ref()?.to_string_lossy();
+                let home = crate::platform::to_slash(self.home.as_ref()?);
                 Some(format!("{}/{}", home.trim_end_matches('/'), rest))
             }
             None => Some(pattern.to_string()),
@@ -834,6 +983,10 @@ fn location_roots(
     let mut locs: Vec<(&'static Category, Safety, String)> = Vec::new();
     for c in cats {
         if let Matcher::Location { locations, .. } = c.matcher {
+            let locations = ctx
+                .locations
+                .set_for(c.name)
+                .map_or(locations, |s| s.locations);
             for l in locations {
                 if let Some(p) = ctx.expand(l.pattern) {
                     locs.push((c, l.safety, p.trim_end_matches('/').to_string()));
@@ -894,6 +1047,10 @@ fn location_roots(
         else {
             continue;
         };
+        let skip_children = ctx
+            .locations
+            .set_for(cat.name)
+            .map_or(skip_children, |s| s.skip_children);
         // Hidden entries (`.DS_Store`, `.localized`) are never reported.
         if name.starts_with('.') || skip_children.iter().any(|s| name.starts_with(s)) {
             continue;
@@ -1246,11 +1403,10 @@ pub struct ApplyOutcome {
     pub entry: Option<crate::history::Entry>,
 }
 
-/// `~/.Trash`, the Trash used outside tests.
+/// The OS Trash used outside tests (REQ-XPLAT-006): `~/.Trash`, the
+/// freedesktop Trash, or the Recycle Bin.
 fn user_trash() -> Result<PathBuf> {
-    Ok(dirs::home_dir()
-        .ok_or_else(|| anyhow::anyhow!("home dir unavailable"))?
-        .join(".Trash"))
+    crate::trash::user_root()
 }
 
 /// The Trash root [`apply`] uses for `mode`. Delete mode never touches the
@@ -1368,6 +1524,7 @@ fn apply_one(
     trash_root: &Path,
 ) -> Result<Option<String>, &'static str> {
     let p = Path::new(&h.path);
+    let bin = crate::trash::Bin::for_root(trash_root);
     match mode {
         ApplyMode::Delete => {
             let is_dir = p.symlink_metadata().is_ok_and(|m| m.is_dir());
@@ -1377,7 +1534,13 @@ fn apply_one(
                 std::fs::remove_file(p)
             };
             match res {
-                Ok(()) => Ok(None),
+                Ok(()) => {
+                    // Emptied for good: its .trashinfo / $I record goes too.
+                    if bin.holds(p) {
+                        crate::trash::forget_record(p);
+                    }
+                    Ok(None)
+                }
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(FAILURE_MISSING),
                 Err(e) => {
                     eprintln!("cleanup: skip {} (delete failed: {e})", h.path);
@@ -1386,8 +1549,7 @@ fn apply_one(
             }
         }
         ApplyMode::Trash => {
-            let in_trash = !trash_root.as_os_str().is_empty() && p.starts_with(trash_root);
-            if h.category == TRASH_CATEGORY || in_trash {
+            if h.category == TRASH_CATEGORY || bin.holds(p) {
                 eprintln!(
                     "cleanup: refused {} — it is already in the Trash and cannot be \
                      removed reversibly; rerun with --apply without --reversible to \
@@ -1399,8 +1561,8 @@ fn apply_one(
             if p.symlink_metadata().is_err() {
                 return Err(FAILURE_MISSING);
             }
-            match move_to_trash(&h.path, trash_root) {
-                Ok(dest) => Ok(Some(dest.to_string_lossy().into_owned())),
+            match bin.put(p, h.bytes) {
+                Ok(dest) => Ok(Some(crate::platform::to_slash(&dest))),
                 Err(_) if p.symlink_metadata().is_ok() => {
                     eprintln!("cleanup: skip {} (move-to-trash failed)", h.path);
                     Err(FAILURE_TRASH_MOVE)
@@ -1409,27 +1571,6 @@ fn apply_one(
             }
         }
     }
-}
-
-fn move_to_trash(path: &str, trash: &Path) -> Result<PathBuf> {
-    std::fs::create_dir_all(trash)?;
-    let src = Path::new(path);
-    let name = src
-        .file_name()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "disky-trashed".into());
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let stamp = format!("{}-{}", now.as_secs(), now.subsec_nanos());
-    let mut dest = trash.join(format!("{}-{}", name, stamp));
-    let mut n = 0u32;
-    while dest.exists() {
-        n += 1;
-        dest = trash.join(format!("{}-{}-{}", name, stamp, n));
-    }
-    std::fs::rename(src, &dest)?;
-    Ok(dest)
 }
 
 #[cfg(test)]
@@ -1514,13 +1655,94 @@ mod tests {
         }
     }
 
+    /// Same names everywhere; each set's safety is its most cautious
+    /// location (REQ-XPLAT-005.A1).
+    #[test]
+    fn every_os_table_names_the_same_categories() {
+        let names = [
+            "system_caches",
+            "app_caches",
+            "temp",
+            "logs",
+            TRASH_CATEGORY,
+            "app_leftovers",
+        ];
+        for table in [MACOS_LOCATIONS, LINUX_LOCATIONS, WINDOWS_LOCATIONS] {
+            for n in names {
+                let set = table.set_for(n).unwrap();
+                for l in set.locations {
+                    assert!(
+                        l.safety == set.safety || set.safety == Safety::Review,
+                        "{n}: {} is more cautious than its set",
+                        l.pattern
+                    );
+                    assert!(
+                        l.pattern.starts_with('/')
+                            || l.pattern.starts_with("~/")
+                            || l.pattern.starts_with("%SystemDrive%/"),
+                        "{n}: {} must be absolute",
+                        l.pattern
+                    );
+                }
+            }
+            assert_eq!(table.set_for("old_downloads").map(|_| ()), None);
+            assert!(CATEGORIES.iter().any(|c| c.name == "old_downloads"));
+        }
+        // No installed-app list outside macOS: no leftovers (A3).
+        assert!(LINUX_LOCATIONS.app_leftovers.locations.is_empty());
+        assert!(WINDOWS_LOCATIONS.app_leftovers.locations.is_empty());
+        assert_eq!(
+            LINUX_LOCATIONS.trash.locations[0].pattern,
+            "~/.local/share/Trash/files"
+        );
+    }
+
+    /// Linux `/tmp` holds live sockets; none of them is offered (A2).
+    #[test]
+    fn linux_temp_skips_live_sockets() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::create_schema(&conn).unwrap();
+        let rows = [
+            ("/tmp", true, 0),
+            ("/tmp/.X11-unix", true, 0),
+            ("/tmp/.X11-unix/X0", false, 1),
+            ("/tmp/systemd-private-abc-colord.service-x", true, 0),
+            ("/tmp/ssh-XXXX", true, 0),
+            ("/tmp/tmux-1000", true, 0),
+            ("/tmp/old-installer", true, 0),
+            ("/tmp/old-installer/a.bin", false, 500),
+            ("/var/tmp/cache.bin", false, 70),
+        ];
+        for (p, d, b) in rows {
+            let name = p.rsplit('/').next().unwrap();
+            conn.execute(
+                "INSERT INTO files (path, name, ext, size, physical_size, mtime, is_dir, depth)
+                 VALUES (?, ?, NULL, ?, ?, 0, ?, 0)",
+                duckdb::params![p, name, b, b, d],
+            )
+            .unwrap();
+        }
+        let ctx = ScanContext {
+            scan_root: Some("/".into()),
+            locations: LINUX_LOCATIONS,
+            now_secs: 1_000_000_000,
+            ..Default::default()
+        };
+        let hits = scan_with(&conn, &["temp".to_string()], 100, &ctx).unwrap();
+        let paths: Vec<&str> = hits.iter().map(|h| h.path.as_str()).collect();
+        assert_eq!(paths, ["/tmp/old-installer", "/var/tmp/cache.bin"]);
+        assert!(hits.iter().all(|h| h.safety == Safety::Review));
+    }
+
     #[test]
     fn location_safety_classes_match_contract() {
         let loc_safety = |cat: &str, pat: &str| -> Safety {
-            let Matcher::Location { locations, .. } = category(cat).unwrap().matcher else {
-                panic!("{cat} is not a location rule");
-            };
-            locations.iter().find(|l| l.pattern == pat).unwrap().safety
+            let set = MACOS_LOCATIONS.set_for(cat).unwrap();
+            set.locations
+                .iter()
+                .find(|l| l.pattern == pat)
+                .unwrap()
+                .safety
         };
         assert_eq!(loc_safety("system_caches", "/Library/Caches"), Safety::Safe);
         assert_eq!(loc_safety("app_caches", "~/Library/Caches"), Safety::Safe);
@@ -1530,6 +1752,7 @@ mod tests {
             Safety::Review
         );
         assert_eq!(loc_safety("trash", "~/.Trash"), Safety::Safe);
+        assert_eq!(MACOS_LOCATIONS.logs.safety, Safety::Review);
         assert_eq!(category("logs").unwrap().safety, Safety::Review);
         assert_eq!(category("app_leftovers").unwrap().safety, Safety::Review);
         assert_eq!(category("old_downloads").unwrap().safety, Safety::Review);
@@ -1861,6 +2084,11 @@ mod tests {
     #[test]
     fn apply_delete_failure_leaves_path_and_proceeds() {
         use std::os::unix::fs::PermissionsExt;
+        // Root reads and deletes regardless of mode bits (containers, CI
+        // images): there is no permission failure to observe.
+        if unsafe { libc::geteuid() } == 0 {
+            return;
+        }
         let tmp = tempfile::tempdir().unwrap();
         let log = tmp.path().join("history.json");
         // A file inside a read-only dir cannot be unlinked.

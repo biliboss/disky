@@ -1,3 +1,4 @@
+import { OS, skippedHint } from "../../lib/os";
 /**
  * Error-state copy (REQ-DCLEAN-018). Failures are told apart by the engine's
  * exit-code slug (`EngineError.code`), never by message text.
@@ -26,5 +27,6 @@ export function skippedPaths(n: number): string {
   return n === 1 ? "1 path skipped" : `${n} paths skipped`;
 }
 
-export const SKIPPED_HINT = "disky needs Full Disk Access to read them.";
+/** Worded for the OS: only macOS has a Full Disk Access setting (REQ-XPLAT-010.A2). */
+export const SKIPPED_HINT = skippedHint(OS);
 export const FULL_DISK_ACCESS_LINK = "Open Full Disk Access";

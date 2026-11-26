@@ -223,6 +223,9 @@ pub fn restore(path: &Path, id: &str) -> Result<RestoreReport> {
                     .and_then(|()| fs::rename(src, dest));
                 match moved {
                     Ok(()) => {
+                        // Out of the Trash: drop its .trashinfo / $I record
+                        // (REQ-XPLAT-006.A4).
+                        crate::trash::forget_record(src);
                         item.status = ItemStatus::Restored;
                         report.restored.push(item.original_path.clone());
                     }
@@ -271,7 +274,7 @@ fn save(path: &Path, entries: Vec<Entry>) -> Result<()> {
     Ok(())
 }
 
-/// Exclusive `flock` on a sibling lock file; released on drop (and by the
+/// Exclusive OS file lock on a sibling lock file; released on drop (and by the
 /// kernel if the process dies). Shared with the preferences store
 /// (`prefs.lock`), which follows the same read-modify-write discipline.
 pub(crate) struct Lock(#[allow(dead_code)] fs::File);
@@ -285,12 +288,62 @@ impl Lock {
             .write(true)
             .open(path)
             .with_context(|| format!("opening {}", path.display()))?;
+        // `flock` on Unix, `LockFileEx` on Windows (REQ-XPLAT-004); blocks
+        // until granted, and the OS releases it when the file closes.
+        // (`File::lock` needs Rust 1.89; the MSRV is lower.)
         #[cfg(unix)]
         {
             use std::os::unix::io::AsRawFd;
             // SAFETY: flock on a valid, owned fd; blocks until granted.
             let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
             if rc != 0 {
+                return Err(anyhow::Error::from(std::io::Error::last_os_error())
+                    .context(format!("locking {}", path.display())));
+            }
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawHandle;
+            #[repr(C)]
+            struct Overlapped {
+                internal: usize,
+                internal_high: usize,
+                offset: u32,
+                offset_high: u32,
+                event: *mut std::ffi::c_void,
+            }
+            #[link(name = "kernel32")]
+            extern "system" {
+                fn LockFileEx(
+                    file: *mut std::ffi::c_void,
+                    flags: u32,
+                    reserved: u32,
+                    bytes_low: u32,
+                    bytes_high: u32,
+                    overlapped: *mut Overlapped,
+                ) -> i32;
+            }
+            const LOCKFILE_EXCLUSIVE_LOCK: u32 = 0x2;
+            let mut ov = Overlapped {
+                internal: 0,
+                internal_high: 0,
+                offset: 0,
+                offset_high: 0,
+                event: std::ptr::null_mut(),
+            };
+            // SAFETY: a valid, owned handle and a zeroed OVERLAPPED; blocks
+            // until the whole-file lock is granted.
+            let ok = unsafe {
+                LockFileEx(
+                    file.as_raw_handle(),
+                    LOCKFILE_EXCLUSIVE_LOCK,
+                    0,
+                    u32::MAX,
+                    u32::MAX,
+                    &mut ov,
+                )
+            };
+            if ok == 0 {
                 return Err(anyhow::Error::from(std::io::Error::last_os_error())
                     .context(format!("locking {}", path.display())));
             }
@@ -387,6 +440,45 @@ mod tests {
         let saved = &load(&log).unwrap()[0];
         assert!(saved.restored_at.is_some());
         assert!(saved.items.iter().all(|i| i.status == ItemStatus::Restored));
+    }
+
+    /// A Linux or Windows Trash keeps a record beside each item; restore
+    /// takes it away with the item (REQ-XPLAT-006.A4).
+    #[test]
+    fn restore_removes_the_trash_record() {
+        use crate::trash::{record_of, Bin};
+        let tmp = tempfile::tempdir().unwrap();
+        let log = tmp.path().join("history.json");
+        for bin in [
+            Bin::FreeDesktop(tmp.path().join("fd")),
+            Bin::Recycle(tmp.path().join("rb")),
+        ] {
+            let orig = tmp.path().join("orig/a.txt");
+            fs::create_dir_all(orig.parent().unwrap()).unwrap();
+            fs::write(&orig, b"a").unwrap();
+            let t = bin.put(&orig, 1).unwrap();
+            let rec = record_of(&t).unwrap();
+            assert!(rec.exists() && !orig.exists());
+            let e = append(
+                &log,
+                Entry::new(
+                    TITLE_SMART_CLEAN,
+                    Mode::Trash,
+                    vec![],
+                    vec![Item {
+                        original_path: orig.to_string_lossy().into_owned(),
+                        trash_path: Some(t.to_string_lossy().into_owned()),
+                        bytes: 1,
+                        status: ItemStatus::InTrash,
+                    }],
+                ),
+            )
+            .unwrap();
+            let r = restore(&log, &e.id).unwrap();
+            assert_eq!(r.restored.len(), 1, "{bin:?}");
+            assert_eq!(fs::read(&orig).unwrap(), b"a");
+            assert!(!rec.exists(), "record left behind: {bin:?}");
+        }
     }
 
     #[test]

@@ -155,6 +155,9 @@ pub fn run_observed(
     cancel: Arc<AtomicBool>,
     observe: &mut dyn FnMut(ScanEvent<'_>),
 ) -> Result<ScanOutcome> {
+    // Stored with `/` separators on every OS (REQ-XPLAT-001).
+    let root_slash = crate::platform::to_slash_str(root);
+    let root = root_slash.as_str();
     let conn = db::open(db_path)?;
     db::create_schema(&conn)?;
 
@@ -223,7 +226,7 @@ pub fn run_observed(
                 };
 
                 let is_dir = meta.is_dir();
-                let path_owned: String = path.to_string_lossy().into_owned();
+                let path_owned: String = crate::platform::to_slash(&path);
                 let path_bytes = path_owned.as_bytes();
 
                 let name_start = memrchr(b'/', path_bytes).map(|i| i + 1).unwrap_or(0);
@@ -251,8 +254,10 @@ pub fn run_observed(
                         Some(meta.blocks() as i64 * 512)
                     }
                 };
+                // No block count on Windows: the length is the best figure
+                // std offers (REQ-XPLAT-007).
                 #[cfg(not(unix))]
-                let physical_size: Option<i64> = None;
+                let physical_size: Option<i64> = (!is_dir).then_some(size);
 
                 let mtime = meta
                     .modified()
@@ -337,4 +342,40 @@ pub fn run_observed(
         bytes,
         skipped,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every regular file gets a physical size, and paths are stored with
+    /// `/` separators (REQ-XPLAT-001.A1, REQ-XPLAT-007.A1).
+    #[test]
+    fn physical_size_is_recorded_for_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("root");
+        std::fs::create_dir_all(root.join("a b")).unwrap();
+        std::fs::write(root.join("a b/x.txt"), vec![7u8; 5000]).unwrap();
+        let db_path = tmp.path().join("s.db");
+        let db_path = db_path.to_str().unwrap();
+        run_observed(
+            root.to_str().unwrap(),
+            db_path,
+            Arc::new(AtomicBool::new(false)),
+            &mut |_| {},
+        )
+        .unwrap();
+        let conn = db::open(db_path).unwrap();
+        let (path, name, physical): (String, String, Option<i64>) = conn
+            .query_row(
+                "SELECT path, name, physical_size FROM files WHERE NOT is_dir",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(name, "x.txt");
+        assert!(!path.contains('\\') || cfg!(unix), "{path}");
+        assert_eq!(path, crate::platform::to_slash(&root.join("a b/x.txt")));
+        assert!(physical.is_some_and(|p| p > 0), "{physical:?}");
+    }
 }

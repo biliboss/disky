@@ -310,6 +310,8 @@ fn synth_ctx(home: &str, root: &str) -> cleanup::ScanContext {
         scan_root: Some(root.to_string()),
         now_secs: T0 + DAY,
         installed_apps: Some(cleanup::InstalledApps::default()),
+        // The synthetic homes use macOS folders on every OS.
+        locations: cleanup::MACOS_LOCATIONS,
         ..Default::default()
     }
 }
@@ -761,6 +763,11 @@ fn contract_load_builds_view_from_snapshot() {
 #[test]
 fn scan_counts_permission_skipped_paths() {
     use std::os::unix::fs::PermissionsExt;
+    // Root reads and deletes regardless of mode bits (containers, CI
+    // images): there is no permission failure to observe.
+    if unsafe { libc::geteuid() } == 0 {
+        return;
+    }
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("tree");
     let locked = root.join("locked");

@@ -1,6 +1,42 @@
 # disky
 
-Fast macOS disk analyzer and cleanup CLI in Rust — `ncdu` / `dust` / GrandPerspective alternative.
+Fast disk analyzer and cleanup CLI in Rust for macOS, Linux and Windows — `ncdu` / `dust` / GrandPerspective alternative.
+
+## Platforms (specs/cross-platform.md, REQ-XPLAT-*)
+
+macOS, Linux (glibc) and Windows (MSVC) run the same commands, envelopes
+and safety rules. The per-OS parts live in `src/platform.rs` and
+`src/trash.rs`; nothing else branches on the OS except `cfg` blocks for a
+syscall.
+
+- **Paths are `/`-separated everywhere** (`platform::to_slash`): a Windows
+  scan stores `C:/Users/me/x`, so map, cleanup scope, nesting and exclusions
+  are one code path. A drive root maps as `C:` (children `C:/Users`, …).
+  User-typed paths go through `platform::expand_user`.
+- **Home** is `$HOME` / `%USERPROFILE%` (`platform::home_dir`, environment
+  first). **Data dir**: `~/Library/Application Support/disky`,
+  `$XDG_DATA_HOME/disky` or `~/.local/share/disky`, `%LOCALAPPDATA%\disky`.
+  CLI tests must set `HOME`, `USERPROFILE`, `LOCALAPPDATA` and
+  `XDG_DATA_HOME` to the temp home.
+- **Default scan root**: `/`, or `%SystemDrive%/` on Windows.
+- **Disk space**: `statvfs` (Unix), `GetDiskFreeSpaceExW` (Windows).
+- **Locks**: `std::fs::File::lock` (`flock` / `LockFileEx`).
+- **Cleanup locations**: `cleanup::{MACOS,LINUX,WINDOWS}_LOCATIONS`, picked
+  by `OS_LOCATIONS`; `ScanContext.locations` overrides it (tests use
+  `MACOS_LOCATIONS` so synthetic macOS homes work on every OS). Same
+  category names on every OS; no `app_leftovers` outside macOS.
+- **Trash** (`trash::Bin`): macOS `~/.Trash/<name>-<stamp>`; Linux
+  freedesktop `files/<name>` + `info/<name>.trashinfo`; Windows
+  `<drive>/$Recycle.Bin/<SID>/$R…` + `$I…` (format 2). Restore and
+  permanent emptying remove the record. One `rename`: another volume fails.
+- **Open / reveal** (`platform::open_path` / `reveal_path`): `open`/`open -R`,
+  `explorer`/`explorer /select,`, `xdg-open` / FileManager1 D-Bus. The GUI
+  reads its OS from the user agent (`gui/src/lib/os.ts`) for the Reveal
+  label, the `/` root name and the Full Disk Access link (macOS only).
+- **Physical size** on Windows is the file length; hard-link identity is
+  Unix-only.
+- **Linux builds** link with clang + mold (`.cargo/config.toml`); CI uses
+  `rui314/setup-mold`.
 
 ## Stack
 
@@ -514,7 +550,8 @@ criterion 2. It ships as a **Tauri + SolidJS desktop app in `gui/`**, not a
   default dry-run, explicit per-target confirmation, and Trash
   (`--reversible`) as the default.
 - `gui/` is a separate build and does not join the CLI's release matrix
-  until it has its own CI job.
+  until it has its own CI job. It builds on macOS, Linux and Windows
+  (`tauri.linux.conf.json`, `tauri.windows.conf.json`).
 - MCP remains removed (criterion 1 has still not triggered).
 
 ## Claude Code skill — `/disky` (v2 wizard)
@@ -684,6 +721,11 @@ Auto-saved to `~/Library/Application Support/disky/YYYY-MM-DD_HH-MM.db` via `dir
 
 ## CI
 
+CI runs fmt, clippy and the engine tests on macOS, Ubuntu and Windows,
+and builds the GUI bundle on Ubuntu (.deb, AppImage) and Windows (NSIS).
+Release uploads macOS tarballs plus `x86_64`/`aarch64-unknown-linux-gnu`
+tarballs and an `x86_64-pc-windows-msvc` zip.
+
 **Regression suite:** `scripts/regression.sh [all|engine|gui]` runs every
 stage CI runs. Every bug fix lands with a regression test in it. The CI `gui`
 job (macOS) runs vitest, the token/boundary/control lints, tsc, Playwright
@@ -713,7 +755,7 @@ by sharing compiled artifacts across every repo that touches
 
 ## Release
 
-Matrix: `aarch64-apple-darwin` + `x86_64-apple-darwin`. Tag `vX.Y.Z` triggers workflow.
+Matrix: `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-pc-windows-msvc`. Tag `vX.Y.Z` triggers workflow.
 CHANGELOG.md uses Keep a Changelog format — awk extracts entry per tag.
 
 ## Dev-side cleanup (build artifacts)

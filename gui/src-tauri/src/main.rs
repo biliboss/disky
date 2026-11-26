@@ -384,13 +384,16 @@ async fn reveal_in_finder(app: AppHandle, path: String) -> CmdResult<()> {
             .into());
         }
         // The map shows the last scan: a folder deleted since is still drawn,
-        // but Finder can't reveal it. Say so instead of "open -R exited 1".
+        // but the file manager can't reveal it. Say so instead of "open -R
+        // exited 1".
         contract::check_on_disk(&path)?;
-        let status = std::process::Command::new("open")
-            .arg("-R")
-            .arg(&path)
-            .status()?;
-        anyhow::ensure!(status.success(), "Finder could not reveal {path}");
+        // Finder, Explorer or the freedesktop file manager (REQ-XPLAT-008).
+        disky::platform::reveal_path(&path).map_err(|e| {
+            anyhow::anyhow!(
+                "{} could not reveal {path} ({e})",
+                disky::platform::file_manager_name()
+            )
+        })?;
         Ok(())
     })
     .await
@@ -535,6 +538,12 @@ fn focus_smart_clean(app: &AppHandle) {
 #[tauri::command]
 async fn open_full_disk_access() -> CmdResult<()> {
     blocking(|| {
+        // Only macOS gates reads behind a privacy setting; elsewhere the
+        // screen offers no link (REQ-XPLAT-010.A2).
+        anyhow::ensure!(
+            cfg!(target_os = "macos"),
+            "Full Disk Access is a macOS setting"
+        );
         let status = std::process::Command::new("open")
             .arg(contract::FULL_DISK_ACCESS_URL)
             .status()?;
