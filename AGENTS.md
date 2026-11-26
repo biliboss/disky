@@ -20,7 +20,7 @@ syscall.
   `XDG_DATA_HOME` to the temp home.
 - **Default scan root**: `/`, or `%SystemDrive%/` on Windows.
 - **Disk space**: `statvfs` (Unix), `GetDiskFreeSpaceExW` (Windows).
-- **Locks**: `std::fs::File::lock` (`flock` / `LockFileEx`).
+- **Locks**: `flock` (Unix) and `LockFileEx` (Windows) in `history::Lock` — not `std::fs::File::lock`, which needs Rust 1.89 (MSRV is 1.75).
 - **Cleanup locations**: `cleanup::{MACOS,LINUX,WINDOWS}_LOCATIONS`, picked
   by `OS_LOCATIONS`; `ScanContext.locations` overrides it (tests use
   `MACOS_LOCATIONS` so synthetic macOS homes work on every OS). Same
