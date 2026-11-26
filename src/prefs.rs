@@ -166,7 +166,7 @@ fn expand_home(entry: &str, home: Option<&Path>) -> Option<String> {
         entry.strip_prefix("~/")
     };
     match rest {
-        None => Some(entry.to_string()),
+        None => Some(crate::platform::to_slash_str(entry)),
         Some(rest) => {
             let home = crate::platform::to_slash(home?);
             let home = home.trim_end_matches('/');
@@ -410,7 +410,8 @@ fn write_atomic(path: &Path, prefs: &Prefs) -> Result<()> {
     let body = serde_json::to_vec_pretty(prefs)?;
     let tmp = path.with_extension(format!("json.tmp-{}", std::process::id()));
     fs::write(&tmp, body).with_context(|| format!("writing {}", tmp.display()))?;
-    fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))?;
+    crate::platform::replace_file(&tmp, path)
+        .with_context(|| format!("replacing {}", path.display()))?;
     Ok(())
 }
 

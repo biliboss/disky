@@ -814,10 +814,7 @@ fn cleanup_honours_excluded_folders_and_skip_recently_used() {
             "excluded=~/work/private,~/no/such/folder",
         ],
     );
-    let keep = root
-        .join("keep/node_modules")
-        .to_string_lossy()
-        .into_owned();
+    let keep = slash(&root.join("keep/node_modules"));
     assert_eq!(cleanup(&home), [keep], "excluded folder dropped (A1)");
     let p = json_in_home(&home, &["prefs", "--format", "json"]);
     assert_eq!(
@@ -995,8 +992,8 @@ fn large_fixture(dir: &std::path::Path) -> PathBuf {
         ("tiny.bin", 1, 900),
     ] {
         fs::write(data.join(name), b"x").unwrap();
-        let path = data.join(name);
-        let path = path.to_str().unwrap();
+        let path = slash(&data.join(name));
+        let path = path.as_str();
         conn.execute(
             "INSERT INTO files (path, name, size, physical_size, mtime, is_dir, depth, atime)
              VALUES (?, ?, ?, ?, ?, false, 2, ?)",
@@ -1041,7 +1038,7 @@ fn large_lists_files_over_2gb_with_filters_and_counts() {
         .map(|r| r["path"].as_str().unwrap())
         .collect();
     let data = home.join("data");
-    let at = |n: &str| data.join(n).to_str().unwrap().to_string();
+    let at = |n: &str| slash(&data.join(n));
     assert_eq!(paths, [at("vm.utm"), at("master.mov"), at("ubuntu.iso")]);
     assert_eq!(v["count"], 3);
     assert_eq!(v["total_bytes"].as_u64().unwrap(), 60_000_000_000);

@@ -181,7 +181,8 @@ pub(crate) fn recheck(cands: Vec<Candidate>) -> Vec<Candidate> {
             if c.mtime.is_some() && mtime != c.mtime {
                 return None;
             }
-            Some((c, inode(&meta)))
+            let id = inode(Path::new(&c.path), &meta);
+            Some((c, id))
         })
         .collect();
     let mut seen = HashSet::new();
@@ -193,17 +194,66 @@ pub(crate) fn recheck(cands: Vec<Candidate>) -> Vec<Candidate> {
         .collect()
 }
 
+/// The file's identity: two paths with one identity are hard links to one
+/// file, which frees nothing when one of them is trashed (A4).
 #[cfg(unix)]
-fn inode(meta: &std::fs::Metadata) -> (u64, u64) {
+fn inode(_path: &Path, meta: &std::fs::Metadata) -> (u64, u64) {
     use std::os::unix::fs::MetadataExt;
     (meta.dev(), meta.ino())
 }
 
+/// The volume serial number and file index (`GetFileInformationByHandle`;
+/// std's `MetadataExt::file_index` is unstable). Unreadable → a unique id,
+/// so the path is its own file.
+#[cfg(windows)]
+fn inode(path: &Path, _meta: &std::fs::Metadata) -> (u64, u64) {
+    use std::os::windows::io::AsRawHandle;
+    #[repr(C)]
+    #[derive(Default)]
+    struct ByHandleFileInformation {
+        attributes: u32,
+        times: [u32; 6],
+        volume_serial: u32,
+        size_high: u32,
+        size_low: u32,
+        links: u32,
+        index_high: u32,
+        index_low: u32,
+    }
+    extern "system" {
+        fn GetFileInformationByHandle(
+            file: std::os::windows::io::RawHandle,
+            info: *mut ByHandleFileInformation,
+        ) -> i32;
+    }
+    let Ok(f) = std::fs::File::open(path) else {
+        return unique_id();
+    };
+    let mut info = ByHandleFileInformation::default();
+    // SAFETY: `f` is an open handle and `info` matches
+    // BY_HANDLE_FILE_INFORMATION's layout (13 DWORDs).
+    if unsafe { GetFileInformationByHandle(f.as_raw_handle(), &mut info) } == 0 {
+        return unique_id();
+    }
+    (
+        u64::from(info.volume_serial),
+        (u64::from(info.index_high) << 32) | u64::from(info.index_low),
+    )
+}
+
+#[cfg(not(any(unix, windows)))]
+fn inode(_path: &Path, _meta: &std::fs::Metadata) -> (u64, u64) {
+    unique_id()
+}
+
+/// An id no other file has: the path counts as its own file.
 #[cfg(not(unix))]
-fn inode(_meta: &std::fs::Metadata) -> (u64, u64) {
-    // No inode identity: every path is its own file.
+fn unique_id() -> (u64, u64) {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    (0, NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+    (
+        u64::MAX,
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+    )
 }
 
 /// BLAKE3 of the first [`PREFIX_BYTES`] of `path`. Unreadable → `None`.
@@ -335,7 +385,7 @@ mod tests {
             .unwrap()
             .set_modified(t)
             .unwrap();
-        p.to_string_lossy().into_owned()
+        crate::platform::to_slash(&p)
     }
 
     /// An in-memory snapshot recording each path as it is on disk now.
@@ -458,14 +508,13 @@ mod tests {
         assert_eq!(copy_paths(&v.records[0]), [a.as_str(), b.as_str()]);
     }
 
-    #[cfg(unix)]
     #[test]
     fn hard_links_count_once() {
         let t = tempfile::tempdir().unwrap();
         let a = file(t.path(), "a.bin", b"linked", 10);
         let link = t.path().join("link.bin");
         std::fs::hard_link(&a, &link).unwrap();
-        let link = link.to_string_lossy().into_owned();
+        let link = crate::platform::to_slash(&link);
         assert_eq!(run(&[&a, &link], 1).groups, 0, "one inode is one file");
         let real = file(t.path(), "real.bin", b"linked", 10);
         let v = run(&[&a, &link, &real], 1);
@@ -481,7 +530,7 @@ mod tests {
         let c = file(t.path(), "other/c.bin", b"same", 100);
         let conn = snapshot(&[&a, &b, &c]);
         let ctx = ScanContext {
-            excluded: vec![t.path().join("keep").to_string_lossy().into_owned()],
+            excluded: vec![crate::platform::to_slash(&t.path().join("keep"))],
             ..Default::default()
         };
         let v = dupes(&conn, 1, &ctx).unwrap();

@@ -1344,7 +1344,7 @@ mod tests {
     fn write_file(path: &Path, len: usize) -> String {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, vec![7u8; len]).unwrap();
-        path.to_string_lossy().into_owned()
+        crate::platform::to_slash(path)
     }
 
     #[test]
@@ -1354,7 +1354,7 @@ mod tests {
         let log = tmp.path().join("history.json");
         let a = write_file(&tmp.path().join("u/a.img"), 64 * 1024);
         let b = write_file(&tmp.path().join("u/b.iso"), 8 * 1024);
-        let gone = tmp.path().join("u/gone.dmg").to_string_lossy().into_owned();
+        let gone = crate::platform::to_slash(&tmp.path().join("u/gone.dmg"));
         let listed = vec![a.clone(), b.clone(), gone.clone()];
         let paths = vec![a.clone(), gone.clone(), b.clone(), a.clone()];
 
@@ -1389,7 +1389,7 @@ mod tests {
         assert!(e.items.iter().all(|i| i
             .trash_path
             .as_deref()
-            .is_some_and(|t| t.starts_with(trash.to_str().unwrap()))));
+            .is_some_and(|t| t.starts_with(&crate::platform::to_slash(&trash)))));
         assert_eq!(history_detail(e), "a.img, b.iso");
     }
 
@@ -1569,7 +1569,7 @@ mod tests {
         // snapshot's sizes are what the scan recorded.
         let u = tmp.path().join("u");
         std::fs::create_dir_all(u.join("ex")).unwrap();
-        let at = |rel: &str| u.join(rel).to_string_lossy().into_owned();
+        let at = |rel: &str| crate::platform::to_slash(&u.join(rel));
         for rel in ["ex/a.img", "b.img", "c.img", "gone.img"] {
             std::fs::write(u.join(rel), b"x").unwrap();
         }
@@ -2140,7 +2140,7 @@ mod assistant_tests {
         std::fs::create_dir_all(&dir).unwrap();
         assert!(check_on_disk(dir.to_str().unwrap()).is_ok());
         let gone = dir.join("blobs");
-        let err = check_on_disk(gone.to_str().unwrap()).unwrap_err();
+        let err = check_on_disk(&crate::platform::to_slash(&gone)).unwrap_err();
         let e = err.downcast_ref::<crate::exit::DiskyError>().unwrap();
         assert_eq!(e.code, crate::exit::ExitCode::NotFound);
         assert_eq!(

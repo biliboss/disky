@@ -311,26 +311,71 @@ pub fn user_root() -> Result<PathBuf> {
 }
 
 /// The current user's SID (`S-1-5-21-…`), which names their Recycle Bin
-/// folder. Read once from `whoami /user`.
+/// folder. Read once from the process token, so no helper program is needed.
 fn user_sid() -> Result<String> {
     static SID: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
-    SID.get_or_init(|| {
-        let out = std::process::Command::new("whoami")
-            .args(["/user", "/fo", "csv", "/nh"])
-            .output()
-            .ok()?;
-        parse_whoami_sid(&String::from_utf8_lossy(&out.stdout))
-    })
-    .clone()
-    .ok_or_else(|| anyhow::anyhow!("could not read the user's SID for the Recycle Bin"))
+    SID.get_or_init(token_user_sid)
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("could not read the user's SID for the Recycle Bin"))
 }
 
-/// The SID field of `whoami /user /fo csv /nh` (`"host\me","S-1-5-…"`).
-fn parse_whoami_sid(out: &str) -> Option<String> {
-    out.lines()
-        .find_map(|l| l.rsplit(',').next())
-        .map(|f| f.trim().trim_matches('"').to_string())
-        .filter(|s| s.starts_with("S-1-"))
+/// `OpenProcessToken` → `GetTokenInformation(TokenUser)` →
+/// `ConvertSidToStringSidW`.
+#[cfg(windows)]
+fn token_user_sid() -> Option<String> {
+    use std::ffi::c_void;
+    type Handle = *mut c_void;
+    const TOKEN_QUERY: u32 = 0x0008;
+    const TOKEN_USER: u32 = 1;
+    #[link(name = "advapi32")]
+    extern "system" {
+        fn OpenProcessToken(process: Handle, access: u32, token: *mut Handle) -> i32;
+        fn GetTokenInformation(
+            token: Handle,
+            class: u32,
+            info: *mut c_void,
+            len: u32,
+            ret: *mut u32,
+        ) -> i32;
+        fn ConvertSidToStringSidW(sid: *mut c_void, out: *mut *mut u16) -> i32;
+    }
+    extern "system" {
+        fn GetCurrentProcess() -> Handle;
+        fn CloseHandle(h: Handle) -> i32;
+        fn LocalFree(mem: *mut c_void) -> *mut c_void;
+    }
+    // SAFETY: each call gets valid out-pointers; the token handle is closed
+    // and the string LocalFree'd before returning. The TOKEN_USER buffer is
+    // u64-aligned and as large as GetTokenInformation asked for.
+    unsafe {
+        let mut token: Handle = std::ptr::null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
+            return None;
+        }
+        let mut len = 0u32;
+        GetTokenInformation(token, TOKEN_USER, std::ptr::null_mut(), 0, &mut len);
+        let mut buf = vec![0u64; (len as usize).div_ceil(8).max(1)];
+        let ok = GetTokenInformation(token, TOKEN_USER, buf.as_mut_ptr().cast(), len, &mut len);
+        CloseHandle(token);
+        if ok == 0 {
+            return None;
+        }
+        // TOKEN_USER starts with SID_AND_ATTRIBUTES, whose first field is the SID.
+        let sid = *buf.as_ptr().cast::<*mut c_void>();
+        let mut wide: *mut u16 = std::ptr::null_mut();
+        if ConvertSidToStringSidW(sid, &mut wide) == 0 || wide.is_null() {
+            return None;
+        }
+        let n = (0..).take_while(|&i| *wide.add(i) != 0).count();
+        let s = String::from_utf16_lossy(std::slice::from_raw_parts(wide, n));
+        LocalFree(wide.cast());
+        s.starts_with("S-").then_some(s)
+    }
+}
+
+#[cfg(not(windows))]
+fn token_user_sid() -> Option<String> {
+    None
 }
 
 #[cfg(test)]
@@ -354,7 +399,8 @@ mod tests {
             crate::platform::to_slash(&src).replace(' ', "%20")
         );
         assert!(info.starts_with("[Trash Info]\n"), "{info}");
-        assert!(info.contains(&want), "{info}");
+        // The freedesktop Trash is Linux's; a `C:` path percent-encodes its colon.
+        assert!(!cfg!(unix) || info.contains(&want), "{info}");
         let date = info
             .lines()
             .find_map(|l| l.strip_prefix("DeletionDate="))
@@ -445,11 +491,18 @@ mod tests {
             recycle_dir_for(Path::new(sid), Path::new("C:/x")),
             PathBuf::from(sid)
         );
-        assert_eq!(
-            parse_whoami_sid("\"desktop-1\\me\",\"S-1-5-21-9-8-7-1001\"\r\n").as_deref(),
-            Some("S-1-5-21-9-8-7-1001")
-        );
-        assert_eq!(parse_whoami_sid("garbage"), None);
+    }
+
+    /// The Recycle Bin is named by the process's own SID (REQ-XPLAT-006.A6).
+    #[test]
+    fn the_user_sid_comes_from_the_process_token() {
+        let sid = user_sid();
+        if cfg!(windows) {
+            let sid = sid.expect("Windows must read its own SID");
+            assert!(sid.starts_with("S-1-"), "{sid}");
+        } else {
+            assert!(sid.is_err(), "only Windows names a Recycle Bin by SID");
+        }
     }
 
     #[test]

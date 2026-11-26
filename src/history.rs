@@ -270,7 +270,8 @@ fn save(path: &Path, entries: Vec<Entry>) -> Result<()> {
     })?;
     let tmp = path.with_extension(format!("json.tmp-{}", std::process::id()));
     fs::write(&tmp, body).with_context(|| format!("writing {}", tmp.display()))?;
-    fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))?;
+    crate::platform::replace_file(&tmp, path)
+        .with_context(|| format!("replacing {}", path.display()))?;
     Ok(())
 }
 
@@ -367,8 +368,8 @@ mod tests {
                 let t = trash.join(format!("{n}-1"));
                 fs::write(&t, n.as_bytes()).unwrap();
                 Item {
-                    original_path: orig.to_string_lossy().into_owned(),
-                    trash_path: Some(t.to_string_lossy().into_owned()),
+                    original_path: crate::platform::to_slash(&orig),
+                    trash_path: Some(crate::platform::to_slash(&t)),
                     bytes: n.len() as u64,
                     status: ItemStatus::InTrash,
                 }
@@ -466,8 +467,8 @@ mod tests {
                     Mode::Trash,
                     vec![],
                     vec![Item {
-                        original_path: orig.to_string_lossy().into_owned(),
-                        trash_path: Some(t.to_string_lossy().into_owned()),
+                        original_path: crate::platform::to_slash(&orig),
+                        trash_path: Some(crate::platform::to_slash(&t)),
                         bytes: 1,
                         status: ItemStatus::InTrash,
                     }],
@@ -491,7 +492,7 @@ mod tests {
         fs::write(&orig, b"new").unwrap();
 
         let r = restore(&log, &e.id).unwrap();
-        assert_eq!(r.conflicts, [orig.to_string_lossy()]);
+        assert_eq!(r.conflicts, [crate::platform::to_slash(&orig)]);
         assert_eq!(fs::read(&orig).unwrap(), b"new", "must not overwrite");
         let trash = e.items[0].trash_path.as_deref().unwrap();
         assert_eq!(fs::read(trash).unwrap(), b"a", "left in the Trash");

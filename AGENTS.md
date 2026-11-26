@@ -33,8 +33,11 @@ syscall.
   `explorer`/`explorer /select,`, `xdg-open` / FileManager1 D-Bus. The GUI
   reads its OS from the user agent (`gui/src/lib/os.ts`) for the Reveal
   label, the `/` root name and the Full Disk Access link (macOS only).
-- **Physical size** on Windows is the file length; hard-link identity is
-  Unix-only.
+- **Physical size** on Windows is the file length. Hard links count once
+  in `dupes` everywhere: `(dev, ino)` on Unix, volume serial + file index
+  (`GetFileInformationByHandle`) on Windows.
+- **Replacing** `prefs.json` / `history.json` goes through
+  `platform::replace_file`, which retries a denied rename on Windows.
 - **Linux builds** link with clang + mold (`.cargo/config.toml`); CI uses
   `rui314/setup-mold`.
 

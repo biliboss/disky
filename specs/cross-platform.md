@@ -87,15 +87,21 @@ verifies:
 
 The `history.lock` and `prefs.lock` rules (REQ-DCLEAN-034) use the OS's file lock (`flock` on Unix, `LockFileEx` on Windows). The lock is released when the holder exits.
 
+The temp file is swapped in with one rename. Windows refuses to replace a file that another process (a reader, an indexer or antivirus) holds open for a moment, so there a denied replace is retried for up to about half a second before it fails.
+
 implementations:
   - src/history.rs:Lock
+  - src/platform.rs:replace_file
 
 verifies:
   - src/history.rs:concurrent_appends_lose_nothing
+  - src/prefs.rs:concurrent_writers_never_truncate_or_lose_the_file
 
 ## Acceptance
 <!-- id: REQ-XPLAT-004.A1 -->
 - Two writers appending at the same time on any OS keep both entries.
+<!-- id: REQ-XPLAT-004.A2 -->
+- Eight threads setting and reading preferences at once on Windows all succeed, and the store stays valid.
 
 <!-- id: REQ-XPLAT-005 -->
 ## Cleanup categories MUST target each OS's own folders
@@ -148,6 +154,7 @@ implementations:
   - src/trash.rs:forget_record
   - src/trash.rs:trashinfo
   - src/trash.rs:recycle_record
+  - src/trash.rs:token_user_sid
   - src/cleanup.rs:apply_one
   - src/history.rs:restore
 
@@ -160,6 +167,7 @@ verifies:
   - src/trash.rs:recycle_record_is_format_2
   - src/trash.rs:forget_record_removes_the_sidecar
   - src/history.rs:restore_removes_the_trash_record
+  - src/trash.rs:the_user_sid_comes_from_the_process_token
 
 ## Acceptance
 <!-- id: REQ-XPLAT-006.A1 -->
@@ -172,22 +180,28 @@ verifies:
 - `disky restore <id>` puts the item back and leaves no `.trashinfo` or `$I` record behind. Conflicts and missing items behave as REQ-DCLEAN-034 says.
 <!-- id: REQ-XPLAT-006.A5 -->
 - A path on another volume than the Trash fails as "move to Trash failed" and stays where it is. Nothing is copied and then deleted.
+<!-- id: REQ-XPLAT-006.A6 -->
+- On Windows, the user's SID comes from the process's own token, so finding the Recycle Bin needs no helper program.
 
 <!-- id: REQ-XPLAT-007 -->
 ## Physical size MUST be reported on every OS
 
-On Windows, a file's physical size is its allocated size when the OS reports it, else its length. Hard-link identity (REQ-DSCR-005) is only available on Unix, so on Windows each path counts as its own file. That is the safe direction, because a group can then only gain copies, never merge two names of one file.
+On Windows, a file's physical size is its allocated size when the OS reports it, else its length. Hard links to one file count once on every OS (REQ-DSCR-005.A4): the identity is `(dev, ino)` on Unix and the volume serial number plus file index on Windows. A file whose identity cannot be read counts as its own file.
 
 implementations:
   - src/scan.rs:run_observed
   - src/contract.rs:physical_bytes_on_disk
+  - src/dupes.rs:inode
 
 verifies:
   - src/scan.rs:physical_size_is_recorded_for_files
+  - src/dupes.rs:hard_links_count_once
 
 ## Acceptance
 <!-- id: REQ-XPLAT-007.A1 -->
 - Every regular file in a Windows snapshot has a non-null `physical_size`.
+<!-- id: REQ-XPLAT-007.A2 -->
+- Two hard links to one file are never a duplicate group, on Windows as on Unix.
 
 <!-- id: REQ-XPLAT-008 -->
 ## Open and reveal MUST use each OS's file manager

@@ -244,6 +244,27 @@ fn file_uri(path: &str) -> String {
     out
 }
 
+/// Swap `tmp` in for `dest` with one rename. Windows refuses to replace a
+/// file another process (a reader, an indexer, antivirus) holds open for a
+/// moment, so there a denied replace is retried for up to ~0.5 s before the
+/// error is returned (REQ-XPLAT-004.A2).
+pub fn replace_file(tmp: &Path, dest: &Path) -> std::io::Result<()> {
+    let mut tries = 0;
+    loop {
+        match std::fs::rename(tmp, dest) {
+            Err(e)
+                if cfg!(windows)
+                    && e.kind() == std::io::ErrorKind::PermissionDenied
+                    && tries < 50 =>
+            {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            r => return r,
+        }
+    }
+}
+
 /// Open `path` in its default app (the report, a folder).
 pub fn open_path(path: &str) -> Result<()> {
     run_first(&[open_command(Os::current(), path)], path)
