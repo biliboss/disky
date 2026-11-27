@@ -724,7 +724,9 @@ Auto-saved to `~/Library/Application Support/disky/YYYY-MM-DD_HH-MM.db` via `dir
 
 ## CI
 
-CI runs fmt, clippy and the engine tests on macOS, Ubuntu and Windows,
+CI runs fmt, clippy and the engine tests on macOS, Ubuntu and Windows
+(`windows-2022`: the bundled DuckDB does not compile with Visual Studio
+2026, so `cargo install disky` on Windows needs VS 2022 build tools),
 and builds the GUI bundle on Ubuntu (.deb, AppImage) and Windows (NSIS).
 Release uploads macOS tarballs plus `x86_64`/`aarch64-unknown-linux-gnu`
 tarballs and an `x86_64-pc-windows-msvc` zip.

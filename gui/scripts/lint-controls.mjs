@@ -7,7 +7,7 @@
 // Usage: node scripts/lint-controls.mjs   (exit 1 on any finding)
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import {
   CHECKBOX_CLASS,
   STATEFUL_CLASSES,
@@ -19,7 +19,8 @@ import {
 // fileURLToPath, not .pathname: on Windows the pathname is "/D:/a/..." (REQ-XPLAT-010.A3).
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SRC = join(ROOT, "src");
-const rel = (p) => relative(ROOT, p);
+// `/`-separated, as VENDORED and controlClasses.mjs spell paths, on every OS (REQ-XPLAT-010.A3).
+const rel = (p) => relative(ROOT, p).split(sep).join("/");
 const isVendored = (p) => VENDORED.includes(rel(p));
 
 function* walk(dir, ext) {

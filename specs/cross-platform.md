@@ -266,6 +266,8 @@ implementations:
 <!-- id: REQ-XPLAT-011 -->
 ## CI MUST test, and Release MUST ship, every supported OS
 
+Windows jobs run on `windows-2022` (Visual Studio 2022). The bundled DuckDB (`libduckdb-sys` 1.10502) does not compile with Visual Studio 2026's STL, which drops `stdext::checked_array_iterator`. A newer DuckDB builds there, but it needs Rust 1.88 and may change the snapshot format, so moving to it is a separate decision [needs review].
+
 implementations:
   - .github/workflows/ci.yml
   - .github/workflows/release.yml
