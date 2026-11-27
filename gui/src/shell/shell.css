@@ -1,0 +1,293 @@
+/* App shell — window chrome, sidebar, meter (REQ-DCLEAN-032).
+ * Geometry mirrors the inline styles of specs/disk-cleanup/snapshot.html;
+ * every value is a token (tokens.css / gui-tokens.css). */
+
+/* ── Window frame ─────────────────────────────────────────────── */
+.app-window {
+  width: 100vw;
+  height: 100vh;
+  background: var(--color-bg);
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: var(--layout-titlebar-h) 1fr;
+  position: relative;
+}
+
+.app-body {
+  display: grid;
+  grid-template-columns: var(--layout-sidebar-w) 1fr;
+  min-height: 0;
+}
+
+.app-main {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Title bar ────────────────────────────────────────────────── */
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: var(--titlebar-gap);
+  padding: 0 var(--titlebar-px);
+  background: var(--color-surface);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Reserved for the native macOS traffic lights (titleBarStyle Overlay). */
+.titlebar-lights {
+  flex: none;
+  width: var(--titlebar-lights-w);
+  height: var(--titlebar-light);
+}
+
+.titlebar-title {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-titlebar);
+  color: var(--color-neutral-700);
+  padding-right: var(--titlebar-title-pr);
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────── */
+.sidebar {
+  background: var(--color-surface);
+  padding: var(--sidebar-pt) var(--sidebar-px) var(--sidebar-pb);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sidebar-gap);
+  min-height: 0;
+}
+
+.sidebar-spacer {
+  flex: 1;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--brand-gap);
+  padding: var(--brand-pt) var(--brand-px) var(--brand-pb);
+}
+
+.brand-logo {
+  flex: none;
+  width: var(--brand-logo);
+  height: var(--brand-logo);
+}
+
+.brand-word {
+  font-family: var(--font-heading);
+  font-size: var(--fs-brand);
+  letter-spacing: var(--tracking-brand);
+}
+
+.nav-list {
+  display: contents;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--nav-gap);
+  padding: var(--nav-py) var(--nav-px);
+  border: none;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-size: var(--fs-nav);
+  cursor: pointer;
+  color: var(--color-text);
+  background: transparent;
+  font-weight: 400;
+}
+
+/* REQ-DCLEAN-013 / 015: hover and pressed, as the secondary button's overlays. */
+.nav-item:hover {
+  background: var(--overlay-hover);
+}
+
+.nav-item:active {
+  background: var(--overlay-active);
+}
+
+/* REQ-DCLEAN-011.A3: accent fill; the label is --color-on-accent for 4.5:1
+   (REQ-DCLEAN-024). Listed after hover/active so the current entry keeps it. */
+.nav-item[aria-current="page"] {
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  font-weight: var(--fw-nav-active);
+}
+
+/* REQ-DCLEAN-011.A2 / REQ-DCLEAN-016.A2: blocked while scanning or cleaning —
+   the design system's disabled treatment (organic.css `.btn:disabled`). */
+.nav-item[aria-disabled="true"] {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+.nav-item[aria-disabled="true"]:not([aria-current="page"]):hover,
+.nav-item[aria-disabled="true"]:not([aria-current="page"]):active {
+  background: transparent;
+}
+
+.nav-icon {
+  flex: none;
+  width: var(--nav-icon);
+  height: var(--nav-icon);
+  stroke-width: var(--icon-stroke);
+}
+
+.nav-label {
+  flex: 1;
+  text-align: left;
+}
+
+.nav-badge {
+  min-width: var(--badge-size);
+  height: var(--badge-size);
+  padding: 0 var(--badge-px);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  display: grid;
+  place-items: center;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.nav-item[aria-current="page"] .nav-badge {
+  background: var(--color-bg);
+  color: var(--color-accent-800);
+}
+
+/* ── Disk meter ───────────────────────────────────────────────── */
+.meter {
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  padding: var(--meter-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--meter-gap);
+}
+
+.meter-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-meter);
+}
+
+.meter-volume {
+  font-weight: var(--fw-meter-volume);
+}
+
+.meter-free,
+.meter-goal {
+  color: var(--color-neutral-700);
+}
+
+.meter-goal {
+  font-size: var(--fs-meter-goal);
+}
+
+.meter-bar {
+  position: relative;
+  height: var(--diskbar-h);
+  border-radius: var(--radius-pill);
+  background: var(--color-neutral-200);
+}
+
+.meter-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  transition: var(--motion-bar);
+}
+
+.meter-marker {
+  position: absolute;
+  top: calc(-1 * var(--meter-marker-overhang));
+  bottom: calc(-1 * var(--meter-marker-overhang));
+  width: var(--meter-marker-w);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-2-700);
+}
+
+/* ── Usage ring (REQ-DCLEAN-002.A5) ───────────────────────────── */
+.ring {
+  position: relative;
+  width: var(--ring-size);
+  height: var(--ring-size);
+}
+
+.ring-svg {
+  width: var(--ring-size);
+  height: var(--ring-size);
+  transform: rotate(-90deg);
+}
+
+.ring-track {
+  stroke: var(--color-surface);
+  stroke-width: var(--ring-stroke);
+}
+
+.ring-fill {
+  stroke-width: var(--ring-stroke);
+  stroke-linecap: round;
+  transition: var(--motion-ring);
+}
+
+.ring-fill--idle {
+  stroke: var(--color-accent);
+}
+
+.ring-fill--done {
+  stroke: var(--color-accent-2);
+}
+
+.ring-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ring-label-gap);
+}
+
+.ring-free {
+  font-family: var(--font-heading);
+  font-size: var(--fs-ring-number);
+}
+
+.ring-total {
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+/* ── Plain screens (No scans yet / empty states) ────────────────── */
+.screen {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--screen-py) var(--layout-screen-px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--screen-gap);
+}
+
+.screen-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-screen-title);
+  margin: 0;
+}
+
+.screen-note {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}

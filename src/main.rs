@@ -8,7 +8,7 @@ use disky::exit::{classify, DiskyError, ExitCode};
 use disky::policy::{apply_policy, Policy, SnapshotMeta};
 use disky::query::SCHEMA_VERSION;
 use disky::render::{resolve_format, Format};
-use disky::{cleanup, db, query, render, scan, schema, snapshots};
+use disky::{cleanup, contract, db, history, prefs, query, render, scan, schema, snapshots};
 use serde_json::json;
 use std::process::ExitCode as ProcExit;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -67,7 +67,7 @@ fn emit_error(err: &DiskyError, format: Format) {
 
 fn open_snapshot(spec: &str) -> anyhow::Result<duckdb::Connection> {
     let path = snapshots::resolve(spec)?;
-    db::open(&path)
+    db::open_read(&path)
 }
 
 fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
@@ -101,6 +101,7 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                 bundle.insert("kind".into(), json!("scan_bundle"));
                 bundle.insert("snapshot".into(), json!(db_path));
                 bundle.insert("complete".into(), json!(outcome.complete));
+                bundle.insert("skipped_paths".into(), json!(outcome.skipped));
                 bundle.insert("stats".into(), json!(query::stats(&conn)?));
                 if let Some(n) = emit_top {
                     bundle.insert("top".into(), json!(query::top_files(&conn, n, 0)?));
@@ -202,26 +203,58 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
             reversible,
         } => {
             let conn = open_snapshot(&snapshot)?;
+            // A dry-run previews every category. A bare `--apply` stays
+            // limited to the developer-artefact categories it always
+            // covered; system-level categories must be named in `--target`.
             let targets: Vec<String> = if target.is_empty() {
-                cleanup::default_target_names()
-                    .into_iter()
-                    .map(String::from)
-                    .collect()
+                let names = if apply {
+                    eprintln!(
+                        "cleanup: --apply without --target covers developer artefacts only; \
+                         name system categories explicitly (e.g. --target app_caches)"
+                    );
+                    cleanup::dev_category_names()
+                } else {
+                    cleanup::category_names()
+                };
+                names.into_iter().map(String::from).collect()
             } else {
                 target
             };
-            let hits = cleanup::scan(&conn, &targets, limit)?;
-            let removed = if apply {
+            // Excluded folders and skip-recently-used come from the shared
+            // preferences store, as in the GUI (REQ-DSCR-002).
+            let ctx = cleanup::ScanContext::from_snapshot(&conn)
+                .with_prefs(&prefs::load(&prefs::prefs_path())?);
+            let hits = cleanup::scan_with(&conn, &targets, limit, &ctx)?;
+            let outcome = if apply {
                 let mode = if reversible {
                     cleanup::ApplyMode::Trash
                 } else {
                     cleanup::ApplyMode::Delete
                 };
-                Some(cleanup::apply(&hits, mode)?)
+                Some(cleanup::apply(&hits, mode, Some(&history::log_path()))?)
             } else {
                 None
             };
-            render::cleanup(&hits, removed.as_deref(), format)?;
+            // After an apply, the volume's usage as the GUI meter shows it
+            // (REQ-DCLEAN-002.A4, REQ-DCLEAN-001.A1).
+            let disk = match &outcome {
+                Some(_) => {
+                    let root =
+                        db::read_scan_meta(&conn).map_or_else(|| "/".to_string(), |m| m.root);
+                    Some(disky::contract::disk_near(std::path::Path::new(&root))?)
+                }
+                None => None,
+            };
+            render::cleanup(
+                &hits,
+                outcome.as_ref().map(|o| o.handled.as_slice()),
+                outcome
+                    .as_ref()
+                    .and_then(|o| o.entry.as_ref())
+                    .map(|e| e.id.as_str()),
+                disk.as_ref(),
+                format,
+            )?;
         }
         Command::Diff { a, b, limit } => {
             let path_a = snapshots::resolve(&a)?;
@@ -612,6 +645,92 @@ fn dispatch(cli: Cli, format: Format) -> anyhow::Result<()> {
                     plan.total_removed_bytes
                 );
             }
+        }
+        Command::History { limit } => {
+            let view = contract::history_view_now(&history::log_path())?;
+            render::history(&view, limit, format)?;
+        }
+        Command::Map {
+            path,
+            tiles,
+            snapshot,
+        } => {
+            let db = snapshots::resolve(&snapshot)?;
+            let home = disky::platform::home_dir();
+            let path = path.map(|p| disky::platform::expand_user(&p, home.as_deref()));
+            let p = prefs::load(&prefs::prefs_path())?;
+            let mut view = contract::map_view(&db, path.as_deref(), &p)?;
+            if let Some(n) = tiles {
+                view = view.fold(n, disky::map::MIN_TILE_SHARE);
+            }
+            render::map(&view, format)?;
+        }
+        Command::Large { filter, snapshot } => {
+            let db = snapshots::resolve(&snapshot)?;
+            let p = prefs::load(&prefs::prefs_path())?;
+            let view = contract::large_view(&db, filter, &p)?;
+            render::large(&view, format)?;
+        }
+        Command::Dupes { min_size, snapshot } => {
+            let db = snapshots::resolve(&snapshot)?;
+            let p = prefs::load(&prefs::prefs_path())?;
+            let view = contract::dupes_view(&db, min_size, &p)?;
+            render::dupes(&view, format)?;
+        }
+        Command::Trash { paths, title } => {
+            let cwd = std::env::current_dir()?;
+            let home = disky::platform::home_dir();
+            let paths: Vec<String> = paths
+                .into_iter()
+                .map(|p| {
+                    let expanded = disky::platform::expand_user(&p, home.as_deref());
+                    disky::platform::to_slash(&cwd.join(expanded))
+                })
+                .collect();
+            // Named on the command line = reviewed by the user (REQ-DSCR-006).
+            let result = contract::trash_reviewed(
+                &paths,
+                &paths,
+                None,
+                &title,
+                &history::log_path(),
+                &contract::user_trash_root()?,
+            )?;
+            render::trash(&result, format)?;
+        }
+        Command::Restore { id } => {
+            let report = history::restore(&history::log_path(), &id)?;
+            render::restore(&report, format)?;
+        }
+        Command::Agents => {
+            render::agents(&disky::agents::detect(), format)?;
+        }
+        Command::Suggest { snapshot } => {
+            let p = prefs::load(&prefs::prefs_path())?;
+            // No snapshot yet: goal / ok only (REQ-DSCR-008.A3).
+            let db = if snapshot == "@latest" && snapshots::latest_snapshot().is_none() {
+                None
+            } else {
+                Some(snapshots::resolve(&snapshot)?)
+            };
+            let (view, hits) = contract::assistant_inputs(db.as_deref(), &p)?;
+            let home = disky::platform::home_dir();
+            let records = contract::suggestions_for(
+                &view,
+                &hits,
+                home.as_deref(),
+                chrono::Utc::now().timestamp(),
+            );
+            render::suggestions(&records, format)?;
+        }
+        Command::Prefs { set } => {
+            let path = prefs::prefs_path();
+            let p = if set.is_empty() {
+                prefs::load(&path)?
+            } else {
+                prefs::set_all(&path, &set)?
+            };
+            render::prefs(&p, format)?;
         }
         Command::List => {
             let snaps = snapshots::list_snapshots();

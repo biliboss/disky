@@ -1,0 +1,38 @@
+[package]
+name = "disky-gui"
+version = "0.1.0"
+edition = "2021"
+description = "disky desktop GUI — Tauri backend over the disky engine"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Standalone workspace: keeps the GUI out of the CLI's build, CI and
+# `cargo publish` (the root package also excludes `gui/`).
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "=2.7.6", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.7", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+# Native folder picker for Settings → "Add folder" (REQ-DSCR-016.A3). Called
+# from the backend only; the frontend gets no dialog capability.
+tauri-plugin-dialog = "=2.7.3"
+# The below-goal macOS notification (REQ-DSCR-011.A3), posted from the
+# backend's checks thread only; the frontend gets no notification capability.
+tauri-plugin-notification = "=2.8.1"
+# The engine. Scan / query / cleanup / history come from here and are never
+# reimplemented in the GUI (REQ-DCLEAN-001).
+disky = { path = "../.." }
+
+# `tauri dev` builds this crate in the dev profile. Without this, DuckDB (C++)
+# and the disky engine run unoptimised there: views over a 10 M-row snapshot
+# take many times longer than in the CLI, and buttons such as the Assistant's
+# Review look dead. Dependencies are optimised as in the root crate; this
+# crate itself stays quick to rebuild.
+[profile.dev.package."*"]
+opt-level = 3
+debug = false

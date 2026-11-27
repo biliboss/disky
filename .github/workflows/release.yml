@@ -9,20 +9,27 @@ permissions:
   contents: write
 
 jobs:
+  # macOS, Linux and Windows archives (REQ-XPLAT-011.A3).
   build:
     name: Build ${{ matrix.target }}
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        target:
-          - aarch64-apple-darwin
-          - x86_64-apple-darwin
+        include:
+          - { target: aarch64-apple-darwin, os: macos-latest }
+          - { target: x86_64-apple-darwin, os: macos-latest }
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm }
+          - { target: x86_64-pc-windows-msvc, os: windows-2022 }
 
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      # .cargo/config.toml links Linux targets with clang + mold.
+      - if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
@@ -31,16 +38,26 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package
+        shell: bash
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf disky-${{ github.ref_name }}-${{ matrix.target }}.tar.gz disky
-          mv disky-${{ github.ref_name }}-${{ matrix.target }}.tar.gz ../../../
+          name=disky-${{ github.ref_name }}-${{ matrix.target }}
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "$name.zip" disky.exe
+            mv "$name.zip" ../../../
+          else
+            tar czf "$name.tar.gz" disky
+            mv "$name.tar.gz" ../../../
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: disky-${{ matrix.target }}
-          path: disky-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          path: |
+            disky-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+            disky-${{ github.ref_name }}-${{ matrix.target }}.zip
+          if-no-files-found: error
 
   release:
     name: Create Release

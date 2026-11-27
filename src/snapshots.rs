@@ -11,7 +11,7 @@ pub fn parse_id(id: &str) -> Option<DateTime<Local>> {
 }
 
 pub fn snapshot_dir() -> PathBuf {
-    dirs::data_local_dir()
+    crate::platform::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("~/.local/share"))
         .join("disky")
 }

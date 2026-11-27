@@ -1,0 +1,818 @@
+/* Smart Clean phases. Geometry mirrors snapshot.html "Smart clean · home";
+ * every value is a token (tokens.css / gui-tokens.css). */
+
+.smart-clean {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Idle (REQ-DCLEAN-003) ────────────────────────────────────── */
+.idle {
+  flex: 1;
+  padding: var(--idle-py) var(--layout-screen-px);
+  display: grid;
+  grid-template-columns: 1fr var(--idle-rail-w);
+  gap: var(--idle-gap);
+  align-content: start;
+}
+
+.idle-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--idle-stack-gap);
+}
+
+.idle-kicker {
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+.idle-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-screen-hero);
+  line-height: var(--lh-hero);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.idle-desc {
+  margin: 0;
+  font-size: var(--fs-idle-desc);
+  line-height: var(--lh-body);
+  max-width: var(--idle-desc-max);
+  color: var(--color-neutral-800);
+  text-wrap: pretty;
+}
+
+.idle-actions {
+  display: flex;
+  gap: var(--idle-actions-gap);
+  margin-top: var(--idle-actions-mt);
+}
+
+.idle-start {
+  padding: var(--btn-hero-py) var(--btn-start-px);
+  font-size: var(--fs-btn-start);
+}
+
+.idle-explore {
+  padding: var(--btn-hero-py) var(--btn-explore-px);
+  font-size: var(--fs-btn-explore);
+}
+
+.idle-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--shortcuts-gap);
+  margin-top: var(--shortcuts-mt);
+}
+
+.shortcut {
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.shortcut:hover {
+  background: var(--color-neutral-200);
+}
+
+/* REQ-DCLEAN-015: pressed shortcut card. */
+.shortcut:active {
+  background: var(--color-shortcut-active);
+}
+
+.shortcut-icon {
+  width: var(--shortcut-icon);
+  height: var(--shortcut-icon);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  display: grid;
+  place-items: center;
+  color: var(--color-accent-700);
+}
+
+.shortcut-glyph {
+  width: var(--shortcut-glyph);
+  height: var(--shortcut-glyph);
+  stroke-width: var(--icon-stroke);
+}
+
+.shortcut-title {
+  margin-top: var(--shortcut-title-mt);
+}
+
+.idle-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--idle-rail-gap);
+  padding-top: var(--idle-rail-pt);
+}
+
+.idle-error {
+  padding: var(--idle-actions-mt) var(--layout-screen-px) 0;
+}
+
+/* ── Scanning (REQ-DCLEAN-004) ────────────────────────────────── */
+.scanning {
+  flex: 1;
+  padding: var(--scan-py) var(--layout-screen-px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--scan-gap);
+  max-width: var(--scan-max-w);
+}
+
+.scanning-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-scan-title);
+  margin: 0;
+}
+
+.scan-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--scan-meta-gap);
+  font-size: var(--fs-scan-meta);
+  color: var(--color-neutral-700);
+}
+
+.scan-path {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A5: accent fill over a surface track. */
+.scan-bar {
+  height: var(--progress-h);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.scan-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  transition: var(--motion-bar);
+}
+
+.scan-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--scan-rows-gap);
+  margin-top: var(--scan-rows-mt);
+  border-collapse: collapse;
+}
+
+.scan-rows tbody {
+  display: contents;
+}
+
+.scan-row {
+  display: flex;
+  align-items: center;
+  gap: var(--scan-row-gap);
+  padding: var(--scan-row-py) var(--scan-row-px);
+  font-size: var(--fs-scan-row);
+}
+
+.scan-row td {
+  padding: 0;
+}
+
+.scan-dot-cell {
+  display: flex;
+}
+
+.scan-dot {
+  width: var(--scan-dot);
+  height: var(--scan-dot);
+  flex: none;
+  border-radius: var(--radius-pill);
+  display: grid;
+  place-items: center;
+  color: var(--color-bg);
+  background: var(--color-surface);
+}
+
+.scan-dot-done {
+  background: var(--color-accent-2);
+}
+
+.scan-check {
+  width: var(--scan-check);
+  height: var(--scan-check);
+  stroke-width: var(--scan-check-stroke);
+}
+
+.scan-name {
+  flex: 1;
+}
+
+.scan-size {
+  color: var(--color-neutral-700);
+}
+
+/* ── Busy indicator (REQ-DCLEAN-017.A2) ───────────────────────── */
+.busy {
+  display: flex;
+  align-items: center;
+  gap: var(--busy-gap);
+  padding: var(--scan-py) var(--layout-screen-px);
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+.busy-spinner {
+  width: var(--busy-size);
+  height: var(--busy-size);
+  border-radius: var(--radius-pill);
+  border: var(--busy-stroke) solid var(--color-surface);
+  border-top-color: var(--color-accent);
+  animation: busy-spin var(--motion-busy);
+}
+
+@keyframes busy-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busy-spinner {
+    animation: none;
+  }
+}
+
+/* ── Results · review (REQ-DCLEAN-005/006/019) ────────────────── */
+.results {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.results-stale {
+  margin: 0;
+  padding: var(--results-pt) var(--layout-screen-px) 0;
+  font-size: var(--fs-small);
+}
+
+.results-head {
+  padding: var(--results-pt) var(--layout-screen-px) var(--results-head-pb);
+  display: flex;
+  align-items: flex-end;
+  gap: var(--results-head-gap);
+}
+
+.results-heading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--results-heading-gap);
+}
+
+.results-kicker {
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+.results-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-results-title);
+  margin: 0;
+}
+
+.results-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0 var(--layout-screen-px) var(--results-list-pb);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--results-list-gap);
+}
+
+/* REQ-DCLEAN-012.A3: surface rows on the page background. */
+.result {
+  flex: none;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: var(--result-row-gap);
+  padding: var(--result-row-py) var(--result-row-px);
+  border-radius: var(--radius-md);
+}
+
+/* REQ-DCLEAN-013.A4 */
+.result-row:hover {
+  background: var(--overlay-row-hover);
+}
+
+/* REQ-DCLEAN-012.A2: round selection control. The unchecked border is
+   --color-check-border (REQ-DCLEAN-024.A4: 3:1 against the row surface). */
+.result-check {
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  flex: none;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  border: var(--check-border) solid var(--color-check-border);
+  background: transparent;
+  color: var(--color-bg);
+}
+
+/* REQ-DCLEAN-013 / 015: hover and pressed, unchecked. */
+.result-check:hover {
+  border-color: var(--color-check-hover);
+}
+
+.result-check:active {
+  background: var(--overlay-active);
+}
+
+.result-check[aria-checked="true"] {
+  border-color: var(--color-check-border-checked);
+  background: var(--color-accent);
+}
+
+/* Hover and pressed, checked. */
+.result-check[aria-checked="true"]:hover {
+  background: var(--color-check-checked-hover);
+}
+
+.result-check[aria-checked="true"]:active {
+  background: var(--color-check-checked-active);
+}
+
+.result-check-glyph {
+  width: var(--check-glyph);
+  height: var(--check-glyph);
+  stroke-width: var(--check-stroke);
+}
+
+.result-icon {
+  width: var(--result-icon);
+  height: var(--result-icon);
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  display: grid;
+  place-items: center;
+  color: var(--color-accent-2-700);
+}
+
+.result-glyph {
+  width: var(--result-glyph);
+  height: var(--result-glyph);
+  stroke-width: var(--icon-stroke);
+}
+
+.result-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--result-text-gap);
+}
+
+.result-title {
+  display: flex;
+  align-items: center;
+  gap: var(--result-title-gap);
+}
+
+.result-name {
+  font-weight: var(--fw-result-name);
+  font-size: var(--fs-result-name);
+}
+
+.result-desc {
+  font-size: var(--fs-result-desc);
+  color: var(--color-neutral-700);
+}
+
+.result-size {
+  font-size: var(--fs-result-size);
+  font-weight: var(--fw-result-size);
+  min-width: var(--result-size-min);
+  text-align: right;
+}
+
+.result-disclose {
+  color: var(--color-text);
+}
+
+/* A4: the chevron flips to show the expanded state. */
+.chevron {
+  width: var(--chevron-size);
+  height: var(--chevron-size);
+  stroke-width: var(--icon-stroke);
+  transition: var(--motion-chevron);
+}
+
+[data-expanded="true"] .chevron {
+  transform: var(--chevron-open);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+.result-items {
+  padding: 0 var(--result-row-px) var(--result-items-pb) var(--result-items-pl);
+}
+
+.result-items[hidden] {
+  display: none;
+}
+
+.result-items-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--fs-item);
+}
+
+.result-item td {
+  padding: var(--item-py) 0;
+  border-top: var(--item-rule) solid var(--color-divider);
+  vertical-align: top;
+}
+
+.item-name {
+  width: var(--item-name-w);
+  padding-right: var(--item-gap);
+}
+
+/* A5: long paths are ellipsised; the full path is the tooltip and label. */
+.result-item .item-path {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-neutral-700);
+  padding-right: var(--item-gap);
+}
+
+.item-size {
+  width: var(--item-size-min);
+  text-align: right;
+}
+
+.result-more {
+  margin: 0;
+  padding: var(--more-items-py) 0 0;
+  font-size: var(--fs-item);
+  color: var(--color-neutral-700);
+}
+
+.result-no-items {
+  margin: 0;
+  padding: var(--item-py) 0;
+  border-top: var(--item-rule) solid var(--color-divider);
+  font-size: var(--fs-item);
+  color: var(--color-neutral-700);
+}
+
+.results-foot {
+  padding: var(--results-foot-py) var(--layout-screen-px);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  gap: var(--results-foot-gap);
+}
+
+.results-foot-glyph {
+  width: var(--results-foot-glyph);
+  height: var(--results-foot-glyph);
+  flex: none;
+  stroke: var(--color-accent-2-700);
+  stroke-width: var(--icon-stroke);
+}
+
+.results-foot-note {
+  flex: 1;
+  font-size: var(--fs-results-foot);
+  color: var(--color-neutral-800);
+}
+
+.results-clean {
+  padding: var(--btn-clean-py) var(--btn-clean-px);
+}
+
+.results-empty {
+  padding: var(--results-pt) var(--layout-screen-px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--results-empty-gap);
+}
+
+
+/* ── Confirm clean (REQ-DCLEAN-007/022) ───────────────────────── */
+/* Geometry from snapshot.html's confirm dialog; the .dialog* classes come
+ * from the design system. */
+.confirm-backdrop {
+  background: var(--overlay-backdrop);
+  z-index: 1;
+}
+
+.confirm-dialog {
+  width: min(var(--confirm-w), 100%);
+}
+
+/* An h2 for semantics; the snapshot's title is a div, so it keeps body
+ * text metrics rather than the design system's heading line-height. */
+.confirm-title {
+  margin: 0;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
+.confirm-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--confirm-list-gap);
+}
+
+.confirm-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.confirm-seg {
+  align-self: flex-start;
+  background: var(--color-bg);
+}
+
+.confirm-note {
+  margin: 0;
+  font-size: var(--fs-confirm-note);
+  color: var(--color-neutral-700);
+}
+
+/* Destructive primary (REQ-DCLEAN-007.A6): outranks .btn-primary's states. */
+.btn.btn-danger {
+  color: var(--color-bg);
+  background: var(--color-danger);
+}
+
+.btn.btn-danger:hover,
+.btn.btn-danger:active {
+  background: var(--color-danger-hover);
+}
+
+/* ── Cleaning (REQ-DCLEAN-008) ────────────────────────────────── */
+.cleaning {
+  flex: 1;
+  padding: var(--clean-py) var(--layout-screen-px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--clean-gap);
+  max-width: var(--clean-max-w);
+}
+
+.cleaning-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-clean-title);
+  margin: 0;
+}
+
+/* A2: accent-2 fill distinguishes cleaning from scanning (same track). */
+.clean-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-2);
+  transition: var(--motion-bar);
+}
+
+/* ── Done (REQ-DCLEAN-009) ────────────────────────────────────── */
+.done {
+  flex: 1;
+  padding: var(--done-pad);
+  display: grid;
+  grid-template-columns: 1fr var(--done-rail-w);
+  gap: var(--done-gap);
+  align-content: start;
+}
+
+.done-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--done-stack-gap);
+}
+
+.done-tag {
+  align-self: flex-start;
+}
+
+.done-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-done-title);
+  line-height: var(--lh-done-title);
+  margin: 0;
+}
+
+.done-note {
+  margin: 0;
+  font-size: var(--fs-done-note);
+  line-height: var(--lh-body);
+  max-width: var(--done-note-max);
+  color: var(--color-neutral-800);
+}
+
+.done-actions {
+  display: flex;
+  gap: var(--done-actions-gap);
+  margin-top: var(--done-actions-mt);
+}
+
+.done-home {
+  padding: var(--btn-done-py) var(--btn-done-home-px);
+}
+
+.done-undo {
+  padding: var(--btn-done-py) var(--btn-done-undo-px);
+}
+
+.done-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--done-rail-gap);
+}
+
+.done-rail .ring {
+  --ring-size: var(--done-ring-size);
+}
+
+.done-rail .ring-free {
+  font-size: var(--fs-done-ring-number);
+}
+
+.done-rail .ring-label {
+  gap: var(--done-ring-label-gap);
+}
+
+.done-failed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--done-failed-gap);
+  margin: 0;
+  max-width: var(--done-note-max);
+}
+
+.done-failed-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--done-failed-gap);
+  font-size: var(--fs-small);
+}
+
+.done-failed-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Error states (REQ-DCLEAN-018.A5) ─────────────────────────── */
+.error-state {
+  color: var(--color-danger);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--error-gap);
+  margin: 0;
+}
+
+.error-state .btn {
+  margin-top: var(--error-mt);
+}
+
+.results-error {
+  padding: var(--results-foot-py) var(--layout-screen-px) 0;
+}
+
+.notice {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--color-neutral-800);
+}
+
+.notice-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-accent-700);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* REQ-DCLEAN-013 / 015: as a link (app.css `a`). */
+.notice-link:hover {
+  color: var(--color-link-hover);
+}
+
+.notice-link:active {
+  color: var(--color-link-active);
+}
+
+.skipped-note {
+  padding: var(--results-foot-py) var(--layout-screen-px) 0;
+}
+
+.undo-notice {
+  padding: var(--idle-actions-mt) var(--layout-screen-px) 0;
+}
+
+/* ── Below-goal notification (REQ-DCLEAN-010) ─────────────────── */
+/* Snapshot toast: absolute in the screen area (.app-main), top-right. */
+.notify {
+  position: absolute;
+  top: var(--notify-inset);
+  right: var(--notify-inset);
+  width: var(--notify-w);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: var(--notify-py) var(--notify-px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--notify-gap);
+}
+
+.notify-head {
+  display: flex;
+  align-items: center;
+  gap: var(--notify-gap);
+}
+
+.notify-icon {
+  width: var(--notify-icon-size);
+  height: var(--notify-icon-size);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-2);
+  color: var(--color-bg);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.notify-glyph {
+  width: var(--notify-glyph);
+  height: var(--notify-glyph);
+}
+
+.notify-who {
+  font-size: var(--fs-notify-who);
+  font-weight: var(--fw-notify-who);
+  flex: 1;
+}
+
+.notify-when {
+  font-size: var(--fs-notify-when);
+  color: var(--color-neutral-700);
+}
+
+.notify-text {
+  font-size: var(--fs-notify-text);
+  line-height: var(--lh-notify-text);
+}
+
+.notify-actions {
+  display: flex;
+  gap: var(--notify-actions-gap);
+  justify-content: flex-end;
+}

@@ -13,3 +13,12 @@ bilimanager
 # Use docs/ for committed artifacts.
 .docs/
 .DS_Store
+
+# Desktop GUI (gui/) build outputs
+gui/node_modules
+gui/dist
+gui/src-tauri/target
+gui/src-tauri/gen
+gui/test-results
+gui/playwright-report
+gui/tests/visual/__baseline__

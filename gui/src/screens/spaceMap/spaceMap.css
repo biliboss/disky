@@ -1,0 +1,204 @@
+/* Space map (REQ-DSCR-012) — the snapshot's Space map markup, in tokens. */
+
+.map {
+  flex: 1;
+  min-height: 0;
+  padding: var(--map-pt) var(--map-pr) var(--map-pb) var(--map-pl);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--map-side-w);
+  grid-template-rows: auto 1fr;
+  gap: var(--map-row-gap) var(--map-col-gap);
+}
+
+.map-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--map-head-gap);
+}
+
+.map-up-glyph {
+  width: var(--nav-icon);
+  height: var(--nav-icon);
+  stroke-width: var(--icon-stroke);
+}
+
+.map-heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--map-title-gap);
+}
+
+.map-crumb {
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+  white-space: pre;
+}
+
+.map-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-map-title);
+  margin: 0;
+}
+
+.map-tiles {
+  position: relative;
+  min-height: 0;
+}
+
+.map-empty {
+  margin: 0;
+  color: var(--color-neutral-700);
+}
+
+/* A treemap block: themed button (scripts/controlClasses.mjs). Its colour
+   is one of the seven tile tokens, set per tile. */
+.map-tile {
+  position: absolute;
+  /* No padding here (see .map-tile-body): the block is exactly its slot,
+     however thin, and never spills past the treemap or under the side card. */
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  /* Labels below react to the block's own size (container queries). */
+  container-type: size;
+  border-radius: var(--radius-md);
+  border: none;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  font: inherit;
+  color: var(--color-text);
+  cursor: pointer;
+  background: var(--tile-0);
+  box-shadow: none;
+}
+
+.map-tile[aria-pressed="true"] {
+  box-shadow: var(--map-tile-ring);
+}
+
+.map-tile:hover {
+  background-image: linear-gradient(var(--map-tile-hover), var(--map-tile-hover));
+}
+
+.map-tile:active {
+  background-image: linear-gradient(var(--map-tile-active), var(--map-tile-active));
+}
+
+.map-tile:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-inset-color);
+  outline-offset: var(--focus-ring-inset-offset);
+}
+
+.map-tile-body {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: var(--map-tile-pad);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: var(--map-tile-gap);
+  overflow: hidden;
+}
+
+.map-tile-name,
+.map-tile-size {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-tile-name {
+  font-weight: var(--fw-map-tile-name);
+  font-size: var(--fs-map-tile-name);
+}
+
+.map-tile-size {
+  font-size: var(--fs-map-tile-size);
+}
+
+/* A block too small to read keeps its colour and accessible name but shows
+   no text: the side card names it once selected. The query measures the
+   whole block; its text sits inside 0.875rem of padding on each side.
+   Container query sizes cannot read custom properties, so the thresholds
+   are plain rem: padding (1.75rem) plus one line of text (~1.25rem), both
+   lines (~2.4rem), a readable word (~2.5rem). */
+@container (max-width: 4.25rem) or (max-height: 4.15rem) {
+  .map-tile-size {
+    display: none;
+  }
+}
+
+@container (max-width: 4.25rem) or (max-height: 3rem) {
+  .map-tile-name {
+    display: none;
+  }
+}
+
+/* A thin block takes the small radius so it reads as a block, not a pill. */
+.map-tile-thin {
+  border-radius: var(--radius-sm);
+}
+
+.map-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--map-side-gap);
+}
+
+.map-error {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--color-danger);
+}
+
+.map-card {
+  padding: var(--map-card-pad);
+  gap: var(--map-card-gap);
+}
+
+.map-card-kicker {
+  color: var(--color-accent-700);
+}
+
+.map-card-title {
+  font-size: var(--fs-map-card-title);
+}
+
+.map-card-path {
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+  word-break: break-all;
+}
+
+.map-card-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-map-card-row);
+}
+
+.map-card-row-first {
+  margin-top: var(--map-card-rows-mt);
+}
+
+.map-card-value {
+  font-weight: var(--fw-map-card-value);
+}
+
+.map-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--map-card-actions-gap);
+  margin-top: var(--map-card-actions-mt);
+}
+
+.map-hint {
+  font-size: var(--fs-map-hint);
+  color: var(--color-neutral-700);
+  padding: 0 var(--map-hint-px);
+}

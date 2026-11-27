@@ -1,8 +1,22 @@
 use anyhow::Result;
 use duckdb::Connection;
 
+/// Open a snapshot for writing (scans). DuckDB takes an exclusive lock:
+/// nothing else, in any process, can open the file until this closes.
 pub fn open(path: &str) -> Result<Connection> {
     let conn = Connection::open(path)?;
+    let cpus = num_cpus::get();
+    conn.execute_batch(&format!("PRAGMA threads={cpus};"))?;
+    Ok(conn)
+}
+
+/// Open a finished snapshot for queries. Read-only opens share the file
+/// lock, so the GUI's background checks, its screens and the CLI can all
+/// read the same snapshot at once instead of failing with `lock-held`.
+/// Temporary tables still work (they live outside the file).
+pub fn open_read(path: &str) -> Result<Connection> {
+    let config = duckdb::Config::default().access_mode(duckdb::AccessMode::ReadOnly)?;
+    let conn = Connection::open_with_flags(path, config)?;
     let cpus = num_cpus::get();
     conn.execute_batch(&format!("PRAGMA threads={cpus};"))?;
     Ok(conn)
@@ -20,7 +34,8 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
             physical_size  BIGINT,
             mtime          BIGINT,
             is_dir         BOOLEAN NOT NULL DEFAULT false,
-            depth          INTEGER NOT NULL DEFAULT 0
+            depth          INTEGER NOT NULL DEFAULT 0,
+            atime          BIGINT
         );
         DROP TABLE IF EXISTS scan_meta;
         CREATE TABLE scan_meta (
@@ -29,7 +44,8 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
             ended_at     BIGINT,
             completed    BOOLEAN NOT NULL DEFAULT false,
             entries      BIGINT NOT NULL DEFAULT 0,
-            bytes        BIGINT NOT NULL DEFAULT 0
+            bytes        BIGINT NOT NULL DEFAULT 0,
+            skipped      BIGINT NOT NULL DEFAULT 0
         );
     ",
     )?;
@@ -78,6 +94,22 @@ impl ScanMeta {
     }
 }
 
+/// Record how many paths the scan could not read for permission reasons
+/// (REQ-DCLEAN-018.A2). Call after [`write_scan_meta`].
+pub fn write_scan_skipped(conn: &Connection, skipped: u64) -> Result<()> {
+    conn.execute("UPDATE scan_meta SET skipped = ?", [skipped as i64])?;
+    Ok(())
+}
+
+/// Paths the snapshot's scan skipped for permission reasons. 0 for a
+/// snapshot written before the count existed.
+pub fn read_scan_skipped(conn: &Connection) -> u64 {
+    conn.query_row("SELECT skipped FROM scan_meta LIMIT 1", [], |r| {
+        r.get::<_, i64>(0)
+    })
+    .map_or(0, |n| n.max(0) as u64)
+}
+
 pub fn read_scan_meta(conn: &Connection) -> Option<ScanMeta> {
     let mut stmt = conn
         .prepare(
@@ -124,6 +156,11 @@ pub struct FileRecord {
     pub mtime: Option<i64>,
     pub is_dir: bool,
     pub depth: i32,
+    /// Last access time (`st_atime`, unix seconds) — the Large files screen's
+    /// "last opened" (REQ-DSCR-004.A1). APFS updates it lazily, so it is
+    /// approximate. The last column, since [`append_batch`] appends by
+    /// position.
+    pub atime: Option<i64>,
 }
 
 pub fn append_batch(conn: &Connection, records: &[FileRecord]) -> Result<()> {
@@ -138,6 +175,7 @@ pub fn append_batch(conn: &Connection, records: &[FileRecord]) -> Result<()> {
             r.mtime,
             r.is_dir,
             r.depth,
+            r.atime,
         ])?;
     }
     app.flush()?;

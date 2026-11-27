@@ -107,13 +107,57 @@ pub struct ScanOutcome {
     pub complete: bool,
     pub entries: u64,
     pub bytes: u64,
+    /// Paths the walk could not read for permission reasons
+    /// (REQ-DCLEAN-018.A2). Recorded in `scan_meta.skipped`.
+    pub skipped: u64,
 }
 
 pub fn run(root: &str, db_path: &str) -> Result<ScanOutcome> {
     run_cancellable(root, db_path, Arc::new(AtomicBool::new(false)))
 }
 
+/// Progress of a running scan, reported after each batch is written.
+#[derive(Debug, Clone, Default)]
+pub struct ScanTick {
+    /// Entries (files and dirs) recorded so far.
+    pub entries: u64,
+    /// Logical bytes seen so far.
+    pub bytes: u64,
+    /// Physical bytes seen so far (`st_blocks * 512`; logical off Unix).
+    pub physical_bytes: u64,
+    /// Last path of the batch just written.
+    pub current_path: String,
+}
+
+/// What a scan reports to its observer.
+#[derive(Debug, Clone)]
+pub enum ScanEvent<'a> {
+    Tick(&'a ScanTick),
+    /// The walk is over; indexes are being built.
+    Indexing,
+}
+
 pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Result<ScanOutcome> {
+    let mut progress = Progress::new();
+    let outcome = run_observed(root, db_path, cancel, &mut |ev| match ev {
+        ScanEvent::Tick(t) => progress.tick(t.entries, t.bytes),
+        ScanEvent::Indexing => progress.message("Building indexes..."),
+    })?;
+    progress.finish(outcome.entries, outcome.bytes, db_path);
+    Ok(outcome)
+}
+
+/// [`run_cancellable`] that reports progress to `observe` instead of the
+/// terminal. The desktop GUI uses this to stream scan progress.
+pub fn run_observed(
+    root: &str,
+    db_path: &str,
+    cancel: Arc<AtomicBool>,
+    observe: &mut dyn FnMut(ScanEvent<'_>),
+) -> Result<ScanOutcome> {
+    // Stored with `/` separators on every OS (REQ-XPLAT-001).
+    let root_slash = crate::platform::to_slash_str(root);
+    let root = root_slash.as_str();
     let conn = db::open(db_path)?;
     db::create_schema(&conn)?;
 
@@ -125,16 +169,18 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
 
     let cpus = num_cpus::get();
 
-    let mut progress = Progress::new();
-
     let counter = Arc::new(AtomicU64::new(0));
     let bytes_seen = Arc::new(AtomicU64::new(0));
+    let physical_seen = Arc::new(AtomicU64::new(0));
     let (tx, rx) = bounded::<Vec<FileRecord>>(CHANNEL_CAP);
 
     let root_owned = root.to_string();
     let counter_clone = Arc::clone(&counter);
     let bytes_clone = Arc::clone(&bytes_seen);
+    let physical_clone = Arc::clone(&physical_seen);
     let cancel_clone = Arc::clone(&cancel);
+    let skipped = Arc::new(AtomicU64::new(0));
+    let skipped_clone = Arc::clone(&skipped);
 
     let walker = thread::Builder::new()
         .name("walker".into())
@@ -147,19 +193,40 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
                 .follow_links(false)
                 .parallelism(Parallelism::RayonNewPool(cpus))
                 .into_iter()
-                .flatten()
             {
                 if cancel_clone.load(Ordering::Relaxed) {
                     break;
                 }
+                let denied = |e: &jwalk::Error| {
+                    e.io_error()
+                        .is_some_and(|io| io.kind() == std::io::ErrorKind::PermissionDenied)
+                };
+                let entry = match entry {
+                    Ok(e) => e,
+                    Err(e) => {
+                        if denied(&e) {
+                            skipped_clone.fetch_add(1, Ordering::Relaxed);
+                        }
+                        continue;
+                    }
+                };
+                // jwalk reports an unreadable directory on its own entry.
+                if entry.read_children_error.as_ref().is_some_and(denied) {
+                    skipped_clone.fetch_add(1, Ordering::Relaxed);
+                }
                 let path = entry.path();
                 let meta = match entry.metadata() {
                     Ok(m) => m,
-                    Err(_) => continue,
+                    Err(e) => {
+                        if denied(&e) {
+                            skipped_clone.fetch_add(1, Ordering::Relaxed);
+                        }
+                        continue;
+                    }
                 };
 
                 let is_dir = meta.is_dir();
-                let path_owned: String = path.to_string_lossy().into_owned();
+                let path_owned: String = crate::platform::to_slash(&path);
                 let path_bytes = path_owned.as_bytes();
 
                 let name_start = memrchr(b'/', path_bytes).map(|i| i + 1).unwrap_or(0);
@@ -187,11 +254,21 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
                         Some(meta.blocks() as i64 * 512)
                     }
                 };
+                // No block count on Windows: the length is the best figure
+                // std offers (REQ-XPLAT-007).
                 #[cfg(not(unix))]
-                let physical_size: Option<i64> = None;
+                let physical_size: Option<i64> = (!is_dir).then_some(size);
 
                 let mtime = meta
                     .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64);
+
+                // Last access (REQ-DSCR-004.A1). `stat` itself never
+                // updates it, so the scan leaves it as it found it.
+                let atime = meta
+                    .accessed()
                     .ok()
                     .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
                     .map(|d| d.as_secs() as i64);
@@ -205,11 +282,16 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
                     mtime,
                     is_dir,
                     depth: entry.depth() as i32,
+                    atime,
                 });
 
                 counter_clone.fetch_add(1, Ordering::Relaxed);
                 if size > 0 {
                     bytes_clone.fetch_add(size as u64, Ordering::Relaxed);
+                }
+                let physical = physical_size.unwrap_or(size);
+                if physical > 0 {
+                    physical_clone.fetch_add(physical as u64, Ordering::Relaxed);
                 }
 
                 if batch.len() >= BATCH_SIZE {
@@ -226,18 +308,23 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
             Ok(())
         })?;
 
+    let mut tick = ScanTick::default();
     for batch in rx {
         db::append_batch(&conn, &batch)?;
-        let n = counter.load(Ordering::Relaxed);
-        let b = bytes_seen.load(Ordering::Relaxed);
-        progress.tick(n, b);
+        tick.entries = counter.load(Ordering::Relaxed);
+        tick.bytes = bytes_seen.load(Ordering::Relaxed);
+        tick.physical_bytes = physical_seen.load(Ordering::Relaxed);
+        if let Some(last) = batch.last() {
+            tick.current_path.clone_from(&last.path);
+        }
+        observe(ScanEvent::Tick(&tick));
     }
 
     walker.join().expect("walker thread panicked")?;
 
     let cancelled = cancel.load(Ordering::Relaxed);
 
-    progress.message("Building indexes...");
+    observe(ScanEvent::Indexing);
     db::build_indexes(&conn)?;
 
     let total = counter.load(Ordering::Relaxed);
@@ -247,10 +334,48 @@ pub fn run_cancellable(root: &str, db_path: &str, cancel: Arc<AtomicBool>) -> Re
         .map(|d| d.as_secs() as i64)
         .ok();
     db::write_scan_meta(&conn, root, started_at, ended_at, !cancelled, total, bytes)?;
-    progress.finish(total, bytes, db_path);
+    let skipped = skipped.load(Ordering::Relaxed);
+    db::write_scan_skipped(&conn, skipped)?;
     Ok(ScanOutcome {
         complete: !cancelled,
         entries: total,
         bytes,
+        skipped,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every regular file gets a physical size, and paths are stored with
+    /// `/` separators (REQ-XPLAT-001.A1, REQ-XPLAT-007.A1).
+    #[test]
+    fn physical_size_is_recorded_for_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("root");
+        std::fs::create_dir_all(root.join("a b")).unwrap();
+        std::fs::write(root.join("a b/x.txt"), vec![7u8; 5000]).unwrap();
+        let db_path = tmp.path().join("s.db");
+        let db_path = db_path.to_str().unwrap();
+        run_observed(
+            root.to_str().unwrap(),
+            db_path,
+            Arc::new(AtomicBool::new(false)),
+            &mut |_| {},
+        )
+        .unwrap();
+        let conn = db::open(db_path).unwrap();
+        let (path, name, physical): (String, String, Option<i64>) = conn
+            .query_row(
+                "SELECT path, name, physical_size FROM files WHERE NOT is_dir",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(name, "x.txt");
+        assert!(!path.contains('\\') || cfg!(unix), "{path}");
+        assert_eq!(path, crate::platform::to_slash(&root.join("a b/x.txt")));
+        assert!(physical.is_some_and(|p| p > 0), "{physical:?}");
+    }
 }

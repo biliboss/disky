@@ -1,0 +1,393 @@
+/* GUI token sheet — named tokens for values the snapshot writes inline that
+ * tokens.css does not carry (REQ-DCLEAN-031: component code holds no literals).
+ * tokens.css stays a verbatim copy of specs/disk-cleanup/tokens.css; additions
+ * live here and alias an existing token wherever the value already exists.
+ * Source for every value: specs/disk-cleanup/snapshot.html (app shell). */
+:root {
+  /* ── Type ───────────────────────────────────────────────────── */
+  --fs-titlebar: var(--fs-xs);        /* title bar "disky" — 12px */
+  --fs-brand: 22px;                   /* sidebar brand word */
+  --tracking-brand: -0.01em;
+  --fs-nav: 14px;                     /* navigation entries */
+  --fs-badge: var(--fs-xs);           /* nav badge — 12px */
+  --fw-badge: 600;
+  --fw-nav-active: 600;
+  --fs-meter: var(--fs-small);        /* meter volume / free row — 13px */
+  --fs-meter-goal: var(--fs-xs);      /* "Goal: keep … free" — 12px */
+  --fw-meter-volume: 600;
+
+  /* ── Title bar ──────────────────────────────────────────────── */
+  --titlebar-px: 16px;
+  --titlebar-gap: 12px;
+  --titlebar-light: 12px;             /* native traffic-light diameter */
+  --titlebar-lights-w: 52px;          /* 3 × 12px lights + 2 × 8px gaps */
+  --titlebar-title-pr: 52px;          /* balances the lights so the title centres */
+
+  /* ── Sidebar ────────────────────────────────────────────────── */
+  --sidebar-pt: 12px;
+  --sidebar-px: 14px;
+  --sidebar-pb: 16px;
+  --sidebar-gap: 4px;
+
+  --brand-gap: 10px;
+  --brand-pt: 6px;
+  --brand-px: 8px;
+  --brand-pb: 18px;
+  --brand-logo: 34px;
+
+  --nav-gap: 12px;
+  --nav-py: 10px;
+  --nav-px: 12px;
+  --nav-icon: 18px;
+  --icon-stroke: 2.75;                /* Lucide stroke width, every icon */
+
+  --badge-size: 20px;
+  --badge-px: 6px;
+
+  /* ── Disk meter ─────────────────────────────────────────────── */
+  --meter-pad: 14px;
+  --meter-gap: 8px;
+  --meter-marker-w: 3px;
+  --meter-marker-overhang: 3px;       /* marker extends above/below the bar */
+  --meter-marker-nudge: 1px;          /* snapshot: left = calc(pos − 1px) */
+
+  /* ── Usage ring (REQ-DCLEAN-002) ────────────────────────────── */
+  --ring-size: 260px;                 /* rendered size; geometry is the 120-unit viewBox */
+  --ring-label-gap: 2px;              /* free amount ↔ "free of <capacity>" */
+
+  /* ── Smart Clean · idle (REQ-DCLEAN-003) ────────────────────── */
+  --idle-py: 48px;
+  --idle-gap: 48px;                   /* main column ↔ ring rail */
+  --idle-rail-w: 300px;
+  --idle-stack-gap: 20px;
+  --lh-hero: 1.05;
+  --fs-idle-desc: var(--fs-h5);       /* 16px */
+  --idle-desc-max: 440px;
+  --idle-actions-gap: 10px;
+  --idle-actions-mt: 8px;
+  --btn-hero-py: 14px;
+  --btn-start-px: 26px;
+  --btn-explore-px: 22px;
+  --fs-btn-start: var(--fs-h5);       /* 16px */
+  --fs-btn-explore: var(--fs-body);   /* 15px */
+  --shortcuts-gap: 12px;
+  --shortcuts-mt: 36px;
+  --shortcut-icon: var(--btn-icon-size); /* 36px disc */
+  --shortcut-glyph: var(--nav-icon);  /* 18px */
+  --shortcut-title-mt: 6px;
+  --idle-rail-gap: 14px;
+  --idle-rail-pt: 24px;
+
+  /* ── Smart Clean · scanning (REQ-DCLEAN-004) ───────────────── */
+  --scan-py: var(--idle-py);          /* 48px */
+  --scan-gap: var(--idle-stack-gap);  /* 20px */
+  --scan-max-w: 760px;
+  --fs-scan-title: 40px;
+  --scan-meta-gap: 16px;
+  --fs-scan-meta: var(--fs-nav);      /* 14px */
+  --scan-rows-gap: 2px;
+  --scan-rows-mt: 12px;
+  --scan-row-gap: 14px;
+  --scan-row-py: 9px;
+  --scan-row-px: 4px;
+  --fs-scan-row: var(--fs-body);      /* 15px */
+  --scan-dot: 22px;
+  --scan-check: 12px;
+  --scan-check-stroke: 3.5;
+
+  /* ── Smart Clean · review (REQ-DCLEAN-005/006/019) ──────────── */
+  --results-pt: var(--screen-py);     /* 36px */
+  --results-head-pb: 18px;
+  --results-head-gap: 12px;
+  --results-heading-gap: 8px;
+  --fs-results-title: var(--fs-ring-number); /* 38px */
+  --results-list-gap: 8px;
+  --results-list-pb: 24px;
+  --result-row-gap: 14px;
+  --result-row-py: 12px;
+  --result-row-px: 18px;
+  --check-border: 2px;
+  --check-glyph: 13px;
+  --check-stroke: var(--scan-check-stroke); /* 3.5 */
+  --result-icon: 38px;
+  --result-glyph: var(--nav-icon);    /* 18px */
+  --result-text-gap: 2px;
+  --result-title-gap: 10px;
+  --fs-result-name: var(--fs-body);   /* 15px */
+  --fw-result-name: 600;
+  --fs-result-desc: var(--fs-small);  /* 13px */
+  --fs-result-size: var(--fs-body);   /* 15px */
+  --fw-result-size: 600;
+  --result-size-min: 72px;
+  --chevron-size: var(--nav-icon);    /* 18px */
+  --chevron-open: rotate(180deg);     /* snapshot: chevron-down flips up */
+  --result-items-pl: 124px;           /* aligns items under the category name */
+  --result-items-pb: 12px;
+  --item-gap: 12px;
+  --item-py: 8px;
+  --item-rule: 1px;
+  --fs-item: var(--fs-small);         /* 13px */
+  --item-size-min: 64px;
+  --item-name-w: 33.333%;             /* name : path = 1 : 2, as the snapshot's flex */
+  --results-foot-py: 16px;
+  --results-foot-gap: 16px;
+  --results-foot-glyph: 20px;
+  --fs-results-foot: var(--fs-nav);   /* 14px */
+  --btn-clean-py: 12px;
+  --btn-clean-px: 24px;
+  --results-empty-gap: var(--idle-stack-gap); /* 20px */
+
+  /* ── Smart Clean · confirm dialog (REQ-DCLEAN-007/022) ──────── */
+  --color-danger: var(--color-accent-800); /* destructive primary fill (REQ-DCLEAN-007.A6) */
+  --color-danger-hover: color-mix(in srgb, var(--color-danger) 85%, var(--color-text));
+  --confirm-w: 460px;                 /* snapshot: .dialog width:460px */
+  --confirm-list-gap: 6px;            /* snapshot: dialog-body gap:6px */
+  --fs-confirm-note: var(--fs-small); /* 13px */
+
+  /* ── Smart Clean · cleaning (REQ-DCLEAN-008) ────────────────── */
+  --clean-py: var(--scan-py);         /* 48px, as scanning */
+  --clean-gap: var(--scan-gap);       /* 20px */
+  --clean-max-w: var(--scan-max-w);   /* 760px */
+  --fs-clean-title: var(--fs-scan-title); /* 40px */
+
+  /* ── Smart Clean · done (REQ-DCLEAN-009) ────────────────────── */
+  --done-pad: 56px;
+  --done-gap: var(--idle-gap);        /* 48px, main column ↔ ring rail */
+  --done-rail-w: var(--idle-rail-w);  /* 300px */
+  --done-stack-gap: 18px;
+  --fs-done-title: 54px;
+  --lh-done-title: 1;
+  --fs-done-note: var(--fs-h5);       /* 16px */
+  --done-note-max: var(--idle-desc-max); /* 440px */
+  --done-actions-gap: var(--idle-actions-gap); /* 10px */
+  --done-actions-mt: var(--idle-actions-mt);   /* 8px */
+  --btn-done-py: var(--btn-clean-py); /* 12px */
+  --btn-done-home-px: 24px;
+  --btn-done-undo-px: 20px;
+  --done-ring-size: 240px;
+  --fs-done-ring-number: 34px;
+  --done-ring-label-gap: 0px;         /* snapshot: the done ring label has no gap */
+  --done-rail-gap: var(--idle-rail-gap); /* 14px */
+  --done-failed-gap: 6px;
+
+  /* ── Error states (REQ-DCLEAN-018) ──────────────────────────── */
+  --error-gap: 10px;
+  --error-mt: var(--idle-actions-mt); /* 8px */
+
+  /* ── Disabled treatment (REQ-DCLEAN-016.A2) ─────────────────── */
+  --opacity-disabled: 0.45;           /* organic.css .btn:disabled */
+
+  /* ── Control states (REQ-DCLEAN-012 … 015, contrast per REQ-DCLEAN-024) ──
+     Each aliases an Organic ramp step. Where the snapshot's pairing misses
+     WCAG 2.2 AA, the next ramp step that passes is used (ratios measured by
+     src/styles/contrast.test.ts). */
+  --color-on-accent: var(--color-text);          /* label on an accent fill: 4.6:1 (--color-bg is 3.0:1) */
+  --color-primary-hover: var(--color-accent-500); /* lighter, so the ink label keeps 4.5:1 */
+  --color-primary-active: var(--color-accent-400);
+  --color-ghost-text: var(--color-accent-700);   /* accent text at body size (REQ-DCLEAN-024.A2) */
+  --color-check-border: var(--color-neutral-600); /* unchecked border: 3.2:1 on surface (-400 is 1.5:1) */
+  --color-check-border-checked: var(--color-accent-700); /* checked edge: 5.1:1 on surface */
+  --color-check-hover: var(--color-accent-700);
+  --color-check-checked-hover: var(--color-accent-600);
+  --color-check-checked-active: var(--color-accent-700);
+  --color-link-hover: var(--color-accent-800);
+  --color-link-active: var(--color-accent-900);
+  --color-shortcut-active: var(--color-neutral-300);
+  --focus-ring-color: var(--color-accent-700);   /* 5.1:1 on surface (--color-accent is 2.7:1) */
+  --focus-ring-inset-color: var(--color-text);   /* inset ring that may sit on an accent fill */
+  --focus-ring-width: 2px;                       /* organic.css :focus-visible */
+  --focus-ring-offset: 2px;
+  --focus-ring-inset-offset: -2px;               /* organic.css .seg-opt focus ring */
+
+  /* ── Screen-reader-only text (REQ-DCLEAN-023) ───────────────── */
+  --sr-only-size: 1px;
+  --sr-only-offset: -1px;
+
+  /* ── Results item cap (REQ-DCLEAN-030.A3) ───────────────────── */
+  --more-items-py: var(--item-py);
+
+  /* ── Below-goal notification (REQ-DCLEAN-010) ───────────────── */
+  --notify-inset: 16px;               /* snapshot: top:16px; right:16px */
+  --notify-w: 360px;
+  --notify-py: 14px;
+  --notify-px: 16px;
+  --notify-gap: 10px;                 /* stack gap and header gap */
+  --notify-actions-gap: 8px;
+  --notify-icon-size: 26px;
+  --notify-glyph: 14px;
+  --fs-notify-who: var(--fs-small);   /* "Assistant · …" — 13px */
+  --fw-notify-who: 600;
+  --fs-notify-when: var(--fs-xs);     /* "now" — 12px */
+  --fs-notify-text: var(--fs-nav);    /* 14px */
+  --lh-notify-text: 1.45;
+
+  /* ── Busy indicator (REQ-DCLEAN-017.A2) ─────────────────────── */
+  --busy-size: 18px;
+  --busy-stroke: 2px;
+  --busy-gap: 10px;
+  --motion-busy: 0.8s linear infinite;
+
+  /* ── Figures ────────────────────────────────────────────────── */
+  --numeric-figures: tabular-nums;    /* sizes align in columns (REQ-DCLEAN-028.A4) */
+
+  /* ── Screens ────────────────────────────────────────────────── */
+  --screen-py: 36px;                  /* secondary-screen top/bottom padding */
+  --screen-gap: 6px;                  /* kicker ↔ title stack */
+
+  /* ── Settings (REQ-DSCR-016; snapshot Settings markup) ──────── */
+  --settings-max-w: 820px;            /* snapshot: max-width:820px */
+  --settings-gap: 12px;               /* rows, and the excluded card's stack */
+  --settings-title-mb: 8px;           /* h1 margin: 0 0 8px */
+  --settings-row-gap: 20px;
+  --settings-row-py: 16px;
+  --settings-row-px: 20px;
+  --settings-text-gap: 2px;
+  --fw-settings-label: 600;
+  --switch-w: 46px;                   /* track */
+  --switch-h: 28px;
+  --switch-pad: 3px;
+  --switch-knob: 22px;
+  --color-switch-on: var(--color-accent);
+  --color-switch-off: var(--color-neutral-300);
+  --color-switch-on-hover: var(--color-primary-hover);
+  --color-switch-on-active: var(--color-primary-active);
+  --color-switch-off-hover: var(--color-neutral-400);
+  --color-switch-off-active: var(--color-neutral-500);
+  --chips-gap: 8px;
+  --fs-chip: var(--fs-small);         /* 13px */
+  --chip-py: 6px;
+  --chip-px: 14px;
+  --chip-remove-gap: 6px;             /* gap-fill: chip text ↔ remove button */
+  --chip-remove-size: 16px;
+  --chip-remove-glyph: 12px;
+  --chip-remove-hover: var(--overlay-hover);
+  --chip-remove-active: var(--overlay-active);
+
+  /* ── History (REQ-DSCR-015; snapshot History markup) ────────── */
+  --history-max-w: 860px;             /* snapshot: max-width:860px */
+  --history-gap: 12px;                /* rows, and header ↔ first row */
+  --history-head-gap: var(--screen-gap); /* kicker ↔ title, 6px */
+  --history-head-mb: 6px;
+  --history-row-gap: 16px;
+  --history-row-py: 14px;
+  --history-row-px: 20px;
+  --history-icon: var(--result-icon); /* 38px disc */
+  --history-glyph: var(--nav-icon);   /* 18px */
+  --history-text-gap: 2px;
+  --fw-history-name: 600;
+  --fw-history-size: 600;
+
+  /* ── Space map (REQ-DSCR-012; snapshot Space map markup) ────── */
+  --map-pt: var(--screen-py);         /* 36px */
+  --map-pr: 32px;
+  --map-pb: 32px;
+  --map-pl: var(--layout-screen-px);  /* 56px */
+  --map-side-w: 260px;
+  --map-row-gap: 20px;
+  --map-col-gap: 24px;
+  --map-head-gap: 14px;
+  --map-title-gap: 2px;
+  --fs-map-title: 34px;
+  --map-tile-inset: 3px;              /* half the gutter between tiles */
+  --map-tile-gutter: 6px;
+  --map-tile-pad: 14px;
+  --map-tile-gap: 2px;
+  --fs-map-tile-name: var(--fs-nav);  /* 14px */
+  --fw-map-tile-name: 600;
+  --fs-map-tile-size: var(--fs-small); /* 13px */
+  --map-tile-ring: inset 0 0 0 3px var(--color-accent-700); /* selected tile */
+  --map-tile-hover: var(--overlay-hover);
+  --map-tile-active: var(--overlay-active);
+  --map-side-gap: 12px;
+  --map-card-pad: 20px;
+  --map-card-gap: 10px;
+  --fs-map-card-title: 22px;
+  --fs-map-card-row: var(--fs-nav);   /* 14px */
+  --map-card-rows-mt: 6px;
+  --fw-map-card-value: 600;
+  --map-card-actions-gap: 6px;
+  --map-card-actions-mt: 8px;
+  --fs-map-hint: var(--fs-xs);        /* 12px */
+  --map-hint-px: 6px;
+
+  /* ── Large files (REQ-DSCR-013; snapshot Large files markup) ── */
+  --large-head-pb: 16px;              /* header padding: 36px 56px 16px */
+  --large-head-gap: 20px;
+  --large-body-pb: 16px;              /* table area padding: 0 56px 16px */
+  --large-check-col: 40px;            /* <th style="width:40px"> */
+  --color-table-head: var(--color-neutral-700); /* column headers: Organic's 60% ink is < 4.5:1 */
+  --large-check-raise: 2px;           /* baseline lift of the snapshot's inline check: 49.3 px rows */
+  --large-error-mb: 12px;             /* gap-fill: engine error above the table */
+  --fw-large-name: 600;
+  --fw-large-size: 600;
+
+  /* ── Duplicates (REQ-DSCR-014; snapshot Duplicates markup) ── */
+  --dupes-head-pb: 16px;              /* header padding: 36px 56px 16px */
+  --dupes-body-pb: 16px;              /* grid padding: 0 56px 16px */
+  --dupes-grid-gap: 12px;
+  --dupes-card-pad: 18px;
+  --dupes-card-gap: 8px;
+  --dupes-title-gap: 10px;
+  --dupe-copy-py: 8px;
+  --dupe-copy-px: 12px;
+  --dupe-copy-gap: 10px;
+  --fs-dupe-path: var(--fs-small);    /* 13px */
+  --dupe-dot: 14px;
+  --dupe-dot-border: 2px;
+  --dupe-copy-hover: var(--overlay-hover);
+  --dupe-copy-active: var(--overlay-active);
+  --color-dupe-remove: var(--color-accent-700); /* "Remove" text: Organic's accent is < 4.5:1 at 11 px */
+  --dupes-error-mb: 12px;             /* gap-fill: engine error above the grid */
+
+  /* ── Assistant (REQ-DSCR-009/010; snapshot Assistant markup) ── */
+  --assistant-side-w: 320px;          /* grid-template-columns: minmax(0,1fr) 320px */
+  --assistant-feed-pt: var(--screen-py); /* feed padding: 36px 32px 32px 56px */
+  --assistant-feed-pr: 32px;
+  --assistant-feed-pb: 32px;
+  --assistant-feed-pl: var(--layout-screen-px); /* 56px */
+  --assistant-feed-gap: 14px;
+  --assistant-head-gap: var(--screen-gap); /* status ↔ heading, 6px */
+  --assistant-head-mb: 6px;
+  --fs-assistant-title: 36px;
+  --assistant-card-gap: 12px;
+  --assistant-card-py: 18px;
+  --assistant-card-px: 20px;
+  --assistant-card-head-gap: 10px;
+  --assistant-card-icon: 28px;
+  --assistant-card-glyph: 15px;
+  --fw-assistant-agent: 600;
+  --fs-assistant-text: var(--fs-body); /* 15px */
+  --lh-assistant-text: 1.5;
+  --assistant-actions-gap: 8px;
+  --fs-assistant-size: var(--fs-nav); /* 14px */
+  --fw-assistant-size: 600;
+  --color-assistant-outline: var(--color-accent-700); /* "Heads-up" outline tag: Organic's accent is < 4.5:1 at 11 px */
+  --assistant-empty-py: 12px;
+  --fs-assistant-empty: var(--fs-nav); /* 14px */
+  --assistant-side-gap: 12px;         /* side padding: 36px 32px 32px 0 */
+  --assistant-panel-pad: 20px;
+  --assistant-goal-gap: 12px;
+  --assistant-checks-gap: 10px;
+  --assistant-agents-gap: 8px;
+  --assistant-goal-line-gap: 8px;
+  --fs-assistant-goal-line: var(--fs-nav); /* 14px */
+  --fs-assistant-goal: 28px;
+  --assistant-fill-h: 8px;
+  --motion-assistant-fill: width 0.6s ease;
+  --agent-row-gap: 12px;
+  --agent-row-py: 10px;
+  --agent-row-px: 12px;
+  --agent-text-gap: 1px;
+  --agent-dot: 16px;
+  --agent-dot-border: 2px;
+  --agent-dot-inset: inset 0 0 0 3px var(--color-bg); /* selected dot */
+  --fs-agent-name: var(--fs-nav);     /* 14px */
+  --fw-agent-name: 600;
+  --fs-agent-status: var(--fs-xs);    /* 12px */
+  --opacity-agent-missing: 0.55;
+  --agent-row-hover: var(--overlay-hover);
+  --agent-row-active: var(--overlay-active);
+  --fs-assistant-privacy: var(--fs-xs); /* 12px */
+  --assistant-privacy-mt: 4px;
+  --assistant-error-mb: 12px;         /* gap-fill: engine error above the feed */
+}

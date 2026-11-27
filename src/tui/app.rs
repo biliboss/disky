@@ -96,7 +96,7 @@ impl App {
 
     pub fn open_finder(&mut self) -> Result<()> {
         if let Some(path) = self.selected_path() {
-            std::process::Command::new("open").arg(&path).spawn()?;
+            disky::platform::open_path(&path)?;
             self.status = format!("Opened: {}", path);
         }
         Ok(())

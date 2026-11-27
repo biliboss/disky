@@ -1,0 +1,118 @@
+/* Global base for the GUI window — mirrors the snapshot's <helmet> rules. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  font-family: var(--font-body);
+  color: var(--color-text);
+}
+
+/* Numeric cells: tabular figures so sizes and totals align (REQ-DCLEAN-028.A4). */
+.num {
+  font-variant-numeric: var(--numeric-figures);
+}
+
+a {
+  color: var(--color-accent-700);
+}
+
+a:hover {
+  color: var(--color-link-hover);
+}
+
+a:active {
+  color: var(--color-link-active);
+}
+
+/* ── Control states over the vendored Organic sheet ──────────────
+ * organic.css stays a verbatim copy, so GUI-wide overrides live here (loaded
+ * after it, same specificity). Each fixes a pairing that misses WCAG 2.2 AA
+ * (REQ-DCLEAN-024); the tokens are in gui-tokens.css. */
+
+/* REQ-DCLEAN-012.A1 / 013.A1 / 015.A1: primary label, hover and pressed fills. */
+.btn-primary {
+  color: var(--color-on-accent);
+}
+
+.btn-primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.btn-primary:active {
+  background: var(--color-primary-active);
+}
+
+/* REQ-DCLEAN-024.A2: accent text at body size uses a deep ramp step. */
+.btn-ghost {
+  color: var(--color-ghost-text);
+}
+
+/* REQ-DCLEAN-016.A2: a disabled control keeps its resting fill under the pointer. */
+.btn-primary:disabled:hover,
+.btn-primary:disabled:active {
+  background: var(--color-accent);
+}
+
+.btn-secondary:disabled:hover,
+.btn-secondary:disabled:active,
+.btn-ghost:disabled:hover,
+.btn-ghost:disabled:active {
+  background: transparent;
+}
+
+/* REQ-DCLEAN-014.A1, A3: the focus-visible ring (keyboard only; :focus has none). */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* REQ-DCLEAN-014.A2: segmented options ring their wrapper, inset; ink, because
+   the checked option's fill is the accent. */
+.seg-opt:has(input:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring-inset-color);
+  outline-offset: var(--focus-ring-inset-offset);
+}
+
+/* REQ-DCLEAN-015.A3: the selected option's label on the accent fill. */
+.seg-opt:has(input:checked) {
+  color: var(--color-on-accent);
+}
+
+/* REQ-DCLEAN-015.A2: pressed state of an unselected option. */
+.seg-opt:not(:has(input:checked)):active {
+  background: var(--overlay-active);
+}
+
+/* Programmatic focus targets (phase headings, REQ-DCLEAN-020.A4) are not
+   controls: no ring. */
+[data-phase-heading]:focus {
+  outline: none;
+}
+
+/* REQ-DCLEAN-023: text for assistive tech only. */
+.sr-only {
+  position: absolute;
+  width: var(--sr-only-size);
+  height: var(--sr-only-size);
+  margin: var(--sr-only-offset);
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* REQ-DCLEAN-025.A2: no transitions or animations when reduced motion is asked for. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

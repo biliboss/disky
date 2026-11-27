@@ -10,6 +10,8 @@ documentation = "https://docs.rs/disky"
 keywords = ["disk-usage", "disk-analyzer", "ncdu", "macos", "cli"]
 categories = ["command-line-utilities", "filesystem"]
 readme = "README.md"
+# The desktop GUI is a separate Tauri build with its own workspace.
+exclude = ["gui"]
 rust-version = "1.75"
 
 [lib]
@@ -40,6 +42,14 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ctrlc = "3"
 toml = "0.8"
+plist = "1"
+# Content hash for duplicate detection (REQ-DSCR-005). Pinned: the hash is
+# the deciding comparison, so an upgrade is a deliberate change.
+blake3 = { version = "=1.8.2", features = ["rayon"] }
+
+[target.'cfg(unix)'.dependencies]
+# flock() around history-log read-modify-write (REQ-DCLEAN-034).
+libc = "0.2"
 
 [dev-dependencies]
 dirs = "5"

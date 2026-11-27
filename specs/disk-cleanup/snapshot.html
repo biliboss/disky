@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/organic-2eb7c489-beff-43c2-a70f-35438744f718/styles.css">
+<script src="_ds/organic-2eb7c489-beff-43c2-a70f-35438744f718/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:var(--color-neutral-200);font-family:var(--font-body);color:var(--color-text);}
+a{color:var(--color-accent-700);} a:hover{color:var(--color-accent-800);}
+*{box-sizing:border-box;}
+</style>
+</helmet>
+<div style="min-height:100vh;display:grid;place-items:center;padding:32px;">
+<div data-screen-label="App window" style="width:1200px;height:780px;background:var(--color-bg);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);overflow:hidden;display:grid;grid-template-rows:40px 1fr;position:relative;">
+
+<div style="display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--color-surface);">
+  <div style="display:flex;gap:8px;">
+    <span style="width:12px;height:12px;border-radius:999px;background:var(--color-accent-400);"></span>
+    <span style="width:12px;height:12px;border-radius:999px;background:var(--color-neutral-300);"></span>
+    <span style="width:12px;height:12px;border-radius:999px;background:var(--color-accent-2-300);"></span>
+  </div>
+  <div style="flex:1;text-align:center;font-size:12px;color:var(--color-neutral-700);padding-right:52px;">Diskee</div>
+</div>
+
+<div style="display:grid;grid-template-columns:236px 1fr;min-height:0;">
+  <aside style="background:var(--color-surface);padding:12px 14px 16px;display:flex;flex-direction:column;gap:4px;min-height:0;">
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 8px 18px;">
+      <svg width="34" height="34" viewBox="0 0 34 34" aria-label="Diskee logo" style="flex:none;">
+        <rect x="0" y="0" width="34" height="34" rx="11" fill="var(--color-text)"></rect>
+        <circle cx="17" cy="17" r="9" fill="none" stroke="var(--color-accent)" stroke-dasharray="42.4 56.5" transform="rotate(-90 17 17)" style="stroke-width:5;stroke-linecap:round;"></circle>
+        <circle cx="17" cy="17" r="9" fill="none" stroke="var(--color-accent-2-300)" stroke-dasharray="4 56.5" stroke-dashoffset="-48.5" transform="rotate(-90 17 17)" style="stroke-width:5;stroke-linecap:round;"></circle>
+        <circle cx="17" cy="17" r="2.6" fill="var(--color-bg)"></circle>
+      </svg>
+      <span style="font-family:var(--font-heading);font-size:22px;letter-spacing:-0.01em;">Diskee</span>
+    </div>
+    <sc-for list="{{ nav }}" as="n" hint-placeholder-count="7">
+      <button onClick="{{ n.go }}" style="{{ n.style }}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width:2.75;stroke-linecap:round;stroke-linejoin:round;flex:none;"><path d="{{ n.icon }}"></path></svg>
+        <span style="flex:1;text-align:left;">{{ n.label }}</span>
+        <span style="{{ n.badgeStyle }}">{{ n.badge }}</span>
+      </button>
+    </sc-for>
+    <div style="flex:1;"></div>
+    <div style="background:var(--color-bg);border-radius:var(--radius-md);padding:14px;display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="font-weight:600;">Macintosh HD</span><span style="color:var(--color-neutral-700);">{{ freeLabel }} free</span></div>
+      <div style="position:relative;height:8px;border-radius:999px;background:var(--color-neutral-200);">
+        <div style="height:100%;border-radius:999px;background:var(--color-accent);width:{{ usedPct }};transition:width .8s ease;"></div>
+        <div style="position:absolute;top:-3px;bottom:-3px;width:3px;border-radius:999px;background:var(--color-accent-2-700);left:{{ goalPos }};"></div>
+      </div>
+      <div style="font-size:12px;color:var(--color-neutral-700);">Goal: keep {{ goalLabel }} free</div>
+    </div>
+  </aside>
+
+  <main style="position:relative;min-height:0;overflow:hidden;display:flex;flex-direction:column;">
+
+  <sc-if value="{{ showIdle }}" hint-placeholder-val="{{ true }}">
+    <div data-screen-label="Smart clean · home" style="flex:1;padding:48px 56px;display:grid;grid-template-columns:1fr 300px;gap:48px;align-content:start;">
+      <div style="display:flex;flex-direction:column;gap:20px;">
+        <div style="font-size:13px;color:var(--color-neutral-700);">Last scan 7 days ago</div>
+        <h1 style="font-family:var(--font-heading);font-weight:400;font-size:46px;line-height:1.05;margin:0;text-wrap:pretty;">Let’s clear some room.</h1>
+        <p style="margin:0;font-size:16px;line-height:1.55;max-width:440px;color:var(--color-neutral-800);text-wrap:pretty;">Smart Clean looks through caches, temporary files, logs and app leftovers. Nothing is removed until you review it, and everything goes to the Trash first.</p>
+        <div style="display:flex;gap:10px;margin-top:8px;">
+          <button class="btn btn-primary" onClick="{{ startScan }}" style="padding:14px 26px;font-size:16px;">Start scan</button>
+          <button class="btn btn-secondary" onClick="{{ goMap }}" style="padding:14px 22px;font-size:15px;">Explore disk</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:36px;">
+          <sc-for list="{{ shortcuts }}" as="s" hint-placeholder-count="3">
+            <button class="card" onClick="{{ s.go }}" style="border:none;text-align:left;cursor:pointer;font:inherit;color:inherit;" style-hover="background:var(--color-neutral-200);">
+              <span style="width:36px;height:36px;border-radius:999px;background:var(--color-bg);display:grid;place-items:center;color:var(--color-accent-700);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width:2.75;stroke-linecap:round;stroke-linejoin:round;"><path d="{{ s.icon }}"></path></svg>
+              </span>
+              <span class="card-title" style="margin-top:6px;">{{ s.label }}</span>
+              <span class="card-body">{{ s.desc }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding-top:24px;">
+        <div style="position:relative;width:260px;height:260px;">
+          <svg width="260" height="260" viewBox="0 0 120 120" style="transform:rotate(-90deg);">
+            <circle cx="60" cy="60" r="50" fill="none" stroke="var(--color-surface)" style="stroke-width:14;"></circle>
+            <circle cx="60" cy="60" r="50" fill="none" stroke="var(--color-accent)" stroke-dasharray="{{ ringDash }}" style="stroke-width:14;stroke-linecap:round;transition:stroke-dasharray .8s ease;"></circle>
+          </svg>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
+            <span style="font-family:var(--font-heading);font-size:38px;">{{ freeLabel }}</span>
+            <span style="font-size:13px;color:var(--color-neutral-700);">free of 512 GB</span>
+          </div>
+        </div>
+        <span class="{{ goalTagClass }}">{{ goalTag }}</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showScanning }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Smart clean · scanning" style="flex:1;padding:48px 56px;display:flex;flex-direction:column;gap:20px;max-width:760px;">
+      <h1 style="font-family:var(--font-heading);font-weight:400;font-size:40px;margin:0;">Looking around…</h1>
+      <div style="display:flex;justify-content:space-between;gap:16px;font-size:14px;color:var(--color-neutral-700);"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ scanPath }}</span><span>{{ progressLabel }}</span></div>
+      <div style="height:14px;border-radius:999px;background:var(--color-surface);overflow:hidden;"><div style="height:100%;border-radius:999px;background:var(--color-accent);width:{{ progressPct }};"></div></div>
+      <div style="display:flex;flex-direction:column;gap:2px;margin-top:12px;">
+        <sc-for list="{{ scanRows }}" as="r" hint-placeholder-count="8">
+          <div style="display:flex;align-items:center;gap:14px;padding:9px 4px;font-size:15px;">
+            <span style="{{ r.dotStyle }}"><sc-if value="{{ r.done }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;"><path d="M20 6 9 17l-5-5"></path></svg></sc-if></span>
+            <span style="flex:1;">{{ r.name }}</span>
+            <span style="color:var(--color-neutral-700);font-variant-numeric:tabular-nums;">{{ r.sizeLabel }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div><button class="btn btn-secondary" onClick="{{ cancelScan }}">Stop</button></div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showResults }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Smart clean · review" style="flex:1;min-height:0;display:flex;flex-direction:column;">
+      <div style="padding:36px 56px 18px;display:flex;align-items:flex-end;gap:12px;">
+        <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+          <div style="font-size:13px;color:var(--color-neutral-700);">{{ resultsKicker }}</div>
+          <h1 style="font-family:var(--font-heading);font-weight:400;font-size:38px;margin:0;">Found {{ foundLabel }} you can clear</h1>
+        </div>
+        <button class="btn btn-ghost" onClick="{{ selectSafe }}">Safe only</button>
+        <button class="btn btn-ghost" onClick="{{ selectAll }}">Select all</button>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:0 56px 24px;display:flex;flex-direction:column;gap:8px;">
+        <sc-for list="{{ cats }}" as="c" hint-placeholder-count="8">
+          <div style="background:var(--color-surface);border-radius:var(--radius-md);">
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 18px;">
+              <button onClick="{{ c.toggle }}" aria-label="Select" style="{{ c.checkStyle }}"><sc-if value="{{ c.on }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;"><path d="M20 6 9 17l-5-5"></path></svg></sc-if></button>
+              <span style="width:38px;height:38px;border-radius:999px;background:var(--color-bg);display:grid;place-items:center;color:var(--color-accent-2-700);flex:none;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width:2.75;stroke-linecap:round;stroke-linejoin:round;"><path d="{{ c.icon }}"></path></svg>
+              </span>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+                <div style="display:flex;align-items:center;gap:10px;"><span style="font-weight:600;font-size:15px;">{{ c.name }}</span><span class="{{ c.tagClass }}">{{ c.safety }}</span></div>
+                <span style="font-size:13px;color:var(--color-neutral-700);">{{ c.desc }}</span>
+              </div>
+              <span style="font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;min-width:72px;text-align:right;">{{ c.sizeLabel }}</span>
+              <button class="btn btn-icon btn-ghost" onClick="{{ c.expand }}" aria-label="Details" style="color:var(--color-text);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="{{ c.chevStyle }}"><path d="m6 9 6 6 6-6"></path></svg>
+              </button>
+            </div>
+            <sc-if value="{{ c.open }}">
+              <div style="padding:0 18px 12px 124px;display:flex;flex-direction:column;">
+                <sc-for list="{{ c.items }}" as="it">
+                  <div style="display:flex;gap:12px;padding:8px 0;font-size:13px;border-top:1px solid var(--color-divider);">
+                    <span style="flex:1;">{{ it.name }}</span>
+                    <span style="color:var(--color-neutral-700);flex:2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ it.path }}</span>
+                    <span style="font-variant-numeric:tabular-nums;min-width:64px;text-align:right;">{{ it.sizeLabel }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div style="padding:16px 56px;background:var(--color-surface);display:flex;align-items:center;gap:16px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-2-700)" style="stroke-width:2.75;stroke-linecap:round;stroke-linejoin:round;flex:none;"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1zM9 12l2 2 4-4"></path></svg>
+        <span style="flex:1;font-size:14px;color:var(--color-neutral-800);">{{ safetyNote }}</span>
+        <button class="btn btn-secondary" onClick="{{ backHome }}">Cancel</button>
+        <button class="btn btn-primary" onClick="{{ openConfirm }}" disabled="{{ noneSelected }}" style="padding:12px 24px;">Clean {{ selectedLabel }}</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showCleaning }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Smart clean · cleaning" style="flex:1;padding:48px 56px;display:flex;flex-direction:column;gap:20px;max-width:760px;">
+      <h1 style="font-family:var(--font-heading);font-weight:400;font-size:40px;margin:0;">Tidying up…</h1>
+      <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--color-neutral-700);"><span>{{ cleanStep }}</span><span>{{ progressLabel }}</span></div>
+      <div style="height:14px;border-radius:999px;background:var(--color-surface);overflow:hidden;"><div style="height:100%;border-radius:999px;background:var(--color-accent-2);width:{{ progressPct }};"></div></div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showDone }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Smart clean · done" style="flex:1;padding:56px;display:grid;grid-template-columns:1fr 300px;gap:48px;align-content:start;">
+      <div style="display:flex;flex-direction:column;gap:18px;">
+        <span class="tag tag-accent-2" style="align-self:flex-start;">Done</span>
+        <h1 style="font-family:var(--font-heading);font-weight:400;font-size:54px;line-height:1;margin:0;">{{ freedLabel }} cleared</h1>
+        <p style="margin:0;font-size:16px;line-height:1.55;max-width:440px;color:var(--color-neutral-800);">{{ doneNote }}</p>
+        <div style="display:flex;gap:10px;margin-top:8px;">
+          <button class="btn btn-primary" onClick="{{ backHome }}" style="padding:12px 24px;">Back to home</button>
+          <button class="btn btn-secondary" onClick="{{ undoLast }}" style="padding:12px 20px;">Undo</button>
+          <button class="btn btn-ghost" onClick="{{ goHistory }}">View history</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+        <div style="position:relative;width:240px;height:240px;">
+          <svg width="240" height="240" viewBox="0 0 120 120" style="transform:rotate(-90deg);">
+            <circle cx="60" cy="60" r="50" fill="none" stroke="var(--color-surface)" style="stroke-width:14;"></circle>
+            <circle cx="60" cy="60" r="50" fill="none" stroke="var(--color-accent-2)" stroke-dasharray="{{ ringDash }}" style="stroke-width:14;stroke-linecap:round;transition:stroke-dasharray .8s ease;"></circle>
+          </svg>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;"><span style="font-family:var(--font-heading);font-size:34px;">{{ freeLabel }}</span><span style="font-size:13px;color:var(--color-neutral-700);">now free</span></div>
+        </div>
+        <span class="{{ goalTagClass }}">{{ goalTag }}</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ASSISTANT -->
+  <sc-if value="{{ showAgent }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Assistant" style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 320px;">
+      <div style="min-height:0;overflow:auto;padding:36px 32px 32px 56px;display:flex;flex-direction:column;gap:14px;">
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">
+          <div style="font-size:13px;color:var(--color-neutral-700);">{{ agentStatus }}</div>
+          <h1 style="font-family:var(--font-heading);font-weight:400;font-size:36px;margin:0;">Assistant</h1>
+        </div>
+        <sc-for list="{{ feed }}" as="f" hint-placeholder-count="4">
+          <div style="{{ f.cardStyle }}">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="width:28px;height:28px;border-radius:999px;background:var(--color-accent-2);color:var(--color-bg);display:grid;place-items:center;flex:none;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width:2.75;stroke-linecap:round;stroke-linejoin:round;"><path d="M12 8V4H8M6 8h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2zM2 14h2M20 14h2M15 13v2M9 13v2"></path></svg>
+              </span>
+              <span style="font-size:13px;font-weight:600;">{{ agentName }}</span>
+              <span style="font-size:13px;color:var(--color-neutral-700);flex:1;">{{ f.when }}</span>
+              <span class="{{ f.tagClass }}">{{ f.kind }}</span>
+            </div>
+            <p style="margin:0;font-size:15px;line-height:1.5;text-wrap:pretty;">{{ f.text }}</p>
+            <sc-if value="{{ f.hasActions }}">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <button class="btn btn-primary" onClick="{{ f.act }}">{{ f.cta }}</button>
+                <button class="btn btn-secondary" onClick="{{ f.dismiss }}">{{ f.later }}</button>
+                <span style="flex:1;"></span>
+                <span style="font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;">{{ f.sizeLabel }}</span>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+        <sc-if value="{{ feedEmpty }}"><div style="font-size:14px;color:var(--color-neutral-700);padding:12px 0;">Nothing to review. You’ll hear from the assistant when something changes.</div></sc-if>
+      </div>
+
+      <div style="min-height:0;overflow:auto;padding:36px 32px 32px 0;display:flex;flex-direction:column;gap:12px;">
+        <div class="card" style="padding:20px;gap:12px;">
+          <div style="display:flex;align-items:center;"><span class="card-title" style="flex:1;">Space goal</span><span class="{{ goalTagClass }}">{{ goalTag }}</span></div>
+          <div style="display:flex;align-items:baseline;gap:8px;"><span style="font-size:14px;">Keep at least</span><span style="font-family:var(--font-heading);font-size:28px;">{{ goalLabel }}</span><span style="font-size:14px;">free</span></div>
+          <input type="range" min="20" max="200" step="5" value="{{ goal }}" onChange="{{ setGoal }}" style="width:100%;accent-color:var(--color-accent);">
+          <div style="height:8px;border-radius:999px;background:var(--color-bg);overflow:hidden;"><div style="height:100%;border-radius:999px;background:var(--color-accent-2);width:{{ goalFill }};transition:width .6s ease;"></div></div>
+          <div style="font-size:13px;color:var(--color-neutral-700);">{{ freeLabel }} free now. When it drops below the goal, the assistant prepares a cleanup and asks you first.</div>
+        </div>
+
+        <div class="card" style="padding:20px;gap:10px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="card-title" style="flex:1;">Proactive checks</span>
+            <button onClick="{{ flipAgent }}" role="switch" aria-checked="{{ agentOn }}" style="{{ agentTrack }}"><span style="{{ agentKnob }}"></span></button>
+          </div>
+          <div class="seg" style="background:var(--color-bg);align-self:flex-start;">
+            <sc-for list="{{ freqs }}" as="q" hint-placeholder-count="3">
+              <label class="seg-opt"><input type="radio" name="freq" checked="{{ q.on }}" onChange="{{ q.pick }}" style="position:absolute;opacity:0;width:0;height:0;"><span>{{ q.label }}</span></label>
+            </sc-for>
+          </div>
+          <div style="font-size:13px;color:var(--color-neutral-700);">Never cleans on its own. Every cleanup needs your confirmation.</div>
+        </div>
+
+        <div class="card" style="padding:20px;gap:8px;">
+          <span class="card-title">Agent</span>
+          <span style="font-size:13px;color:var(--color-neutral-700);">Uses a coding CLI already on this Mac.</span>
+          <sc-for list="{{ agents }}" as="a" hint-placeholder-count="3">
+            <button onClick="{{ a.pick }}" disabled="{{ a.missing }}" style="{{ a.rowStyle }}">
+              <span style="{{ a.dotStyle }}"></span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:1px;text-align:left;"><span style="font-weight:600;font-size:14px;">{{ a.name }}</span><span style="font-size:12px;color:var(--color-neutral-700);">{{ a.status }}</span></span>
+            </button>
+          </sc-for>
+          <div style="font-size:12px;color:var(--color-neutral-700);margin-top:4px;">Only file paths, sizes and dates are shared with the agent. File contents never leave this Mac.</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showMap }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Space map" style="flex:1;min-height:0;padding:36px 32px 32px 56px;display:grid;grid-template-columns:minmax(0,1fr) 260px;grid-template-rows:auto 1fr;gap:20px 24px;">
+      <div style="grid-column:1 / -1;display:flex;align-items:center;gap:14px;">
+        <sc-if value="{{ mapCanUp }}"><button class="btn btn-icon btn-secondary" onClick="{{ mapUp }}" aria-label="Up"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width:2.75;stroke-linecap:round;stroke-linejoin:round;"><path d="m12 19-7-7 7-7M19 12H5"></path></svg></button></sc-if>
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <div style="font-size:13px;color:var(--color-neutral-700);">{{ mapCrumb }}</div>
+          <h1 style="font-family:var(--font-heading);font-weight:400;font-size:34px;margin:0;">{{ mapTitle }}</h1>
+        </div>
+      </div>
+      <div style="position:relative;min-height:0;">
+        <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="6">
+          <button onClick="{{ t.pick }}" onDoubleClick="{{ t.open }}" style="{{ t.style }}">
+            <span style="font-weight:600;font-size:14px;">{{ t.name }}</span>
+            <span style="font-size:13px;">{{ t.sizeLabel }}</span>
+          </button>
+        </sc-for>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card" style="padding:20px;gap:10px;">
+          <span class="card-kicker" style="color:var(--color-accent-700);">Selected</span>
+          <span class="card-title" style="font-size:22px;">{{ sel.name }}</span>
+          <span style="font-size:13px;color:var(--color-neutral-700);word-break:break-all;">{{ sel.path }}</span>
+          <div style="display:flex;justify-content:space-between;font-size:14px;margin-top:6px;"><span>Size</span><span style="font-weight:600;">{{ sel.sizeLabel }}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:14px;"><span>Share of disk</span><span style="font-weight:600;">{{ sel.share }}</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+            <sc-if value="{{ sel.hasKids }}"><button class="btn btn-primary" onClick="{{ sel.open }}">Open folder</button></sc-if>
+            <button class="btn btn-secondary">Reveal in Finder</button>
+          </div>
+        </div>
+        <span style="font-size:12px;color:var(--color-neutral-700);padding:0 6px;">Click a block to inspect it, double-click to open.</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showLarge }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Large files" style="flex:1;min-height:0;display:flex;flex-direction:column;">
+      <div style="padding:36px 56px 16px;display:flex;align-items:flex-end;gap:20px;">
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:13px;color:var(--color-neutral-700);">{{ largeCount }} files · {{ largeTotal }}</div>
+          <h1 style="font-family:var(--font-heading);font-weight:400;font-size:36px;margin:0;">Large &amp; old files</h1>
+        </div>
+        <div class="seg">
+          <sc-for list="{{ largeFilters }}" as="f" hint-placeholder-count="3">
+            <label class="seg-opt"><input type="radio" name="lf" checked="{{ f.on }}" onChange="{{ f.pick }}" style="position:absolute;opacity:0;width:0;height:0;"><span>{{ f.label }}</span></label>
+          </sc-for>
+        </div>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:0 56px 16px;">
+        <table class="table">
+          <thead><tr><th style="width:40px;"></th><th>Name</th><th>Location</th><th>Last opened</th><th style="text-align:right;">Size</th></tr></thead>
+          <tbody>
+            <sc-for list="{{ largeRows }}" as="f" hint-placeholder-count="8">
+              <tr onClick="{{ f.toggle }}" style="cursor:pointer;">
+                <td><span style="{{ f.checkStyle }}"><sc-if value="{{ f.on }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;"><path d="M20 6 9 17l-5-5"></path></svg></sc-if></span></td>
+                <td style="font-weight:600;">{{ f.name }}</td>
+                <td style="color:var(--color-neutral-700);">{{ f.path }}</td>
+                <td><span class="{{ f.ageClass }}">{{ f.opened }}</span></td>
+                <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">{{ f.sizeLabel }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="padding:16px 56px;background:var(--color-surface);display:flex;align-items:center;gap:16px;">
+        <span style="flex:1;font-size:14px;color:var(--color-neutral-800);">{{ largeSelNote }}</span>
+        <button class="btn btn-primary" disabled="{{ largeNone }}" onClick="{{ trashLarge }}" style="padding:12px 24px;">Move {{ largeSelLabel }} to Trash</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showDupes }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Duplicates" style="flex:1;min-height:0;display:flex;flex-direction:column;">
+      <div style="padding:36px 56px 16px;display:flex;flex-direction:column;gap:6px;">
+        <div style="font-size:13px;color:var(--color-neutral-700);">4 groups · one copy of each is kept, you choose which</div>
+        <h1 style="font-family:var(--font-heading);font-weight:400;font-size:36px;margin:0;">Duplicates</h1>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:0 56px 16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-content:start;">
+        <sc-for list="{{ dupes }}" as="g" hint-placeholder-count="4">
+          <div class="card" style="padding:18px;gap:8px;">
+            <div style="display:flex;align-items:center;gap:10px;"><span class="card-title" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ g.name }}</span><span class="tag tag-neutral">{{ g.each }} each</span></div>
+            <sc-for list="{{ g.copies }}" as="cp">
+              <button onClick="{{ cp.keep }}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border:none;border-radius:999px;background:var(--color-bg);font:inherit;color:inherit;cursor:pointer;text-align:left;">
+                <span style="{{ cp.dotStyle }}"></span>
+                <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ cp.path }}</span>
+                <span class="{{ cp.tagClass }}">{{ cp.label }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+      <div style="padding:16px 56px;background:var(--color-surface);display:flex;align-items:center;gap:16px;">
+        <span style="flex:1;font-size:14px;color:var(--color-neutral-800);">{{ dupeNote }}</span>
+        <button class="btn btn-primary" style="padding:12px 24px;">Remove {{ dupeExtra }} extra copies</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showHistory }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="History" style="flex:1;min-height:0;overflow:auto;padding:36px 56px;display:flex;flex-direction:column;gap:12px;max-width:860px;">
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">
+        <div style="font-size:13px;color:var(--color-neutral-700);">{{ historyTotal }} cleared · items stay restorable for 30 days</div>
+        <h1 style="font-family:var(--font-heading);font-weight:400;font-size:36px;margin:0;">History</h1>
+      </div>
+      <sc-for list="{{ history }}" as="h" hint-placeholder-count="4">
+        <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;background:var(--color-surface);border-radius:var(--radius-md);">
+          <span style="width:38px;height:38px;border-radius:999px;background:var(--color-bg);display:grid;place-items:center;color:var(--color-accent-700);flex:none;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width:2.75;stroke-linecap:round;stroke-linejoin:round;"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+          </span>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">{{ h.title }}</span><span style="font-size:13px;color:var(--color-neutral-700);">{{ h.when }} · {{ h.detail }}</span></div>
+          <span style="font-weight:600;font-variant-numeric:tabular-nums;">{{ h.sizeLabel }}</span>
+          <sc-if value="{{ h.canRestore }}"><button class="btn btn-secondary" onClick="{{ h.restore }}">Restore</button></sc-if>
+          <sc-if value="{{ h.restored }}"><span class="tag tag-accent-2">Restored</span></sc-if>
+          <sc-if value="{{ h.expired }}"><span class="tag tag-neutral">Emptied</span></sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showSettings }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Settings" style="flex:1;min-height:0;overflow:auto;padding:36px 56px;display:flex;flex-direction:column;gap:12px;max-width:820px;">
+      <h1 style="font-family:var(--font-heading);font-weight:400;font-size:36px;margin:0 0 8px;">Settings</h1>
+      <sc-for list="{{ toggles }}" as="t" hint-placeholder-count="4">
+        <div style="display:flex;align-items:center;gap:20px;padding:16px 20px;background:var(--color-surface);border-radius:var(--radius-md);">
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">{{ t.label }}</span><span style="font-size:13px;color:var(--color-neutral-700);">{{ t.desc }}</span></div>
+          <button onClick="{{ t.flip }}" role="switch" aria-checked="{{ t.on }}" style="{{ t.track }}"><span style="{{ t.knob }}"></span></button>
+        </div>
+      </sc-for>
+      <div style="display:flex;align-items:center;gap:20px;padding:16px 20px;background:var(--color-surface);border-radius:var(--radius-md);">
+        <div style="flex:1;display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">Scheduled scan</span><span style="font-size:13px;color:var(--color-neutral-700);">Scans in the background and notifies you. Cleaning always waits for you.</span></div>
+        <div class="seg" style="background:var(--color-bg);">
+          <sc-for list="{{ schedules }}" as="s" hint-placeholder-count="3">
+            <label class="seg-opt"><input type="radio" name="sch" checked="{{ s.on }}" onChange="{{ s.pick }}" style="position:absolute;opacity:0;width:0;height:0;"><span>{{ s.label }}</span></label>
+          </sc-for>
+        </div>
+      </div>
+      <div style="padding:16px 20px;background:var(--color-surface);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;"><div style="flex:1;display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">Never touch these folders</span><span style="font-size:13px;color:var(--color-neutral-700);">Excluded from scans and from the assistant.</span></div><button class="btn btn-secondary">Add folder</button></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <sc-for list="{{ exclusions }}" as="e" hint-placeholder-count="3"><span class="tag tag-accent-2" style="font-size:13px;padding:6px 14px;">{{ e }}</span></sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showToast }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position:absolute;top:16px;right:16px;width:360px;background:var(--color-surface);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="width:26px;height:26px;border-radius:999px;background:var(--color-accent-2);color:var(--color-bg);display:grid;place-items:center;flex:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="stroke-width:2.75;stroke-linecap:round;stroke-linejoin:round;"><path d="M12 8V4H8M6 8h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2zM2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></span>
+        <span style="font-size:13px;font-weight:600;flex:1;">Assistant · {{ agentName }}</span>
+        <span style="font-size:12px;color:var(--color-neutral-700);">now</span>
+      </div>
+      <div style="font-size:14px;line-height:1.45;">{{ toastText }}</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-secondary" onClick="{{ hideToast }}">Later</button>
+        <button class="btn btn-primary" onClick="{{ reviewGoal }}">Review cleanup</button>
+      </div>
+    </div>
+  </sc-if>
+
+  </main>
+</div>
+
+<sc-if value="{{ confirmOpen }}" hint-placeholder-val="{{ false }}">
+  <div class="dialog-backdrop" style="position:absolute;">
+    <div class="dialog" role="dialog" style="width:460px;">
+      <div class="dialog-title">Clean {{ selectedLabel }}?</div>
+      <div class="dialog-body" style="display:flex;flex-direction:column;gap:6px;">
+        <sc-for list="{{ selectedCats }}" as="s"><div style="display:flex;justify-content:space-between;"><span>{{ s.name }}</span><span style="font-variant-numeric:tabular-nums;">{{ s.sizeLabel }}</span></div></sc-for>
+      </div>
+      <div class="seg" style="align-self:flex-start;background:var(--color-bg);">
+        <label class="seg-opt"><input type="radio" name="mode" checked="{{ modeTrash }}" onChange="{{ setTrash }}" style="position:absolute;opacity:0;width:0;height:0;"><span>Move to Trash</span></label>
+        <label class="seg-opt"><input type="radio" name="mode" checked="{{ modeDelete }}" onChange="{{ setDelete }}" style="position:absolute;opacity:0;width:0;height:0;"><span>Delete permanently</span></label>
+      </div>
+      <div style="font-size:13px;color:var(--color-neutral-700);">{{ modeNote }}</div>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" onClick="{{ closeConfirm }}">Cancel</button>
+        <button class="btn btn-primary" onClick="{{ runClean }}">Clean now</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;clean&quot;,&quot;agent&quot;,&quot;map&quot;,&quot;large&quot;,&quot;dupes&quot;,&quot;history&quot;,&quot;settings&quot;],&quot;default&quot;:&quot;clean&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;safeMode&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;showNotification&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+const I = {
+  clean:"M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z",
+  bot:"M12 8V4H8M6 8h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2zM2 14h2M20 14h2M15 13v2M9 13v2",
+  map:"M5 3h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM15 3h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM15 13h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2zM5 13h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2z",
+  large:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7ZM14 2v4a2 2 0 0 0 2 2h4",
+  dupes:"M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2zM4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2",
+  history:"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M12 7v5l4 2",
+  settings:"M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4",
+  box:"M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16ZM3.3 7 12 12l8.7-5M12 22V12",
+  app:"M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM2 8h20",
+  clock:"M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6v6l4 2",
+  log:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7ZM14 2v4a2 2 0 0 0 2 2h4M16 13H8M16 17H8",
+  trash:"M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2",
+  dl:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
+  code:"m16 18 6-6-6-6M8 6l-6 6 6 6",
+  pkg:"M16.5 9.4 7.55 4.24M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16zM3.29 7 12 12l8.71-5M12 22V12"
+};
+const TOTAL = 512;
+const fmt = gb => gb >= 1 ? (gb >= 100 ? Math.round(gb) : +gb.toFixed(1)) + ' GB' : Math.max(1, Math.round(gb * 1024)) + ' MB';
+const CATS = [
+  { id:'sys', name:'System caches', desc:'Rebuilt automatically when needed', icon:I.box, size:4.2, safe:true, items:[['Font caches','/Library/Caches/com.apple.ATS',1.1],['Spotlight temp','/private/var/folders/…/mds',1.6],['Update leftovers','/Library/Updates',1.5]] },
+  { id:'app', name:'App caches', desc:'Chrome, Spotify, Slack, VS Code', icon:I.app, size:3.1, safe:true, items:[['Chrome','~/Library/Caches/Google/Chrome',1.2],['Spotify','~/Library/Caches/com.spotify.client',0.9],['Slack','~/Library/Application Support/Slack/Cache',0.6],['VS Code','~/Library/Application Support/Code/Cache',0.4]] },
+  { id:'tmp', name:'Temporary files', desc:'Left behind by installers and apps', icon:I.clock, size:1.8, safe:true, items:[['Installer temp','/private/tmp',1.2],['App temp','~/Library/Containers/…/tmp',0.6]] },
+  { id:'log', name:'Logs & crash reports', desc:'Older than 7 days', icon:I.log, size:0.6, safe:true, items:[['System logs','/private/var/log',0.4],['Diagnostic reports','~/Library/Logs/DiagnosticReports',0.2]] },
+  { id:'trash', name:'Trash', desc:'1,284 items already in the Trash', icon:I.trash, size:2.4, safe:true, items:[['Trash','~/.Trash',2.4]] },
+  { id:'left', name:'App leftovers', desc:'Support files from 6 apps you uninstalled', icon:I.pkg, size:2.7, safe:false, items:[['Sketch','~/Library/Application Support/com.bohemiancoding.sketch3',1.4],['Zoom','~/Library/Application Support/zoom.us',0.8],['Others (4)','~/Library/Preferences, ~/Library/Containers',0.5]] },
+  { id:'dl', name:'Old downloads', desc:'Not opened in 6 months', icon:I.dl, size:5.3, safe:false, items:[['Xcode_15.dmg','~/Downloads',3.2],['Figma-installer.zip','~/Downloads',0.4],['tax-scans-2024/','~/Downloads',1.7]] },
+  { id:'dev', name:'Developer junk', desc:'node_modules, build caches, old simulators', icon:I.code, size:7.9, safe:false, items:[['node_modules (4 idle projects)','~/Projects/**/node_modules',4.1],['Xcode DerivedData','~/Library/Developer/Xcode/DerivedData',2.6],['Cargo target dirs','~/Projects/**/target',1.2]] }
+];
+const SAFE_TOTAL = CATS.filter(c => c.safe).reduce((a, c) => a + c.size, 0);
+const SCAN_PATHS = ['/Library/Caches/com.apple.ATS','~/Library/Caches/Google/Chrome/Default','/private/tmp/installer-8f2a','/private/var/log/system.log.3','~/.Trash','~/Library/Application Support/com.bohemiancoding.sketch3','~/Downloads/Xcode_15.dmg','~/Projects/atlas/node_modules/.cache'];
+const MAP = { name:'Macintosh HD', kids:[
+  { name:'Users', size:212, kids:[{name:'Library',size:74},{name:'Documents',size:48},{name:'Movies',size:41},{name:'Developer',size:31},{name:'Pictures',size:12},{name:'Music',size:6}] },
+  { name:'Applications', size:92, kids:[{name:'Adobe Creative Cloud',size:22},{name:'Xcode',size:18},{name:'Logic Pro',size:12},{name:'Final Cut Pro',size:9},{name:'Other apps',size:31}] },
+  { name:'System', size:58 }, { name:'Library', size:34 }, { name:'Containers', size:26 }, { name:'Other', size:16 }
+]};
+const LARGE = [
+  ['Wedding 4K master.mov','~/Movies/Exports',18.4,'2 years ago',true],
+  ['ubuntu-22.04-desktop.iso','~/Downloads',4.7,'1 year ago',true],
+  ['Windows 11 VM.utm','~/Library/Containers/UTM',38.2,'8 months ago',false],
+  ['Photo library backup.zip','~/Documents/Backups',22.6,'3 years ago',true],
+  ['Xcode_15.dmg','~/Downloads',3.2,'1 year ago',true],
+  ['podcast-raw-ep42.wav','~/Music/Recordings',2.1,'5 months ago',false],
+  ['dataset-train.parquet','~/Developer/ml',6.8,'2 weeks ago',false],
+  ['GoPro dump 2023','~/Pictures',14.9,'2 years ago',true]
+];
+const DUPES = [
+  ['IMG_2041.HEIC',0.006,['~/Pictures/Photos Library','~/Desktop/to sort','~/Downloads']],
+  ['Brand guidelines v3.pdf',0.18,['~/Documents/Work','~/Downloads','~/Desktop']],
+  ['Wedding 4K master.mov',18.4,['~/Movies/Exports','~/Documents/Backups/Video']],
+  ['Lecture 07.mp4',1.3,['~/Documents/School','~/Downloads']]
+];
+const AGENTS = [
+  { id:'claude', name:'Claude Code', status:'Found · ~/.local/bin/claude', found:true },
+  { id:'codex', name:'Codex CLI', status:'Found · /opt/homebrew/bin/codex', found:true },
+  { id:'gemini', name:'Gemini CLI', status:'Not installed', found:false }
+];
+const TILE = ['var(--color-accent-300)','var(--color-accent-2-300)','var(--color-neutral-300)','var(--color-accent-200)','var(--color-accent-2-200)','var(--color-neutral-200)','var(--color-accent-400)'];
+
+function layout(items, x, y, w, h, out) {
+  if (!items.length) return out;
+  if (items.length === 1) { out.push({ ...items[0], x, y, w, h }); return out; }
+  const total = items.reduce((a, b) => a + b.size, 0);
+  let acc = 0, i = 0;
+  while (i < items.length - 1 && acc + items[i].size <= total / 2) acc += items[i++].size;
+  if (i === 0) { acc = items[0].size; i = 1; }
+  const f = acc / total, A = items.slice(0, i), B = items.slice(i);
+  if (w >= h) { layout(A, x, y, w * f, h, out); layout(B, x + w * f, y, w * (1 - f), h, out); }
+  else { layout(A, x, y, w, h * f, out); layout(B, x, y + h * f, w, h * (1 - f), out); }
+  return out;
+}
+const css = str => Object.fromEntries(str.split(';').filter(p => p.trim()).map(p => { const i = p.indexOf(':'); return [p.slice(0, i).trim().replace(/-([a-z])/g, (_, c) => c.toUpperCase()), p.slice(i + 1).trim()]; }));
+const check = on => css(`width:24px;height:24px;flex:none;border-radius:999px;display:inline-grid;place-items:center;cursor:pointer;padding:0;border:2px solid ${on ? 'var(--color-accent)' : 'var(--color-neutral-400)'};background:${on ? 'var(--color-accent)' : 'transparent'};color:var(--color-bg);`);
+const track = on => css(`width:46px;height:28px;flex:none;border-radius:999px;border:none;padding:3px;cursor:pointer;display:flex;justify-content:${on ? 'flex-end' : 'flex-start'};background:${on ? 'var(--color-accent)' : 'var(--color-neutral-300)'};`);
+const knob = css('width:22px;height:22px;border-radius:999px;background:var(--color-bg);box-shadow:var(--shadow-sm);');
+
+class Component extends DCLogic {
+  state = {
+    screen: this.props.startScreen ?? 'clean', phase:'idle', progress:0, sel:{}, open:null, confirm:false, mode:'trash', fromAgent:false,
+    used:438, freed:0, goal:80, agent:'claude', agentOn:true, freq:'Daily', toast:true, dismissed:{},
+    mapPath:[], mapPick:0, largeFilter:'all', largeSel:{}, keep:{}, schedule:'Weekly',
+    toggles:{ trash:true, recent:true, safe:this.props.safeMode ?? true, alert:true },
+    history:[
+      { title:'Smart Clean', when:'Nov 17', detail:'App caches, Temporary files, Trash', size:6.8, days:7 },
+      { title:'Large files', when:'Nov 2', detail:'3 files from Downloads', size:11.2, days:22 },
+      { title:'Smart Clean', when:'Oct 6', detail:'System caches, Logs', size:3.9, days:49 }
+    ]
+  };
+  componentWillUnmount() { clearInterval(this.t); }
+  defaultSel() { const s = {}; CATS.forEach(c => s[c.id] = this.state.toggles.safe ? c.safe : true); return s; }
+  startScan = () => {
+    clearInterval(this.t);
+    this.setState({ screen:'clean', phase:'scanning', progress:0, sel:this.defaultSel(), open:null, fromAgent:false, toast:false });
+    this.t = setInterval(() => {
+      const p = Math.min(100, this.state.progress + 1.4);
+      this.setState({ progress:p });
+      if (p >= 100) { clearInterval(this.t); setTimeout(() => this.setState({ phase:'results' }), 350); }
+    }, 50);
+  };
+  reviewWith = (ids, confirm) => this.setState({ screen:'clean', phase:'results', fromAgent:true, toast:false, open: confirm ? null : ids[0], confirm:!!confirm, mode: this.state.toggles.trash ? 'trash' : 'delete', sel:Object.fromEntries(CATS.map(c => [c.id, ids.includes(c.id)])) });
+  runClean = () => {
+    const chosen = CATS.filter(c => this.state.sel[c.id]);
+    const freed = chosen.reduce((a, c) => a + c.size, 0);
+    this.setState({ confirm:false, phase:'cleaning', progress:0 });
+    clearInterval(this.t);
+    this.t = setInterval(() => {
+      const p = Math.min(100, this.state.progress + 2.5);
+      this.setState({ progress:p });
+      if (p >= 100) {
+        clearInterval(this.t);
+        this.setState(s => ({ phase:'done', freed, used:s.used - freed, dismissed:{ ...s.dismissed, ...Object.fromEntries(chosen.map(c => [c.id, true])) },
+          history:[{ title: s.fromAgent ? 'Assistant cleanup' : 'Smart Clean', when:'Just now', detail:chosen.map(c => c.name).join(', '), size:freed, days:0, perm:s.mode === 'delete' }, ...s.history] }));
+      }
+    }, 50);
+  };
+  go = screen => () => { if (this.state.phase === 'scanning' || this.state.phase === 'cleaning') return; this.setState(s => ({ screen, phase: s.phase === 'done' || screen !== 'clean' ? 'idle' : s.phase })); };
+
+  renderVals() {
+    const s = this.state, P = this.props;
+    const free = TOTAL - s.used, below = free < s.goal;
+    const C2 = 2 * Math.PI * 50;
+    const selected = CATS.filter(c => s.sel[c.id]);
+    const selSize = selected.reduce((a, c) => a + c.size, 0);
+    const agentName = AGENTS.find(a => a.id === s.agent).name;
+
+    const feedRaw = [];
+    if (below && !s.dismissed.goal) feedRaw.push({ key:'goal', kind:'Goal', tagClass:'tag tag-accent', when:'Just now',
+      text:`Free space is down to ${fmt(free)}, under your ${fmt(s.goal)} goal. I found ${fmt(SAFE_TOTAL)} in safe categories: caches, temp files, logs and the Trash. Shall I clean them?`,
+      cta:'Review & confirm', later:'Not now', size:SAFE_TOTAL, act:() => this.reviewWith(CATS.filter(c => c.safe).map(c => c.id), true) });
+    if (!below) feedRaw.push({ key:'ok', kind:'On track', tagClass:'tag tag-accent-2', when:'Just now', text:`You’re at ${fmt(free)} free, above your ${fmt(s.goal)} goal. I’ll keep checking ${s.freq.toLowerCase()}.` });
+    if (!s.dismissed.dev) feedRaw.push({ key:'dev', kind:'Suggestion', tagClass:'tag tag-neutral', when:'2h ago',
+      text:'Four projects in ~/Projects haven’t been opened since March. Their node_modules and build folders take 7.9 GB and can be reinstalled any time.', cta:'Review', later:'Dismiss', size:7.9, act:() => this.reviewWith(['dev']) });
+    if (!s.dismissed.dl) feedRaw.push({ key:'dl', kind:'Suggestion', tagClass:'tag tag-neutral', when:'Yesterday',
+      text:'Downloads has installers for apps you already have (Xcode, Figma) plus a folder of scans you haven’t opened in 6 months.', cta:'Review', later:'Dismiss', size:5.3, act:() => this.reviewWith(['dl']) });
+    if (!s.dismissed.left) feedRaw.push({ key:'left', kind:'Heads-up', tagClass:'tag tag-outline', when:'3 days ago',
+      text:'Sketch and Zoom were uninstalled but left 2.2 GB of support files in ~/Library.', cta:'Review', later:'Dismiss', size:2.7, act:() => this.reviewWith(['left']) });
+    const feed = s.agentOn ? feedRaw.map(f => ({ ...f, hasActions:!!f.act, sizeLabel: f.size ? fmt(f.size) : '',
+      dismiss:() => this.setState(st => ({ dismissed:{ ...st.dismissed, [f.key]:true } })),
+      cardStyle: css(`display:flex;flex-direction:column;gap:12px;padding:18px 20px;border-radius:var(--radius-lg);background:${f.key === 'goal' ? 'var(--color-accent-100)' : 'var(--color-surface)'};`) })) : [];
+    const pending = feed.filter(f => f.hasActions).length;
+
+    const navItems = [['clean','Smart Clean',I.clean,''],['agent','Assistant',I.bot, pending ? String(pending) : ''],['map','Space Map',I.map,''],['large','Large files',I.large,''],['dupes','Duplicates',I.dupes,''],['history','History',I.history,''],['settings','Settings',I.settings,'']];
+
+    let node = MAP; s.mapPath.forEach(i => node = node.kids[i]);
+    const kids = [...node.kids].sort((a, b) => b.size - a.size);
+    const rects = layout(kids, 0, 0, 100, 100, []);
+    const pickIdx = Math.min(s.mapPick, rects.length - 1);
+    const pk = rects[pickIdx];
+    const crumbs = ['Macintosh HD']; { let n = MAP; s.mapPath.forEach(i => { n = n.kids[i]; crumbs.push(n.name); }); }
+    const openKid = k => { const idx = node.kids.findIndex(x => x.name === k.name); if (node.kids[idx].kids) this.setState({ mapPath:[...s.mapPath, idx], mapPick:0 }); };
+
+    const lf = LARGE.map((r, i) => ({ i, name:r[0], path:r[1], size:r[2], opened:r[3], old:r[4] }))
+      .filter(f => !s.largeSel['gone' + f.i])
+      .filter(f => s.largeFilter === 'all' || (s.largeFilter === 'big' ? f.size >= 10 : f.old)).sort((a, b) => b.size - a.size);
+    const lsel = lf.filter(f => s.largeSel[f.i]); const lselSize = lsel.reduce((a, f) => a + f.size, 0);
+
+    let dupExtra = 0, dupSize = 0;
+    const dupes = DUPES.map((d, gi) => { const k = s.keep[gi] ?? 0; dupExtra += d[2].length - 1; dupSize += d[1] * (d[2].length - 1);
+      return { name:d[0], each:fmt(d[1]), copies:d[2].map((p, ci) => ({ path:p, label: ci === k ? 'Keep' : 'Remove', tagClass: ci === k ? 'tag tag-accent-2' : 'tag tag-outline',
+        dotStyle: css(`width:14px;height:14px;border-radius:999px;flex:none;border:2px solid var(--color-accent-2);background:${ci === k ? 'var(--color-accent-2)' : 'transparent'};`),
+        keep: () => this.setState(st => ({ keep:{ ...st.keep, [gi]:ci } })) })) }; });
+
+    const tg = [['trash','Move to Trash instead of deleting','Cleaned items can be restored for 30 days.'],['recent','Skip recently used files','Ignore anything opened in the last 30 days.'],['safe','Preselect only safe categories','Downloads, leftovers and developer files wait for your review.'],['alert','Warn when below my space goal','Shows a notification even when the window is closed.']];
+    const n = Math.floor(s.progress / (100 / CATS.length));
+    const seg = (list, cur, key) => list.map(l => ({ label:l, on:cur === l, pick:() => this.setState({ [key]:l }) }));
+
+    return {
+      agentName,
+      nav: navItems.map(([id, label, icon, badge]) => { const on = s.screen === id; return { label, icon, badge, go:this.go(id),
+        badgeStyle: css(badge ? `min-width:20px;height:20px;padding:0 6px;border-radius:999px;font-size:12px;font-weight:600;display:grid;place-items:center;background:${on ? 'var(--color-bg)' : 'var(--color-accent)'};color:${on ? 'var(--color-accent-800)' : 'var(--color-bg)'};` : 'display:none;'),
+        style: css(`display:flex;align-items:center;gap:12px;padding:10px 12px;border:none;border-radius:999px;font:inherit;font-size:14px;cursor:pointer;color:${on ? 'var(--color-bg)' : 'var(--color-text)'};background:${on ? 'var(--color-accent)' : 'transparent'};font-weight:${on ? 600 : 400};`) }; }),
+      freeLabel:fmt(free), usedPct:(s.used / TOTAL * 100) + '%', goalPos:`calc(${(TOTAL - s.goal) / TOTAL * 100}% - 1px)`, goalLabel:fmt(s.goal),
+      goalTag: below ? 'Below your goal' : 'Goal met', goalTagClass: below ? 'tag tag-accent' : 'tag tag-accent-2',
+      ringDash:`${C2 * s.used / TOTAL} ${C2}`,
+      showIdle: s.screen === 'clean' && s.phase === 'idle', showScanning: s.screen === 'clean' && s.phase === 'scanning', showResults: s.screen === 'clean' && s.phase === 'results',
+      showCleaning: s.screen === 'clean' && s.phase === 'cleaning', showDone: s.screen === 'clean' && s.phase === 'done',
+      showAgent: s.screen === 'agent', showMap: s.screen === 'map', showLarge: s.screen === 'large', showDupes: s.screen === 'dupes', showHistory: s.screen === 'history', showSettings: s.screen === 'settings',
+      startScan:this.startScan, goMap:this.go('map'), goHistory:this.go('history'),
+      shortcuts:[['agent','Assistant', pending ? `${pending} suggestions waiting` : 'Watching your space goal',I.bot],['map','Space Map','See what’s taking up room',I.map],['large','Large files','8 files over 2 GB',I.large]].map(([id, label, desc, icon]) => ({ label, desc, icon, go:this.go(id) })),
+      scanPath: SCAN_PATHS[Math.min(SCAN_PATHS.length - 1, n)], progressLabel:Math.round(s.progress) + '%', progressPct:s.progress + '%',
+      scanRows: CATS.map((c, i) => ({ name:c.name, done:i < n, sizeLabel: i < n ? fmt(c.size) : (i === n ? 'Checking…' : ''),
+        dotStyle: css(`width:22px;height:22px;flex:none;border-radius:999px;display:grid;place-items:center;color:var(--color-bg);background:${i < n ? 'var(--color-accent-2)' : 'var(--color-surface)'};`) })),
+      cancelScan: () => { clearInterval(this.t); this.setState({ phase:'idle' }); },
+      resultsKicker: s.fromAgent ? `Prepared by ${agentName} · review before cleaning` : `Scan finished · ${CATS.length} categories`,
+      foundLabel:fmt(CATS.reduce((a, c) => a + c.size, 0)),
+      selectSafe: () => this.setState({ sel:Object.fromEntries(CATS.map(c => [c.id, c.safe])) }),
+      selectAll: () => this.setState({ sel:Object.fromEntries(CATS.map(c => [c.id, true])) }),
+      cats: CATS.map(c => ({ name:c.name, desc:c.desc, icon:c.icon, sizeLabel:fmt(c.size), on:!!s.sel[c.id], open:s.open === c.id,
+        safety: c.safe ? 'Safe' : 'Review', tagClass: c.safe ? 'tag tag-accent-2' : 'tag tag-accent', checkStyle:check(!!s.sel[c.id]),
+        chevStyle: css(`stroke-width:2.75;stroke-linecap:round;stroke-linejoin:round;transition:transform .2s;transform:rotate(${s.open === c.id ? 180 : 0}deg);`),
+        toggle: () => this.setState(st => ({ sel:{ ...st.sel, [c.id]:!st.sel[c.id] } })), expand: () => this.setState(st => ({ open: st.open === c.id ? null : c.id })),
+        items: c.items.map(([name, path, size]) => ({ name, path, sizeLabel:fmt(size) })) })),
+      safetyNote: s.toggles.trash ? 'Items move to the Trash and can be restored from History for 30 days.' : 'Trash is off in Settings, so items will be deleted permanently.',
+      selectedLabel:fmt(selSize), noneSelected: selSize === 0, backHome: () => this.setState({ phase:'idle', screen:'clean' }),
+      openConfirm: () => this.setState({ confirm:true, mode: s.toggles.trash ? 'trash' : 'delete' }), closeConfirm: () => this.setState({ confirm:false }),
+      confirmOpen:s.confirm, selectedCats: selected.map(c => ({ name:c.name, sizeLabel:fmt(c.size) })),
+      modeTrash: s.mode === 'trash', modeDelete: s.mode === 'delete', setTrash: () => this.setState({ mode:'trash' }), setDelete: () => this.setState({ mode:'delete' }),
+      modeNote: s.mode === 'trash' ? 'You can restore everything from History for 30 days.' : 'This can’t be undone.',
+      runClean:this.runClean,
+      cleanStep: 'Moving ' + ((selected[Math.min(selected.length - 1, Math.floor(s.progress / (100 / Math.max(1, selected.length))))] || {}).name || 'files') + '…',
+      freedLabel:fmt(s.freed),
+      doneNote: s.history[0] && s.history[0].perm ? 'Those files were deleted permanently.' : 'Everything went to the Trash. Changed your mind? Undo now or restore any time in the next 30 days.',
+      undoLast: () => this.setState(st => ({ used:st.used + st.freed, phase:'idle', history:st.history.map((h, i) => i === 0 ? { ...h, restored:true } : h) })),
+      agentStatus: s.agentOn ? `Watching · ${agentName} · checks ${s.freq.toLowerCase()}` : 'Paused',
+      feed, feedEmpty: feed.length === 0,
+      goal:s.goal, setGoal: e => this.setState({ goal:+e.target.value, dismissed:{ ...s.dismissed, goal:false } }), goalFill: Math.min(100, free / s.goal * 100) + '%',
+      agentOn:s.agentOn, flipAgent: () => this.setState({ agentOn:!s.agentOn }), agentTrack:track(s.agentOn), agentKnob:knob,
+      freqs: seg(['Hourly','Daily','Weekly'], s.freq, 'freq'),
+      agents: AGENTS.map(a => { const on = s.agent === a.id; return { name:a.name, status: a.found && on ? a.status + ' · in use' : a.status, missing:!a.found, pick:() => a.found && this.setState({ agent:a.id }),
+        rowStyle: css(`display:flex;align-items:center;gap:12px;padding:10px 12px;border:none;border-radius:var(--radius-md);font:inherit;color:inherit;cursor:${a.found ? 'pointer' : 'default'};opacity:${a.found ? 1 : 0.55};background:${on ? 'var(--color-bg)' : 'transparent'};`),
+        dotStyle: css(`width:16px;height:16px;flex:none;border-radius:999px;border:2px solid ${a.found ? 'var(--color-accent)' : 'var(--color-neutral-400)'};background:${on ? 'var(--color-accent)' : 'transparent'};box-shadow:${on ? 'inset 0 0 0 3px var(--color-bg)' : 'none'};`) }; }),
+      showToast: (P.showNotification ?? true) && s.toast && s.agentOn && below && s.screen === 'clean' && s.phase === 'idle',
+      toastText:`You’re down to ${fmt(free)} free, under your ${fmt(s.goal)} goal. I can clear ${fmt(SAFE_TOTAL)} of safe junk once you confirm.`,
+      hideToast: () => this.setState({ toast:false }), reviewGoal: () => this.reviewWith(CATS.filter(c => c.safe).map(c => c.id), true),
+      mapCanUp: s.mapPath.length > 0, mapUp: () => this.setState({ mapPath:s.mapPath.slice(0, -1), mapPick:0 }),
+      mapCrumb: crumbs.join('  /  '), mapTitle: crumbs[crumbs.length - 1] + ' · ' + fmt(node.size ?? s.used),
+      tiles: rects.map((r, i) => { const on = i === pickIdx;
+        return { name:r.name, sizeLabel:fmt(r.size), pick:() => this.setState({ mapPick:i }), open:() => openKid(r),
+          style: css(`position:absolute;left:calc(${r.x}% + 3px);top:calc(${r.y}% + 3px);width:calc(${r.w}% - 6px);height:calc(${r.h}% - 6px);border-radius:var(--radius-md);border:none;padding:14px;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:2px;overflow:hidden;text-align:left;font:inherit;color:var(--color-text);cursor:pointer;background:${TILE[i % TILE.length]};box-shadow:${on ? 'inset 0 0 0 3px var(--color-accent-700)' : 'none'};`) }; }),
+      sel: { name:pk.name, path:'/' + crumbs.slice(1).concat(pk.name).join('/'), sizeLabel:fmt(pk.size), share:(pk.size / TOTAL * 100).toFixed(1) + '%', hasKids:!!pk.kids, open:() => openKid(pk) },
+      largeCount:lf.length, largeTotal:fmt(lf.reduce((a, f) => a + f.size, 0)),
+      largeFilters: [['all','All'],['big','Over 10 GB'],['old','Unused 1 year+']].map(([id, label]) => ({ label, on:s.largeFilter === id, pick:() => this.setState({ largeFilter:id }) })),
+      largeRows: lf.map(f => ({ ...f, sizeLabel:fmt(f.size), on:!!s.largeSel[f.i], checkStyle:check(!!s.largeSel[f.i]), ageClass: f.old ? 'tag tag-accent' : 'tag tag-neutral',
+        toggle:() => this.setState(st => ({ largeSel:{ ...st.largeSel, [f.i]:!st.largeSel[f.i] } })) })),
+      largeNone: lsel.length === 0, largeSelLabel:fmt(lselSize),
+      largeSelNote: lsel.length ? `${lsel.length} selected · restorable from History for 30 days` : 'Select files to move them to the Trash.',
+      trashLarge: () => this.setState(st => { const ls = { ...st.largeSel }; lsel.forEach(f => { ls[f.i] = false; ls['gone' + f.i] = true; });
+        return { largeSel:ls, used:st.used - lselSize, history:[{ title:'Large files', when:'Just now', detail:lsel.map(f => f.name).join(', '), size:lselSize, days:0 }, ...st.history] }; }),
+      dupes, dupeExtra:dupExtra, dupeNote:`Frees ${fmt(dupSize)} · removed copies go to the Trash`,
+      historyTotal: fmt(s.history.reduce((a, h) => a + h.size, 0)),
+      history: s.history.map((h, i) => ({ ...h, sizeLabel:fmt(h.size), canRestore: !h.restored && !h.perm && h.days < 30, expired: h.days >= 30, restored:!!h.restored,
+        restore:() => this.setState(st => ({ used:st.used + h.size, history:st.history.map((x, j) => j === i ? { ...x, restored:true } : x) })) })),
+      toggles: tg.map(([k, label, desc]) => ({ label, desc, on:s.toggles[k], track:track(s.toggles[k]), knob, flip:() => this.setState(st => ({ toggles:{ ...st.toggles, [k]:!st.toggles[k] } })) })),
+      schedules: seg(['Off','Weekly','Monthly'], s.schedule, 'schedule'),
+      exclusions:['~/Projects/active','~/Pictures/RAW','~/Library/Mobile Documents']
+    };
+  }
+}
+</script>
+</body>
+</html>

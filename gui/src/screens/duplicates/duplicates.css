@@ -1,0 +1,159 @@
+/* Duplicates (REQ-DSCR-014) — the snapshot's Duplicates markup, in tokens. */
+
+.dupes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dupes-head {
+  padding: var(--screen-py) var(--layout-screen-px) var(--dupes-head-pb);
+  display: flex;
+  flex-direction: column;
+  gap: var(--screen-gap);
+}
+
+.dupes-kicker {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+.dupes-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-screen-title);
+  margin: 0;
+}
+
+.dupes-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 var(--layout-screen-px) var(--dupes-body-pb);
+}
+
+.dupes-body .busy {
+  padding: 0;
+}
+
+.dupes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--dupes-grid-gap);
+  align-content: start;
+}
+
+.dupes-error {
+  margin: 0 0 var(--dupes-error-mb);
+  font-size: var(--fs-small);
+  color: var(--color-danger);
+}
+
+.dupes-empty {
+  margin: 0;
+  color: var(--color-neutral-700);
+}
+
+.dupes .card {
+  padding: var(--dupes-card-pad);
+  gap: var(--dupes-card-gap);
+}
+
+.dupes-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--dupes-title-gap);
+}
+
+.dupes-card-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dupes-copies {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dupes-card-gap);
+}
+
+/* One copy: themed radio button (scripts/controlClasses.mjs). */
+.dupe-copy {
+  display: flex;
+  align-items: center;
+  gap: var(--dupe-copy-gap);
+  padding: var(--dupe-copy-py) var(--dupe-copy-px);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dupe-copy:hover {
+  background-image: linear-gradient(var(--dupe-copy-hover), var(--dupe-copy-hover));
+}
+
+.dupe-copy:active {
+  background-image: linear-gradient(var(--dupe-copy-active), var(--dupe-copy-active));
+}
+
+.dupe-copy:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.dupe-dot {
+  width: var(--dupe-dot);
+  height: var(--dupe-dot);
+  border-radius: var(--radius-pill);
+  flex: none;
+  border: var(--dupe-dot-border) solid var(--color-accent-2);
+  background: transparent;
+}
+
+.dupe-copy[aria-checked="true"] .dupe-dot {
+  background: var(--color-accent-2);
+}
+
+.dupe-path {
+  flex: 1;
+  font-size: var(--fs-dupe-path);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dupe-copy .tag-outline {
+  color: var(--color-dupe-remove);
+}
+
+.dupe-copy-error {
+  margin: 0;
+  padding: 0 var(--dupe-copy-px);
+  font-size: var(--fs-small);
+  color: var(--color-danger);
+}
+
+.dupes-foot {
+  padding: var(--results-foot-py) var(--layout-screen-px);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  gap: var(--results-foot-gap);
+}
+
+.dupes-foot-note {
+  flex: 1;
+  font-size: var(--fs-results-foot);
+  color: var(--color-neutral-800);
+}
+
+.dupes-remove {
+  padding: var(--btn-clean-py) var(--btn-clean-px);
+}

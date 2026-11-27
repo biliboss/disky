@@ -1,0 +1,284 @@
+/* Assistant (REQ-DSCR-009/010) — the snapshot's Assistant markup, in tokens. */
+
+.assistant {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--assistant-side-w);
+}
+
+/* ── Feed ────────────────────────────────────────────────────── */
+.assistant-feed {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--assistant-feed-pt) var(--assistant-feed-pr) var(--assistant-feed-pb) var(--assistant-feed-pl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--assistant-feed-gap);
+}
+
+.assistant-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--assistant-head-gap);
+  margin-bottom: var(--assistant-head-mb);
+}
+
+.assistant-status {
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+.assistant-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: var(--fs-assistant-title);
+  margin: 0;
+}
+
+.assistant-error {
+  margin: 0 0 var(--assistant-error-mb);
+  font-size: var(--fs-small);
+  color: var(--color-danger);
+}
+
+.assistant-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--assistant-card-gap);
+  padding: var(--assistant-card-py) var(--assistant-card-px);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.assistant-card-goal {
+  background: var(--color-accent-100);
+}
+
+.assistant-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--assistant-card-head-gap);
+}
+
+.assistant-card-icon {
+  width: var(--assistant-card-icon);
+  height: var(--assistant-card-icon);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-2);
+  color: var(--color-bg);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.assistant-card-glyph {
+  width: var(--assistant-card-glyph);
+  height: var(--assistant-card-glyph);
+  stroke-width: var(--icon-stroke);
+}
+
+.assistant-card-agent {
+  font-size: var(--fs-small);
+  font-weight: var(--fw-assistant-agent);
+}
+
+.assistant-card-when {
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+  flex: 1;
+}
+
+.assistant-card .tag-outline {
+  color: var(--color-assistant-outline);
+  border-color: var(--color-assistant-outline);
+}
+
+.assistant-card-text {
+  margin: 0;
+  font-size: var(--fs-assistant-text);
+  line-height: var(--lh-assistant-text);
+  text-wrap: pretty;
+}
+
+.assistant-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--assistant-actions-gap);
+}
+
+.assistant-card-spacer {
+  flex: 1;
+}
+
+.assistant-card-size {
+  font-size: var(--fs-assistant-size);
+  font-weight: var(--fw-assistant-size);
+}
+
+.assistant-empty {
+  margin: 0;
+  font-size: var(--fs-assistant-empty);
+  color: var(--color-neutral-700);
+  padding: var(--assistant-empty-py) 0;
+}
+
+/* ── Side panel (REQ-DSCR-010) ───────────────────────────────── */
+.assistant-side {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--assistant-feed-pt) var(--assistant-feed-pr) var(--assistant-feed-pb) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--assistant-side-gap);
+}
+
+.assistant-panel {
+  padding: var(--assistant-panel-pad);
+}
+
+.assistant-goal {
+  gap: var(--assistant-goal-gap);
+}
+
+.assistant-checks {
+  gap: var(--assistant-checks-gap);
+}
+
+.assistant-agents {
+  gap: var(--assistant-agents-gap);
+}
+
+.assistant-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--assistant-checks-gap);
+}
+
+.assistant-panel-title {
+  flex: 1;
+}
+
+.assistant-goal-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--assistant-goal-line-gap);
+  font-size: var(--fs-assistant-goal-line);
+}
+
+.assistant-goal-value {
+  font-family: var(--font-heading);
+  font-size: var(--fs-assistant-goal);
+}
+
+.assistant-range {
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+
+.assistant-fill {
+  height: var(--assistant-fill-h);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+.assistant-fill-bar {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-2);
+  transition: var(--motion-assistant-fill);
+}
+
+.assistant-note {
+  font-size: var(--fs-small);
+  color: var(--color-neutral-700);
+}
+
+.assistant-seg {
+  background: var(--color-bg);
+  align-self: flex-start;
+}
+
+/* Agent rows: the snapshot's buttons, themed here (REQ-DCLEAN-012.A1). */
+.agent-option {
+  display: flex;
+  align-items: center;
+  gap: var(--agent-row-gap);
+  padding: var(--agent-row-py) var(--agent-row-px);
+  border: none;
+  border-radius: var(--radius-md);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: transparent;
+}
+
+.agent-option[aria-pressed="true"] {
+  background: var(--color-bg);
+}
+
+.agent-option:hover {
+  background: var(--agent-row-hover);
+}
+
+.agent-option:active {
+  background: var(--agent-row-active);
+}
+
+.agent-option[aria-pressed="true"]:hover,
+.agent-option[aria-pressed="true"]:active {
+  background: var(--color-bg);
+}
+
+.agent-option:disabled {
+  cursor: default;
+  opacity: var(--opacity-agent-missing);
+}
+
+.agent-option:disabled:hover,
+.agent-option:disabled:active {
+  background: transparent;
+}
+
+.agent-dot {
+  width: var(--agent-dot);
+  height: var(--agent-dot);
+  flex: none;
+  border-radius: var(--radius-pill);
+  border: var(--agent-dot-border) solid var(--color-accent);
+  background: transparent;
+}
+
+.agent-option:disabled .agent-dot {
+  border-color: var(--color-neutral-400);
+}
+
+.agent-option[aria-pressed="true"] .agent-dot {
+  background: var(--color-accent);
+  box-shadow: var(--agent-dot-inset);
+}
+
+.agent-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--agent-text-gap);
+  text-align: left;
+}
+
+.agent-name {
+  font-weight: var(--fw-agent-name);
+  font-size: var(--fs-agent-name);
+}
+
+.agent-status {
+  font-size: var(--fs-agent-status);
+  color: var(--color-neutral-700);
+}
+
+.assistant-privacy {
+  font-size: var(--fs-assistant-privacy);
+  color: var(--color-neutral-700);
+  margin-top: var(--assistant-privacy-mt);
+}
