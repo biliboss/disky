@@ -12,9 +12,11 @@
 //
 // Usage: node scripts/lint-boundary.mjs   (exit 1 on any finding)
 import { readdirSync, readFileSync, statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { join, relative } from "node:path";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows the pathname is "/D:/a/..." (REQ-XPLAT-010.A3).
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const REPO = join(ROOT, "..");
 const SRC = join(ROOT, "src");
 const TAURI_SRC = join(ROOT, "src-tauri", "src");

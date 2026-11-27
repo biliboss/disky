@@ -33,6 +33,11 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
       - uses: mozilla-actions/sccache-action@v0.0.6
+      # An unreachable cache must not fail the build: fall back to plain
+      # rustc (an empty RUSTC_WRAPPER turns the wrapper off; REQ-XPLAT-011.A1).
+      - name: build without sccache if its server cannot start
+        shell: bash
+        run: sccache --start-server || echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
 
@@ -51,6 +56,11 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
       - uses: mozilla-actions/sccache-action@v0.0.6
+      # An unreachable cache must not fail the build: fall back to plain
+      # rustc (an empty RUSTC_WRAPPER turns the wrapper off; REQ-XPLAT-011.A1).
+      - name: build without sccache if its server cannot start
+        shell: bash
+        run: sccache --start-server || echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
@@ -89,6 +99,11 @@ jobs:
         with:
           workspaces: gui/src-tauri
       - uses: mozilla-actions/sccache-action@v0.0.6
+      # An unreachable cache must not fail the build: fall back to plain
+      # rustc (an empty RUSTC_WRAPPER turns the wrapper off; REQ-XPLAT-011.A1).
+      - name: build without sccache if its server cannot start
+        shell: bash
+        run: sccache --start-server || echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"
       - run: npm ci
       - name: unit + flow tests (vitest)
         run: npm test
@@ -146,6 +161,11 @@ jobs:
         with:
           workspaces: gui/src-tauri
       - uses: mozilla-actions/sccache-action@v0.0.6
+      # An unreachable cache must not fail the build: fall back to plain
+      # rustc (an empty RUSTC_WRAPPER turns the wrapper off; REQ-XPLAT-011.A1).
+      - name: build without sccache if its server cannot start
+        shell: bash
+        run: sccache --start-server || echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"
       - run: npm ci
       - name: unit + flow tests (vitest)
         run: npm test

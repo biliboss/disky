@@ -250,12 +250,18 @@ The Tauri app builds an NSIS installer on Windows and a `.deb` and AppImage on L
 implementations:
   - gui/src-tauri/tauri.windows.conf.json
   - gui/src-tauri/tauri.linux.conf.json
+  - gui/vite.config.ts
+  - gui/scripts/lint-tokens.mjs
+  - gui/scripts/lint-controls.mjs
+  - gui/scripts/lint-boundary.mjs
 
 ## Acceptance
 <!-- id: REQ-XPLAT-010.A1 -->
 - `npm run tauri build` produces the NSIS installer on Windows and the `.deb` and AppImage on Linux.
 <!-- id: REQ-XPLAT-010.A2 -->
 - The GUI's screens, flows and tests are the same on every OS. Only the Reveal label (REQ-XPLAT-008) differs.
+<!-- id: REQ-XPLAT-010.A3 -->
+- The GUI's unit tests and lints pass on whichever OS runs them. The tests pin the macOS user agent, as the Playwright config does, and the lint scripts resolve their own folder with `fileURLToPath`, so a Windows path never reads as `D:\D:\…`.
 
 <!-- id: REQ-XPLAT-011 -->
 ## CI MUST test, and Release MUST ship, every supported OS
@@ -266,7 +272,7 @@ implementations:
 
 ## Acceptance
 <!-- id: REQ-XPLAT-011.A1 -->
-- CI runs fmt, clippy and the engine's tests on macOS, Ubuntu and Windows on every push and PR.
+- CI runs fmt, clippy and the engine's tests on macOS, Ubuntu and Windows on every push and PR. An unreachable build cache never fails a job: CI builds without `sccache` when its server cannot start.
 <!-- id: REQ-XPLAT-011.A2 -->
 - CI builds the GUI's Tauri crate on Ubuntu and Windows.
 <!-- id: REQ-XPLAT-011.A3 -->

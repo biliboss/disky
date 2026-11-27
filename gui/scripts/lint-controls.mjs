@@ -6,6 +6,7 @@
 // The vendored Organic sheets are read for their rules, never linted.
 // Usage: node scripts/lint-controls.mjs   (exit 1 on any finding)
 import { readdirSync, readFileSync, statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { join, relative } from "node:path";
 import {
   CHECKBOX_CLASS,
@@ -15,7 +16,8 @@ import {
   buttonClassProblem,
 } from "./controlClasses.mjs";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows the pathname is "/D:/a/..." (REQ-XPLAT-010.A3).
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SRC = join(ROOT, "src");
 const rel = (p) => relative(ROOT, p);
 const isVendored = (p) => VENDORED.includes(rel(p));
